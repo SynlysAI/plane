@@ -37,10 +37,11 @@ def context_policy_hash(payload):
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
 
 
-def agent_context_v3_hash(*, target, subject, policy, manifest_hash):
+def agent_context_v3_hash(*, target, subject, policy, manifest_hash, issuer=""):
     """Hash the complete v3 target/subject/policy/manifest identity."""
     payload = {
         "schema_version": "agent-context.v3",
+        "issuer": str(issuer or ""),
         "target": target,
         "subject": subject,
         "policy_hash": context_policy_hash(policy),
@@ -159,6 +160,7 @@ def issue_agent_dock_context_token(
     scope_source="workspace_member",
     policy_version="agent-dock-policy.v1",
     ttl_seconds=None,
+    issuer="",
 ):
     """Issue an agent-context.v3 grant for any supported dock target.
 
@@ -178,6 +180,7 @@ def issue_agent_dock_context_token(
         scope_source: Authorization source description.
         policy_version: Versioned policy name.
         ttl_seconds: Optional token lifetime.
+        issuer: Normalized Plane issuer base URL for multi-instance callbacks.
 
     Returns:
         ``(grant, raw_token)``; the raw token is never persisted in clear text.
@@ -218,9 +221,11 @@ def issue_agent_dock_context_token(
         "allowed_knowledge_base_ids": list(allowed_knowledge_base_ids or []),
         "allowed_file_ids": list(allowed_file_ids or []),
     }
+    normalized_issuer = str(issuer or "").rstrip("/")
     safe_manifest = {
         "version": 1,
         "hash": "",
+        **({"issuer": normalized_issuer} if normalized_issuer else {}),
         "summary": str((manifest or {}).get("summary") or "")[:12000],
         "resources": list((manifest or {}).get("resources") or [])[:100],
     }
@@ -240,6 +245,7 @@ def issue_agent_dock_context_token(
         subject=subject,
         policy=policy,
         manifest_hash=safe_manifest["hash"],
+        issuer=normalized_issuer,
     )
     raw_token = secrets.token_urlsafe(48)
     default_ttl = getattr(settings, "RESEARCH_CONTEXT_TOKEN_TTL_SECONDS", 600)

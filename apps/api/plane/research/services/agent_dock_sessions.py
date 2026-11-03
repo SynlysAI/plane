@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from plane.db.models import (
@@ -155,6 +155,20 @@ def create_agent_dock_session(
         if existing.workspace_id != workspace.id or existing.user_id != user.id:
             raise AgentDockSessionError("request_id was already used", 409)
         return existing
+    bound_session = (
+        ResearchAgentSession.objects.select_related(
+            "workspace", "user", "project", "research_chain", "chain_node", "context_grant"
+        )
+        .filter(
+            context_grant=grant,
+            workspace=workspace,
+            user=user,
+            deleted_at__isnull=True,
+        )
+        .first()
+    )
+    if bound_session is not None:
+        return bound_session
 
     runtime = runtime or resolve_synlora_runtime(workspace, user=user)
     if runtime is None:
@@ -171,24 +185,49 @@ def create_agent_dock_session(
     except SynloraRuntimeError as exc:
         raise AgentDockSessionError(exc.message, exc.status_code, exc.code) from exc
 
-    session = ResearchAgentSession.objects.create(
-        workspace=workspace,
-        user=user,
-        target_type=grant.target_type,
-        project=grant.project,
-        research_chain=grant.research_chain,
-        chain_node=grant.chain_node,
-        context_grant=grant,
-        status=ResearchAgentSession.Status.READY,
-        provider=ResearchAgentSession.Provider.SYNLORA,
-        synlora_session_id=synlora_session_id,
-        delegated_subject=f"plane-ws-{workspace.id}-user-{user.id}",
-        context_token_encrypted=grant.context_token_encrypted,
-        assembly=_assembly(grant),
-        request_id=request_id,
-        payload_hash=payload_hash({"context_id": str(grant.context_id)}),
-        created_by=user,
-    )
+    try:
+        session = ResearchAgentSession.objects.create(
+            workspace=workspace,
+            user=user,
+            target_type=grant.target_type,
+            project=grant.project,
+            research_chain=grant.research_chain,
+            chain_node=grant.chain_node,
+            context_grant=grant,
+            status=ResearchAgentSession.Status.READY,
+            provider=ResearchAgentSession.Provider.SYNLORA,
+            synlora_session_id=synlora_session_id,
+            delegated_subject=f"plane-ws-{workspace.id}-user-{user.id}",
+            context_token_encrypted=grant.context_token_encrypted,
+            assembly=_assembly(grant),
+            request_id=request_id,
+            payload_hash=payload_hash({"context_id": str(grant.context_id)}),
+            created_by=user,
+        )
+    except IntegrityError as exc:
+        bound_session = (
+            ResearchAgentSession.objects.select_related(
+                "workspace", "user", "project", "research_chain", "chain_node", "context_grant"
+            )
+            .filter(
+                context_grant=grant,
+                workspace=workspace,
+                user=user,
+                deleted_at__isnull=True,
+            )
+            .first()
+        )
+        if bound_session is None:
+            raise AgentDockSessionError(
+                "Agent Dock session could not be created", 409, "agent_session_conflict"
+            ) from exc
+        try:
+            runtime.close_session(thread_id=synlora_session_id)
+        except Exception:
+            # The losing concurrent request only created a redundant upstream
+            # session; failing to clean it must not hide the authoritative local one.
+            pass
+        return bound_session
     _append_event(
         session,
         "CONTEXT_ASSEMBLED",
