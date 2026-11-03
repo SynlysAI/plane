@@ -907,3 +907,58 @@ def test_agent_dock_rotates_admin_only_connection_when_research_mcp_enabled(env,
     old.refresh_from_db()
     assert old.revoked_at is not None
     assert old.token_encrypted == ""
+
+
+def test_agent_dock_upgrades_read_connection_when_workspace_enables_writes(env, settings, monkeypatch):
+    """工作区打开研究写入后，已有 read 连接会轮换为 read_write。"""
+    from plane.db.models import WorkspaceResearchSetting
+    from plane.research.services import agent_dock_mcp
+
+    settings.RESEARCH_MCP_ENABLED = True
+    settings.RESEARCH_MCP_WRITE_ENABLED = True
+    WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).update(
+        module_enabled=True, research_chain_enabled=True, research_mcp_write_enabled=True
+    )
+    old = UnifiedMCPConnection.objects.create(
+        owner=env["owner"],
+        name="Read Agent Dock",
+        token_hash=uuid4().hex,
+        token_encrypted="encrypted",
+        scope={
+            "version": 1,
+            "include_future_objects": True,
+            "workspaces": [
+                {"workspace_id": str(env["workspace"].id), "domains": {"research": "read"}}
+            ],
+        },
+        expires_at=timezone.now() + timedelta(hours=1),
+    )
+    new = UnifiedMCPConnection.objects.create(
+        owner=env["owner"],
+        name="Read-write Agent Dock",
+        token_hash=uuid4().hex,
+        token_encrypted="",
+        scope={
+            "version": 1,
+            "include_future_objects": True,
+            "workspaces": [
+                {"workspace_id": str(env["workspace"].id), "domains": {"research": "read_write"}}
+            ],
+        },
+        expires_at=timezone.now() + timedelta(hours=1),
+    )
+    credential = AgentDockMcpCredential(
+        connection=new,
+        token=f"pum-{uuid4().hex}",
+        url="http://plane.test/api/mcp/",
+    )
+    monkeypatch.setattr(agent_dock_mcp, "recover_credential", lambda _connection: "healthy-old-token")
+    monkeypatch.setattr(agent_dock_mcp, "issue_agent_dock_mcp_connection", lambda **kwargs: credential)
+
+    resolved = agent_dock_mcp.resolve_agent_dock_mcp_credentials(
+        workspace=env["workspace"], user=env["owner"], connection=old
+    )
+
+    assert resolved.connection.pk == new.pk
+    old.refresh_from_db()
+    assert old.revoked_at is not None

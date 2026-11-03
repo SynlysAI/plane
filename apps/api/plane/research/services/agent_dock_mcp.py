@@ -8,7 +8,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.utils import timezone
 
-from plane.db.models import UnifiedMCPConnection, Workspace
+from plane.db.models import UnifiedMCPConnection, Workspace, WorkspaceResearchSetting
 from plane.mcp.authorization import issue_connection
 from plane.mcp.credentials import recover_credential
 from plane.research.services.mcp_catalog import ResearchReadError
@@ -118,6 +118,14 @@ def resolve_agent_dock_mcp_credentials(
     # enabled so a healthy-looking old credential cannot pin the session to a
     # reduced domain set.
     requires_research = bool(getattr(settings, "RESEARCH_MCP_ENABLED", False))
+    research_write_enabled = bool(getattr(settings, "RESEARCH_MCP_WRITE_ENABLED", False)) and (
+        WorkspaceResearchSetting.objects.filter(
+            workspace=workspace,
+            module_enabled=True,
+            research_chain_enabled=True,
+            research_mcp_write_enabled=True,
+        ).exists()
+    )
     healthy = (
         connection is not None
         and connection.owner_id == user.id
@@ -130,7 +138,8 @@ def resolve_agent_dock_mcp_credentials(
             for item in (connection.scope or {}).get("workspaces", [])
         )
         and (not requires_research or any(
-            "research" in item.get("domains", {})
+            item.get("domains", {}).get("research")
+            in ({"read_write"} if research_write_enabled else {"read", "read_write"})
             for item in (connection.scope or {}).get("workspaces", [])
             if item.get("workspace_id") == str(workspace.id)
         ))
