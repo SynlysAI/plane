@@ -420,6 +420,7 @@ def _context_payload(grant):
     manifest = grant.context_manifest if grant.context_manifest else None
     return {
         "schema_version": AGENT_CONTEXT_V3_SCHEMA_VERSION,
+        "issuer": str(manifest.get("issuer") or "") if isinstance(manifest, dict) else "",
         "workspace_id": str(grant.workspace_id),
         "context_id": str(grant.context_id),
         "context_hash": grant.context_hash,

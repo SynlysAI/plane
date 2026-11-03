@@ -68,6 +68,11 @@ def _uuid(value: str) -> UUID | None:
         return None
 
 
+def _context_issuer() -> str:
+    """Return the normalized Plane issuer URL used by external agent runtimes."""
+    return str(getattr(settings, "RESEARCH_CONTEXT_ISSUER_BASE_URL", "") or "").rstrip("/")
+
+
 def _target_from_route(workspace: Workspace, user, route: str) -> AgentDockTarget:
     """Parse a Plane route server-side and resolve the narrowest visible target."""
     path = str(route or "").split("?", 1)[0].strip("/")
@@ -404,6 +409,7 @@ def resolve_agent_dock_context(
         else []
     )
     scope_kind, scope_source = _scope_for_target(workspace, user, target)
+    issuer = _context_issuer()
     grant, token = issue_agent_dock_context_token(
         workspace=workspace,
         user=user,
@@ -421,12 +427,14 @@ def resolve_agent_dock_context(
         scope_kind=scope_kind,
         scope_source=scope_source,
         policy_version="agent-dock-policy.v1",
+        issuer=issuer,
     )
     return grant, token, _envelope(grant, target, user)
 
 
 def agent_context_v3_for_grant(grant: ResearchContextGrant) -> dict:
     """Convert a stored grant into Synlora agent-context.v3 metadata."""
+    manifest = grant.context_manifest or {}
     target = {
         "type": grant.target_type,
         "workspace_id": str(grant.workspace_id),
@@ -452,9 +460,9 @@ def agent_context_v3_for_grant(grant: ResearchContextGrant) -> dict:
         "allowed_knowledge_base_ids": grant.allowed_knowledge_base_ids,
         "allowed_file_ids": grant.allowed_file_ids,
     }
-    manifest = grant.context_manifest or {}
     return {
         "schema_version": "agent-context.v3",
+        "issuer": str(manifest.get("issuer") or ""),
         "context_id": str(grant.context_id),
         "context_hash": grant.context_hash,
         "expires_at": grant.expires_at.isoformat(),

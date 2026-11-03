@@ -205,6 +205,29 @@ def test_context_callback_accepts_workspace_and_project_tokens(env, project_scop
     assert denied.status_code == 403
 
 
+def test_context_callback_returns_configured_issuer(env, settings):
+    """签发与回调返回同一 Plane issuer，供 Synlora 多实例安全路由。"""
+    settings.RESEARCH_CONTEXT_ISSUER_BASE_URL = "http://dev-plane.internal:8000/"
+    grant, token, _envelope = resolve_agent_dock_context(
+        workspace=env["workspace"],
+        user=env["owner"],
+        route=f"/{env['workspace'].slug}",
+        request_id=f"issuer-{uuid4().hex}",
+    )
+    client = APIClient()
+    client.credentials(
+        HTTP_X_RESEARCH_CONTEXT_TOKEN=token,
+        HTTP_X_RESEARCH_CONTEXT_HASH=grant.context_hash,
+    )
+
+    response = client.get(f"/api/research/workspaces/{env['workspace'].slug}/context/")
+
+    assert response.status_code == 200, response.text
+    expected = agent_context_v3_for_grant(grant)
+    assert expected["issuer"] == "http://dev-plane.internal:8000"
+    assert response.json()["context"]["issuer"] == expected["issuer"]
+
+
 def test_context_version_advances_and_invalid_attachments_fail_closed(env):
     route = f"/{env['workspace'].slug}"
     first = _resolve(env, route)
@@ -389,9 +412,11 @@ def test_agent_dock_sse_replays_and_deduplicates_synlora_events(env, monkeypatch
     assert started.json()["run_id"] != session["run_id"]
     assert started.json()["run_start_cursor"] == -1
 
-    response = env["client"].get(
-        f"/api/workspaces/{env['workspace'].slug}/agent-dock/runs/{started.json()['run_id']}/events/stream/?after_seq=-1"
+    stream_url = (
+        f"/api/workspaces/{env['workspace'].slug}/agent-dock/runs/"
+        f"{started.json()['run_id']}/events/stream/?after_seq=-1"
     )
+    response = env["client"].get(stream_url, HTTP_ACCEPT="text/event-stream")
     assert response.status_code == 200
     wire = b"".join(response.streaming_content).decode()
     assert wire.count("id: 4\n") == 1
@@ -454,6 +479,12 @@ def test_agent_dock_sse_replays_and_deduplicates_synlora_events(env, monkeypatch
         item["run_id"] == next_started.json()["run_id"]
         for item in current_events.json()["results"]
     )
+    historical_events = env["client"].get(
+        f"/api/workspaces/{env['workspace'].slug}/agent-dock/runs/{started.json()['run_id']}/events/"
+    )
+    assert historical_events.status_code == 200, historical_events.text
+    assert historical_events.json()["session"]["run_id"] == next_started.json()["run_id"]
+    assert all(item["run_id"] == started.json()["run_id"] for item in historical_events.json()["results"])
 
     invalid = env["client"].get(
         f"/api/workspaces/{env['workspace'].slug}/agent-dock/runs/{next_started.json()['run_id']}/events/stream/?after_seq=bad"
@@ -591,8 +622,8 @@ def test_context_access_projection_never_returns_resource_body():
     assert marker not in str(streamed)
 
 
-def test_agent_dock_cancel_failure_is_reported(env, monkeypatch):
-    """上游拒绝取消时，Plane 返回可观察错误并保留运行状态。"""
+def test_agent_dock_cancel_is_idempotent_when_synlora_run_already_ended(env, monkeypatch):
+    """Synlora 返回 ok=false 表示已结束，Plane 同步终态且不再报 502。"""
     from plane.db.models import ResearchAgentSession
     from plane.research.services import agent_runtime
     from plane.research.services import agent_dock_sessions
@@ -607,6 +638,16 @@ def test_agent_dock_cancel_failure_is_reported(env, monkeypatch):
         def cancel(self, *, run_id):
             assert run_id == "synlora-run-cancel"
             return False
+
+        def pull_events(self, *, session_id, after_seq=-1):
+            return (
+                [
+                    {"sequence": 1, "event": {"type": "run.started", "remote_run_id": "synlora-run-cancel"}},
+                    {"sequence": 2, "event": {"type": "run.cancelled"}},
+                ],
+                2,
+                "cancelled",
+            )
 
     runtime = FakeRuntime()
     monkeypatch.setattr(agent_dock_sessions, "resolve_synlora_runtime", lambda *args, **kwargs: runtime)
@@ -629,7 +670,44 @@ def test_agent_dock_cancel_failure_is_reported(env, monkeypatch):
         f"/api/workspaces/{env['workspace'].slug}/agent-dock/runs/{started.json()['run_id']}/cancel/"
     )
 
-    assert cancelled.status_code == 502
-    assert cancelled.json()["error"] == "synlora_cancel_failed"
+    assert cancelled.status_code == 200, cancelled.text
     session = ResearchAgentSession.objects.get(session_id=created.json()["session_id"])
-    assert session.status == "STREAMING"
+    assert session.status == "READY"
+    assert session.last_error == "synlora_run_cancelled"
+
+
+def test_agent_dock_reuses_session_for_same_context_grant(env, monkeypatch):
+    """同一 grant 重复创建会话时幂等返回已绑定会话。"""
+    from plane.research.services import agent_dock_sessions
+
+    calls = {"create_session": 0}
+
+    class FakeRuntime:
+        def create_session(self, *, title, research_context, context_token):
+            calls["create_session"] += 1
+            return f"synlora-session-{calls['create_session']}"
+
+    monkeypatch.setattr(
+        agent_dock_sessions,
+        "resolve_synlora_runtime",
+        lambda *args, **kwargs: FakeRuntime(),
+    )
+    route = f"/{env['workspace'].slug}/research/chains/{env['chain'].id}/nodes/{env['node'].id}/agent"
+    context = _resolve(env, route).json()
+    payload = {"context_id": context["context_id"]}
+
+    first = env["client"].post(
+        f"/api/workspaces/{env['workspace'].slug}/agent-dock/sessions/",
+        {**payload, "request_id": f"session-{uuid4().hex}"},
+        format="json",
+    )
+    second = env["client"].post(
+        f"/api/workspaces/{env['workspace'].slug}/agent-dock/sessions/",
+        {**payload, "request_id": f"session-{uuid4().hex}"},
+        format="json",
+    )
+
+    assert first.status_code == 201, first.text
+    assert second.status_code == 201, second.text
+    assert second.json()["session_id"] == first.json()["session_id"]
+    assert calls["create_session"] == 1

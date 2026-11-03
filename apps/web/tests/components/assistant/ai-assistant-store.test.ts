@@ -52,6 +52,22 @@ describe("AIAssistantStore", () => {
     expect(window.localStorage.getItem("PLANE_AI_ASSISTANT_THREAD_lab-a")).toBeNull();
   });
 
+  it("isolates thread ids per workspace and user", () => {
+    const store = new AIAssistantStore();
+    window.localStorage.setItem("PLANE_AI_ASSISTANT_THREAD_lab-a", "legacy-thread");
+    window.localStorage.setItem("PLANE_AI_ASSISTANT_THREAD_lab-a:user-a", "thread-a");
+    window.localStorage.setItem("PLANE_AI_ASSISTANT_THREAD_lab-a:user-b", "thread-b");
+
+    store.hydrate("lab-a", "user-a");
+    expect(store.threadId).toBe("thread-a");
+    store.setThreadId("lab-a", "thread-a-next");
+    expect(window.localStorage.getItem("PLANE_AI_ASSISTANT_THREAD_lab-a:user-a")).toBe("thread-a-next");
+
+    store.hydrate("lab-a", "user-b");
+    expect(store.threadId).toBe("thread-b");
+    expect(window.localStorage.getItem("PLANE_AI_ASSISTANT_THREAD_lab-a")).toBe("legacy-thread");
+  });
+
   it("persists bounded dock preferences per workspace", () => {
     const store = new AIAssistantStore();
     store.hydrate("lab-a");

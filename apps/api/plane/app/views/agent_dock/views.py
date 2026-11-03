@@ -10,6 +10,7 @@ from uuid import UUID
 
 from django.http import StreamingHttpResponse
 from rest_framework import status
+from rest_framework.negotiation import BaseContentNegotiation
 from rest_framework.response import Response
 from django.utils import timezone
 
@@ -33,6 +34,16 @@ from plane.research.services.idempotency import request_id_from
 
 def _workspace_or_none(slug: str):
     return Workspace.objects.filter(slug=slug).first()
+
+
+class IgnoreAcceptNegotiation(BaseContentNegotiation):
+    """Allow browser SSE Accept headers on a DRF streaming endpoint."""
+
+    def select_parser(self, request, parsers):
+        return parsers[0]
+
+    def select_renderer(self, request, renderers, format_suffix=None):
+        return (renderers[0], renderers[0].media_type)
 
 
 class AgentDockContextResolveEndpoint(BaseAPIView):
@@ -126,6 +137,54 @@ def _session_or_none(workspace, user, session_id):
         )
         .first()
     )
+
+
+def _session_for_run_or_none(workspace, user, run_id):
+    """Resolve a historical run without depending on the session's current run."""
+    from plane.db.models import ResearchAgentRunEvent, ResearchAgentSession
+
+    try:
+        run_uuid = UUID(str(run_id))
+    except (TypeError, ValueError):
+        return None
+    session = (
+        ResearchAgentSession.objects.select_related(
+            "workspace",
+            "user",
+            "project",
+            "research_chain",
+            "chain_node",
+            "context_grant",
+        )
+        .filter(
+            run_id=run_uuid,
+            workspace=workspace,
+            user=user,
+            deleted_at__isnull=True,
+        )
+        .first()
+    )
+    if session is not None:
+        return session
+    event = (
+        ResearchAgentRunEvent.objects.select_related(
+            "session__workspace",
+            "session__user",
+            "session__project",
+            "session__research_chain",
+            "session__chain_node",
+            "session__context_grant",
+        )
+        .filter(
+            run_id=run_uuid,
+            session__workspace=workspace,
+            session__user=user,
+            session__deleted_at__isnull=True,
+        )
+        .order_by("seq")
+        .first()
+    )
+    return event.session if event is not None else None
 
 
 class AgentDockSessionCollectionEndpoint(BaseAPIView):
@@ -229,7 +288,6 @@ class AgentDockRunEventEndpoint(BaseAPIView):
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
     def get(self, request, slug, run_id):
-        from plane.db.models import ResearchAgentSession
         from plane.research.serializers import ResearchAgentRunEventSerializer
         from plane.research.services.agent_dock_sessions import (
             sync_agent_dock_events,
@@ -239,21 +297,10 @@ class AgentDockRunEventEndpoint(BaseAPIView):
         workspace = _workspace_or_none(slug)
         if workspace is None:
             return Response({"error": "Workspace not found"}, status=status.HTTP_404_NOT_FOUND)
-        try:
-            from uuid import UUID as _UUID
-
-            run_uuid = _UUID(str(run_id))
-        except (TypeError, ValueError):
-            return Response({"error": "agent_run_not_found"}, status=status.HTTP_404_NOT_FOUND)
-        session = (
-            ResearchAgentSession.objects.select_related(
-                "workspace", "user", "project", "research_chain", "chain_node", "context_grant"
-            )
-            .filter(run_id=run_uuid, workspace=workspace, user=request.user, deleted_at__isnull=True)
-            .first()
-        )
+        session = _session_for_run_or_none(workspace, request.user, run_id)
         if session is None:
             return Response({"error": "agent_run_not_found"}, status=status.HTTP_404_NOT_FOUND)
+        run_uuid = UUID(str(run_id))
         session = sync_agent_dock_events(workspace=workspace, session=session)
         try:
             after_seq = int(request.query_params.get("after_seq", 0))
@@ -275,22 +322,14 @@ class AgentDockRunEventEndpoint(BaseAPIView):
 class AgentDockRunEventStreamEndpoint(BaseAPIView):
     """受 Plane 权限保护的 Agent Dock SSE BFF。"""
 
+    content_negotiation_class = IgnoreAcceptNegotiation
+
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
     def get(self, request, slug, run_id):
-        from plane.db.models import ResearchAgentSession
-
         workspace = _workspace_or_none(slug)
         if workspace is None:
             return Response({"error": "Workspace not found"}, status=status.HTTP_404_NOT_FOUND)
-        try:
-            run_uuid = UUID(str(run_id))
-        except (TypeError, ValueError):
-            return Response({"error": "agent_run_not_found"}, status=status.HTTP_404_NOT_FOUND)
-        session = (
-            ResearchAgentSession.objects.select_related("workspace", "user", "context_grant")
-            .filter(run_id=run_uuid, workspace=workspace, user=request.user, deleted_at__isnull=True)
-            .first()
-        )
+        session = _session_for_run_or_none(workspace, request.user, run_id)
         if session is None:
             return Response({"error": "agent_run_not_found"}, status=status.HTTP_404_NOT_FOUND)
         if session.context_grant.revoked_at is not None or session.context_grant.expires_at <= timezone.now():
@@ -488,7 +527,6 @@ class AgentDockRunCancelEndpoint(BaseAPIView):
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
     def post(self, request, slug, run_id):
-        from plane.db.models import ResearchAgentSession
         from plane.research.services.agent_runtime import SynloraRuntimeError, resolve_synlora_runtime
         from plane.research.services.agent_dock_sessions import (
             serialize_agent_dock_session,
@@ -498,13 +536,15 @@ class AgentDockRunCancelEndpoint(BaseAPIView):
         workspace = _workspace_or_none(slug)
         if workspace is None:
             return Response({"error": "Workspace not found"}, status=status.HTTP_404_NOT_FOUND)
-        session = (
-            ResearchAgentSession.objects.select_related("workspace", "user", "context_grant")
-            .filter(run_id=run_id, workspace=workspace, user=request.user, deleted_at__isnull=True)
-            .first()
-        )
+        session = _session_for_run_or_none(workspace, request.user, run_id)
         if session is None:
             return Response({"error": "agent_run_not_found"}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            run_uuid = UUID(str(run_id))
+        except (TypeError, ValueError):
+            return Response({"error": "agent_run_not_found"}, status=status.HTTP_404_NOT_FOUND)
+        if session.run_id != run_uuid:
+            return Response(serialize_agent_dock_session(session))
         runtime = resolve_synlora_runtime(workspace, user=session.user)
         if session.synlora_run_id and runtime is None:
             return Response(
@@ -513,16 +553,11 @@ class AgentDockRunCancelEndpoint(BaseAPIView):
             )
         if runtime is not None and session.synlora_run_id:
             try:
-                cancelled = runtime.cancel(run_id=session.synlora_run_id)
+                runtime.cancel(run_id=session.synlora_run_id)
             except SynloraRuntimeError as exc:
                 return Response(
                     {"error": exc.code, "message": exc.message},
                     status=exc.status_code,
-                )
-            if not cancelled:
-                return Response(
-                    {"error": "synlora_cancel_failed"},
-                    status=status.HTTP_502_BAD_GATEWAY,
                 )
             session = sync_agent_dock_events(workspace=workspace, session=session, runtime=runtime)
         return Response(serialize_agent_dock_session(session))

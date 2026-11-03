@@ -613,4 +613,55 @@ describe("AIAssistantPanel", () => {
     renderPanel(store);
     await waitForText("session_unavailable");
   });
+
+  it("resets a stale cross-account session without showing unavailable", async () => {
+    mocks.getSession.mockRejectedValueOnce(
+      Object.assign(new Error("not found"), { error: "agent_session_not_found" })
+    );
+    window.localStorage.setItem("PLANE_AI_ASSISTANT_THREAD_lab", "session-1");
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+
+    expect(document.body.textContent).not.toContain("session_unavailable");
+    expect(store.threadId).toBeNull();
+    expect(window.localStorage.getItem("PLANE_AI_ASSISTANT_THREAD_lab")).toBeNull();
+  });
+
+  it("refreshes an expired context before sending", async () => {
+    mocks.resolveContext
+      .mockResolvedValueOnce({ ...envelope, expiry: "2000-01-01T00:00:00Z" })
+      .mockResolvedValue({ ...envelope, context_id: "context-2" });
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+
+    typeAndSend();
+    await waitForText("你好，世界");
+
+    expect(mocks.resolveContext.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("stops reconnecting after a protocol-level SSE failure", async () => {
+    mocks.streamEvents.mockRejectedValue(
+      Object.assign(new Error("not acceptable"), { status: 406, detail: { error: "not_acceptable" } })
+    );
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+
+    typeAndSend();
+    await waitForText("stream_not_acceptable");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+
+    expect(mocks.streamEvents).toHaveBeenCalledTimes(1);
+  });
 });

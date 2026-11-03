@@ -32,6 +32,7 @@ export interface IAIAssistantStore {
   // observables
   isOpen: boolean;
   threadWorkspaceSlug: string | null;
+  threadOwnerKey: string | null;
   threadId: string | null;
   status: TAssistantStatus | null;
   activeProvider: TAssistantProvider;
@@ -45,7 +46,7 @@ export interface IAIAssistantStore {
   close: () => void;
   toggle: (value?: boolean) => void;
   openWithLocal: (nodeId: string) => void;
-  hydrate: (workspaceSlug: string) => void;
+  hydrate: (workspaceSlug: string, ownerKey?: string) => void;
   setStatus: (status: TAssistantStatus | null) => void;
   setThreadId: (workspaceSlug: string, threadId: string) => void;
   clearThreadId: (workspaceSlug: string) => void;
@@ -60,6 +61,7 @@ export interface IAIAssistantStore {
 export class AIAssistantStore implements IAIAssistantStore {
   isOpen: boolean = false;
   threadWorkspaceSlug: string | null = null;
+  threadOwnerKey: string | null = null;
   threadId: string | null = null;
   status: TAssistantStatus | null = null;
   activeProvider: TAssistantProvider = "cloud";
@@ -73,6 +75,7 @@ export class AIAssistantStore implements IAIAssistantStore {
     makeObservable(this, {
       isOpen: observable.ref,
       threadWorkspaceSlug: observable.ref,
+      threadOwnerKey: observable.ref,
       threadId: observable.ref,
       status: observable.ref,
       activeProvider: observable.ref,
@@ -121,12 +124,14 @@ export class AIAssistantStore implements IAIAssistantStore {
     this.persistCurrentPreferences();
   };
 
-  hydrate = (workspaceSlug: string) => {
-    if (this.threadWorkspaceSlug === workspaceSlug) return;
+  hydrate = (workspaceSlug: string, ownerKey?: string) => {
+    const nextOwnerKey = ownerKey ?? null;
+    if (this.threadWorkspaceSlug === workspaceSlug && this.threadOwnerKey === nextOwnerKey) return;
     this.threadWorkspaceSlug = workspaceSlug;
+    this.threadOwnerKey = nextOwnerKey;
     this.activeProvider = "cloud";
     this.contextNodeId = null;
-    this.threadId = storage.get(`${THREAD_KEY_PREFIX}${workspaceSlug}`) ?? null;
+    this.threadId = storage.get(this.threadStorageKey(workspaceSlug, nextOwnerKey)) ?? null;
     const raw = storage.get(`${PREFERENCES_KEY_PREFIX}${workspaceSlug}`);
     try {
       const parsed = typeof raw === "string" ? (JSON.parse(raw) as Partial<TAgentDockPreferences>) : raw;
@@ -158,7 +163,7 @@ export class AIAssistantStore implements IAIAssistantStore {
       this.threadWorkspaceSlug = workspaceSlug;
       this.threadId = threadId;
     });
-    storage.set(`${THREAD_KEY_PREFIX}${workspaceSlug}`, threadId);
+    storage.set(this.threadStorageKey(workspaceSlug, this.threadOwnerKey), threadId);
     this.persistPreferences(workspaceSlug, { activeSessionId: threadId });
   };
 
@@ -199,12 +204,18 @@ export class AIAssistantStore implements IAIAssistantStore {
       this.threadWorkspaceSlug = workspaceSlug;
       this.threadId = null;
     });
-    storage.remove(`${THREAD_KEY_PREFIX}${workspaceSlug}`);
+    storage.remove(this.threadStorageKey(workspaceSlug, this.threadOwnerKey));
     this.persistPreferences(workspaceSlug, { activeSessionId: null });
   };
 
   private persistCurrentPreferences() {
     if (this.threadWorkspaceSlug) this.persistPreferences(this.threadWorkspaceSlug);
+  }
+
+  private threadStorageKey(workspaceSlug: string, ownerKey: string | null) {
+    return ownerKey
+      ? `${THREAD_KEY_PREFIX}${workspaceSlug}:${ownerKey}`
+      : `${THREAD_KEY_PREFIX}${workspaceSlug}`;
   }
 
   private persistPreferences(workspaceSlug: string, overrides: Partial<TAgentDockPreferences> = {}) {
