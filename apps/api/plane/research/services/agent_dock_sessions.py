@@ -6,18 +6,29 @@
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 from django.db import transaction
 from django.utils import timezone
 
-from plane.db.models import ResearchAgentRunEvent, ResearchAgentSession, ResearchContextGrant, Workspace
+from plane.db.models import (
+    ResearchAgentRunEvent,
+    ResearchAgentSession,
+    ResearchChainEvent,
+    ResearchContextGrant,
+    Workspace,
+)
 from plane.license.utils.encryption import decrypt_data
 from plane.research.services.agent_dock import agent_context_v3_for_grant, context_status
 from plane.research.services.agent_runtime import (
     SynloraRuntimeClient,
     SynloraRuntimeError,
+    _is_context_access_tool,
     resolve_synlora_runtime,
+    synlora_event_run_id,
 )
 from plane.research.services.chain_projection import (
+    SCIENCE_DISCOVERY_CHAIN_EVENT_TYPE_MAP,
     SCIENCE_DISCOVERY_AGENT_EVENT_TYPE_MAP,
     SCIENCE_DISCOVERY_TERMINAL_SESSION_STATUS,
     _science_discovery_payload,
@@ -94,6 +105,8 @@ def serialize_agent_dock_session(session: ResearchAgentSession) -> dict:
         "provider": session.provider,
         "assembly": session.assembly,
         "latest_seq": session.latest_seq,
+        "source_cursor": int((session.assembly or {}).get("source_cursor", -1)),
+        "run_start_cursor": int((session.assembly or {}).get("run_start_cursor", -1)),
         "created_at": session.created_at.isoformat(),
         "updated_at": session.updated_at.isoformat(),
     }
@@ -213,15 +226,28 @@ def start_agent_dock_message(
     if existing is not None:
         if existing.session_id != session.pk:
             raise AgentDockSessionError("request_id was already used", 409)
-        return existing
+        if existing.run_id != session.run_id:
+            raise AgentDockSessionError("request_id belongs to a previous run", 409)
+        return session
 
-    content_hash = payload_hash({"content": content})
-    _append_event(
-        session,
-        "COMMUNICATION",
-        {"direction": "user", "content_hash": content_hash, "length": len(content)},
-        request_id,
+    # A session may contain many turns; each request gets its own immutable
+    # Plane run id so delayed events can never be attributed to the next turn.
+    session.run_id = uuid4()
+    persisted_cursor = max(
+        [
+            int(event.payload["remote_seq"])
+            for event in session.run_events.all()
+            if event.payload.get("remote_seq") is not None
+        ]
+        + [int((session.assembly or {}).get("source_cursor", -1))]
     )
+    session.assembly = {
+        **(session.assembly or {}),
+        "source_cursor": persisted_cursor,
+        "run_start_cursor": persisted_cursor,
+    }
+    session.save(update_fields=["run_id", "assembly", "updated_at"])
+
     runtime = runtime or resolve_synlora_runtime(workspace, user=user)
     if runtime is None:
         raise AgentDockSessionError("Synlora runtime is not configured", 503, "synlora_unavailable")
@@ -246,6 +272,13 @@ def start_agent_dock_message(
     session.last_error = ""
     session.updated_by = user
     session.save(update_fields=["synlora_run_id", "status", "last_error", "updated_by", "updated_at"])
+    content_hash = payload_hash({"content": content})
+    _append_event(
+        session,
+        "COMMUNICATION",
+        {"direction": "user", "content_hash": content_hash, "length": len(content)},
+        request_id,
+    )
     _append_event(
         session,
         "CONTEXT_ASSEMBLED",
@@ -258,6 +291,177 @@ def start_agent_dock_message(
     )
     session.refresh_from_db()
     return session
+
+
+def persist_synlora_stream_event(session, envelope: dict) -> ResearchAgentRunEvent | None:
+    """幂等保存一个 Synlora 持久事件并同步 Plane 运行终态。
+
+    Args:
+        session: 当前已授权的 Agent Dock 会话。
+        envelope: 已脱敏的 Agent Dock 统一事件封装。
+
+    Returns:
+        新建或已存在的本地事件；瞬态 delta 不落盘时返回 None。
+    """
+    remote_type = str(envelope.get("raw_event_type") or "")
+    if remote_type in {"llm/delta", "reasoning/delta", "assistant.delta", "assistant.thinking.delta"}:
+        return None
+    source_seq = int(envelope.get("source_seq") or 0)
+    if source_seq <= 0:
+        return None
+    request_id = f"dock:{session.synlora_session_id}:{source_seq}"
+    with transaction.atomic():
+        locked = ResearchAgentSession.objects.select_for_update().get(pk=session.pk)
+        if str(envelope.get("run_id") or "") != str(locked.run_id):
+            return None
+        existing = ResearchAgentRunEvent.objects.filter(request_id=request_id).first()
+        if existing is not None:
+            event = existing
+        else:
+            next_seq = (
+                ResearchAgentRunEvent.objects.filter(run_id=locked.run_id)
+                .order_by("-seq")
+                .values_list("seq", flat=True)
+                .first()
+                or 0
+            ) + 1
+            event_type = {
+                "output.delta": "OUTPUT",
+                "tool.started": "TOOL_CALL",
+                "tool.completed": "TOOL_CALL",
+                "context.accessed": "DATA_CHANGE",
+                "approval.required": "APPROVAL",
+                "approval.resolved": "HUMAN_DECISION",
+                "run.completed": "OUTPUT",
+                "run.failed": "DEGRADED",
+                "run.cancelled": "DEGRADED",
+            }.get(str(envelope.get("event_type")), "AI_ACTION")
+            event = ResearchAgentRunEvent.objects.create(
+                session=locked,
+                run_id=locked.run_id,
+                seq=next_seq,
+                event_type=event_type,
+                payload={
+                    **(envelope.get("payload") if isinstance(envelope.get("payload"), dict) else {}),
+                    "remote_seq": source_seq,
+                    "remote_type": remote_type,
+                    "source_system": "SYNLORA",
+                },
+                request_id=request_id,
+            )
+            locked.latest_seq = next_seq
+        terminal = {
+            "run.completed": (ResearchAgentSession.Status.READY, ""),
+            "run.failed": (ResearchAgentSession.Status.DEGRADED, "synlora_run_failed"),
+            "run.cancelled": (ResearchAgentSession.Status.READY, "synlora_run_cancelled"),
+        }.get(str(envelope.get("event_type")))
+        if terminal:
+            locked.status, locked.last_error = terminal
+        elif envelope.get("event_type") == "approval.required":
+            locked.status = ResearchAgentSession.Status.WAITING_APPROVAL
+            locked.last_error = ""
+        elif envelope.get("event_type") == "approval.resolved":
+            locked.status = ResearchAgentSession.Status.STREAMING
+            locked.last_error = ""
+        assembly = dict(locked.assembly or {})
+        assembly["source_cursor"] = max(int(assembly.get("source_cursor", -1)), source_seq)
+        locked.assembly = assembly
+        locked.save(update_fields=["latest_seq", "status", "last_error", "assembly", "updated_at"])
+        if locked.chain_node is not None:
+            chain_type = SCIENCE_DISCOVERY_CHAIN_EVENT_TYPE_MAP.get(
+                str(envelope.get("event_type")), "AI_ACTION"
+            )
+            chain_request_id = f"chain:{request_id}"
+            remote_payload = envelope.get("payload") if isinstance(envelope.get("payload"), dict) else {}
+            ResearchChainEvent.objects.get_or_create(
+                request_id=chain_request_id,
+                defaults={
+                    "chain": locked.chain_node.chain,
+                    "node": locked.chain_node,
+                    "event_id": payload_hash({"request_id": chain_request_id}),
+                    "actor": locked.user,
+                    "actor_type": "USER",
+                    "source_system": "SYNLORA",
+                    "event_type": chain_type,
+                    "occurred_at": timezone.now(),
+                    "refs": [{"kind": "agent_event", "id": str(event.id), "seq": source_seq}],
+                    "summary": remote_type or chain_type,
+                    "content_hash": payload_hash(remote_payload),
+                },
+            )
+    return event
+
+
+def _project_synlora_replay_event(remote_type: str, payload: dict) -> tuple[str, dict] | None:
+    """Normalize JSON replay events to the same durable shapes used by SSE."""
+    event_type_map = {
+        "run.started": "run.started",
+        "turn/start": "run.started",
+        "assistant.snapshot": "output.delta",
+        "assistant.delta": "output.delta",
+        "assistant.thinking.delta": "run.progress",
+        "assistant.thinking.snapshot": "run.progress",
+        "tool.started": "tool.started",
+        "tool.completed": "tool.completed",
+        "permission.required": "approval.required",
+        "agent.phase": "run.progress",
+        "artifact.upserted": "tool.completed",
+        "run.completed": "run.completed",
+        "run.failed": "run.failed",
+        "run.cancelled": "run.cancelled",
+    }
+    event_type = event_type_map.get(remote_type)
+    if not event_type:
+        return None
+
+    remote_run_id = str(payload.get("remote_run_id") or synlora_event_run_id(payload))
+    if remote_type in {"run.started", "turn/start"}:
+        shaped_payload = {"remote_run_id": remote_run_id} if remote_run_id else {}
+    else:
+        shaped_payload = dict(payload)
+    if remote_type in {"assistant.thinking.delta", "assistant.thinking.snapshot"}:
+        shaped_payload = {"phase": "thinking"}
+    elif remote_type == "agent.phase":
+        shaped_payload = {"phase": str(payload.get("phase") or "waiting_user")}
+    elif remote_type == "assistant.snapshot":
+        shaped_payload["final"] = True
+    elif remote_type in {"tool.started", "tool.completed"}:
+        name = str(payload.get("name") or "tool")
+        if payload.get("context_access") or _is_context_access_tool(name):
+            arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
+            resource_id = payload.get("resource_id") or next(
+                (
+                    arguments[key]
+                    for key in ("resource_id", "file_id", "knowledge_base_id", "kb_id")
+                    if arguments.get(key)
+                ),
+                "",
+            )
+            result_status = str(payload.get("status") or "COMPLETED").lower()
+            shaped_payload = {
+                "name": name,
+                "tool_call_id": str(payload.get("tool_call_id") or ""),
+                "status": "running" if remote_type == "tool.started" else result_status,
+                "context_access": True,
+            }
+            if resource_id:
+                shaped_payload["resource_id"] = str(resource_id)
+            event_type = "context.accessed"
+    elif remote_type == "permission.required":
+        request = payload.get("request") if isinstance(payload.get("request"), dict) else {}
+        shaped_payload["tool_call_id"] = str(payload.get("tool_call_id") or request.get("id") or "")
+    elif remote_type == "artifact.upserted":
+        refs = payload.get("refs") if isinstance(payload.get("refs"), list) else []
+        resource_id = str((refs[0] or {}).get("id") or "") if refs and isinstance(refs[0], dict) else ""
+        shaped_payload = {
+            "name": "file/send",
+            "status": "completed",
+            "result": str(payload.get("summary") or "Artifact created."),
+            "resource_id": resource_id,
+        }
+    if remote_run_id and "remote_run_id" not in shaped_payload:
+        shaped_payload["remote_run_id"] = remote_run_id
+    return event_type, shaped_payload
 
 
 def sync_agent_dock_events(
@@ -273,7 +477,12 @@ def sync_agent_dock_events(
     if runtime is None:
         return session
     remote_after = max(
-        [int(event.payload.get("remote_seq") or 0) for event in session.run_events.all()] or [-1]
+        [
+            int(event.payload["remote_seq"])
+            for event in session.run_events.all()
+            if event.payload.get("remote_seq") is not None
+        ]
+        + [int((session.assembly or {}).get("source_cursor", -1))]
     )
     try:
         shaped, _cursor, terminal = runtime.pull_events(
@@ -282,8 +491,86 @@ def sync_agent_dock_events(
         )
     except SynloraRuntimeError:
         return session
-    if not shaped:
+    if not shaped and session.provider != ResearchAgentSession.Provider.SYNLORA:
         return session
+    run_start_cursor = int((session.assembly or {}).get("run_start_cursor", -1))
+    current_run_started = any(
+        str((event.payload if isinstance(event.payload, dict) else {}).get("remote_run_id") or "")
+        == str(session.synlora_run_id or "")
+        and str((event.payload if isinstance(event.payload, dict) else {}).get("remote_type") or "")
+        in {"turn/start", "run.started"}
+        and int((event.payload if isinstance(event.payload, dict) else {}).get("remote_seq") or 0)
+        > run_start_cursor
+        for event in session.run_events.filter(run_id=session.run_id)
+    )
+    current_run_terminal = False
+    if session.provider == ResearchAgentSession.Provider.SYNLORA:
+        pending_approval_ids: set[str] = set()
+        for persisted in session.run_events.filter(
+            run_id=session.run_id,
+            event_type__in=["APPROVAL", "HUMAN_DECISION"],
+        ):
+            persisted_payload = persisted.payload if isinstance(persisted.payload, dict) else {}
+            if int(persisted_payload.get("remote_seq") or 0) > remote_after:
+                continue
+            tool_call_id = str(persisted_payload.get("tool_call_id") or "")
+            if not tool_call_id:
+                continue
+            if persisted.event_type == "APPROVAL":
+                pending_approval_ids.add(tool_call_id)
+            else:
+                pending_approval_ids.discard(tool_call_id)
+        for remote in shaped:
+            remote_seq = int(remote.get("sequence") or 0)
+            body = remote.get("event") if isinstance(remote.get("event"), dict) else {}
+            remote_type = str(body.get("type") or "")
+            if remote_seq <= run_start_cursor or current_run_terminal:
+                continue
+            remote_run_id = str(body.get("remote_run_id") or synlora_event_run_id(body))
+            is_run_start = remote_type in {"turn/start", "run.started"}
+            if is_run_start:
+                if remote_run_id != str(session.synlora_run_id or ""):
+                    continue
+                current_run_started = True
+            elif not current_run_started:
+                continue
+            elif remote_run_id and remote_run_id != str(session.synlora_run_id or ""):
+                continue
+            projection = _project_synlora_replay_event(remote_type, body)
+            if projection is None:
+                continue
+            event_type, payload = projection
+            tool_call_id = str(payload.get("tool_call_id") or "")
+            if event_type == "approval.required" and tool_call_id:
+                pending_approval_ids.add(tool_call_id)
+            elif event_type == "tool.completed" and tool_call_id in pending_approval_ids:
+                event_type = "approval.resolved"
+                payload = {
+                    "tool_call_id": tool_call_id,
+                    "name": str(payload.get("name") or "tool"),
+                    "status": str(payload.get("status") or "COMPLETED").upper(),
+                    "approval_status": "resolved",
+                }
+                pending_approval_ids.discard(tool_call_id)
+            envelope = {
+                "run_id": str(session.run_id),
+                "seq": remote_seq,
+                "source_seq": remote_seq,
+                "event_type": event_type,
+                "raw_event_type": remote_type,
+                "payload": payload,
+            }
+            persist_synlora_stream_event(session, envelope)
+            current_run_terminal = event_type in {"run.completed", "run.failed", "run.cancelled"}
+        with transaction.atomic():
+            locked = ResearchAgentSession.objects.select_for_update().get(pk=session.pk)
+            assembly = dict(locked.assembly or {})
+            assembly["source_cursor"] = max(
+                int(assembly.get("source_cursor", -1)), int(_cursor or remote_after)
+            )
+            locked.assembly = assembly
+            locked.save(update_fields=["assembly", "updated_at"])
+        return ResearchAgentSession.objects.get(pk=session.pk)
     if session.chain_node is not None:
         project_science_discovery_events(session, shaped, source_system="SYNLORA")
         session.refresh_from_db()

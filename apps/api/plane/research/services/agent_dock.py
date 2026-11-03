@@ -313,6 +313,22 @@ def _envelope(grant: ResearchContextGrant, target: AgentDockTarget, user) -> dic
             "total": len(manifest.get("resources", [])),
             "by_kind": resource_kinds,
         },
+        "manifest_summary": {
+            "summary": str(manifest.get("summary") or "")[:12000],
+            "resources": [
+                {
+                    "kind": str(resource.get("kind") or "other"),
+                    "id": str(resource.get("id") or ""),
+                    "title": str(resource.get("title") or "")[:300],
+                    "status": str(resource.get("status") or ""),
+                    "updated_at": str(resource.get("updated_at") or ""),
+                    **({"version": int(resource["version"])} if resource.get("version") is not None else {}),
+                }
+                for resource in manifest.get("resources", [])[:100]
+                if isinstance(resource, dict)
+            ],
+        },
+        "manifest_hash": str(manifest.get("hash") or ""),
         "capabilities": {
             "agent": "Synlora workspace assistant",
             "allowed_tools": grant.allowed_tools,

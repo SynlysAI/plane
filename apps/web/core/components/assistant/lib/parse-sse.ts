@@ -16,22 +16,27 @@ export type TSSEFrame = {
   event?: string;
   data: string;
   id?: string;
+  retry?: number;
 };
 
+export type TSSEParser = ((chunk: string) => void) & { flush: () => void };
+
 /** Build a chunk consumer that dispatches complete SSE frames. */
-export const createSSEParser = (onFrame: (frame: TSSEFrame) => void): ((chunk: string) => void) => {
+export const createSSEParser = (onFrame: (frame: TSSEFrame) => void): TSSEParser => {
   let buffer = "";
   let event: string | undefined;
   let dataLines: string[] = [];
   let id: string | undefined;
+  let retry: number | undefined;
 
   const dispatch = () => {
     if (dataLines.length > 0) {
-      onFrame({ event, data: dataLines.join("\n"), id });
+      onFrame({ event, data: dataLines.join("\n"), id, retry });
     }
     event = undefined;
     dataLines = [];
     id = undefined;
+    retry = undefined;
   };
 
   const consumeLine = (line: string) => {
@@ -47,9 +52,10 @@ export const createSSEParser = (onFrame: (frame: TSSEFrame) => void): ((chunk: s
     if (field === "event") event = value;
     else if (field === "data") dataLines.push(value);
     else if (field === "id") id = value;
+    else if (field === "retry" && /^\d+$/.test(value)) retry = Number(value);
   };
 
-  return (chunk: string) => {
+  const consume = (chunk: string) => {
     buffer += chunk;
     let newline = buffer.indexOf("\n");
     while (newline !== -1) {
@@ -61,6 +67,15 @@ export const createSSEParser = (onFrame: (frame: TSSEFrame) => void): ((chunk: s
     }
     // any trailing partial line stays buffered until the next chunk completes it
   };
+
+  consume.flush = () => {
+    if (buffer) {
+      consumeLine(buffer.endsWith("\r") ? buffer.slice(0, -1) : buffer);
+      buffer = "";
+    }
+    dispatch();
+  };
+  return consume;
 };
 
 export type TAssistantStreamEvent =

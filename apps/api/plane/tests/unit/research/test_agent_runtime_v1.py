@@ -4,7 +4,47 @@
 
 """Synlora v1 runtime adapter unit tests."""
 
-from plane.research.services.agent_runtime import project_synlora_events
+from types import SimpleNamespace
+
+from plane.research.services import agent_runtime
+from plane.research.services.agent_runtime import (
+    SynloraRuntimeClient,
+    project_synlora_events,
+    resolve_synlora_runtime,
+)
+from plane.research.services.agent_dock_sessions import _project_synlora_replay_event
+
+
+def test_runtime_accepts_delegated_service_token_without_legacy_token(monkeypatch):
+    """有 Plane 用户身份时，服务令牌即可建立 Synlora runtime。"""
+    workspace = object()
+    user = object()
+    config = SimpleNamespace(
+        base_url="https://synlora.example",
+        token="",
+        service_token="plane-service-token",
+        is_enabled=True,
+    )
+    monkeypatch.setattr(agent_runtime, "resolve_assistant_config", lambda *_args, **_kwargs: config)
+
+    runtime = resolve_synlora_runtime(workspace, user=user)
+
+    assert isinstance(runtime, SynloraRuntimeClient)
+    assert runtime.workspace is workspace
+    assert runtime.user is user
+
+
+def test_runtime_without_delegated_identity_requires_legacy_token(monkeypatch):
+    """缺少 Plane 用户身份时仍要求旧式会话 token。"""
+    config = SimpleNamespace(
+        base_url="https://synlora.example",
+        token="",
+        service_token="plane-service-token",
+        is_enabled=True,
+    )
+    monkeypatch.setattr(agent_runtime, "resolve_assistant_config", lambda *_args, **_kwargs: config)
+
+    assert resolve_synlora_runtime(object()) is None
 
 
 def test_projects_synlora_events_without_user_text_or_reasoning():
@@ -80,3 +120,37 @@ def test_projects_approval_and_redacts_sensitive_arguments():
         "api_key": "[REDACTED]",
         "headers": {"Authorization": "[REDACTED]"},
     }
+
+
+def test_json_replay_normalizes_context_access_and_terminal_events():
+    """JSON replay retains context evidence and terminal state from Synlora events."""
+    started = _project_synlora_replay_event(
+        "tool.started",
+        {"name": "file.read", "tool_call_id": "call-1", "arguments": {"file_id": "file-1"}},
+    )
+    completed = _project_synlora_replay_event(
+        "tool.completed",
+        {
+            "name": "knowledge.read",
+            "tool_call_id": "call-2",
+            "status": "COMPLETED",
+            "context_access": True,
+            "resource_id": "kb-1",
+            "summary": "Context resource read completed.",
+        },
+    )
+    terminal = _project_synlora_replay_event("run.completed", {"message": {"content": ""}})
+
+    assert started == (
+        "context.accessed",
+        {
+            "name": "file.read",
+            "tool_call_id": "call-1",
+            "status": "running",
+            "context_access": True,
+            "resource_id": "file-1",
+        },
+    )
+    assert completed is not None and completed[0] == "context.accessed"
+    assert completed[1]["resource_id"] == "kb-1"
+    assert terminal == ("run.completed", {"message": {"content": ""}})

@@ -9,6 +9,7 @@ from plane.app.views.agent_dock import (
     AgentDockContextResolveEndpoint,
     AgentDockRunCancelEndpoint,
     AgentDockRunEventEndpoint,
+    AgentDockRunEventStreamEndpoint,
     AgentDockSessionCollectionEndpoint,
     AgentDockSessionDetailEndpoint,
     AgentDockSessionMessageEndpoint,
@@ -39,6 +40,11 @@ urlpatterns = [
         "workspaces/<str:slug>/agent-dock/sessions/<uuid:session_id>/messages/",
         AgentDockSessionMessageEndpoint.as_view(),
         name="agent-dock-session-message",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-dock/runs/<uuid:run_id>/events/stream/",
+        AgentDockRunEventStreamEndpoint.as_view(),
+        name="agent-dock-run-events-stream",
     ),
     path(
         "workspaces/<str:slug>/agent-dock/runs/<uuid:run_id>/events/",

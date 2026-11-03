@@ -198,6 +198,12 @@ export interface IUserEmailNotificationSettings {
   comment: boolean;
   mention: boolean;
   issue_completed: boolean;
+  assignment: boolean;
+  research_property_change: boolean;
+  research_state_change: boolean;
+  research_comment: boolean;
+  research_mention: boolean;
+  research_completion: boolean;
 }
 
 export type TProfileViews = "assigned" | "created" | "subscribed";
