@@ -16,6 +16,7 @@ def make_email_message():
     """Create a minimal email double with a separate SMTP connection double."""
     message = MagicMock()
     message.connection = MagicMock()
+    message.send.return_value = 1
     return message
 
 
@@ -44,6 +45,18 @@ def test_temporary_smtp_rejection_is_retryable():
     assert error.value.code == "smtp_temporary_rejection"
     assert error.value.retryable is True
     message.connection.close.assert_called_once()
+
+
+def test_zero_acceptance_count_is_retryable_before_submission():
+    """A backend returning zero accepted recipients cannot be logged as sent."""
+    message = make_email_message()
+    message.send.return_value = 0
+
+    with pytest.raises(AccountEmailDeliveryError) as error:
+        send_account_email(message)
+
+    assert error.value.code == "smtp_no_recipient_accepted"
+    assert error.value.retryable is True
 
 
 def test_authentication_and_permanent_rejection_are_not_retryable():
@@ -110,4 +123,3 @@ def test_permanent_account_email_error_surfaces_as_failed_task():
 
     with pytest.raises(AccountEmailDeliveryError, match="smtp_authentication_failed"):
         handle_account_email_error(error)
-

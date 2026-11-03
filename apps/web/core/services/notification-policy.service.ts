@@ -21,6 +21,12 @@ export type TWorkspaceNotificationPolicy = {
   email_enabled: boolean;
 };
 
+export type TWorkspaceNotificationPolicyUpdate = {
+  category: TWorkspaceNotificationCategory;
+  in_app_enabled?: boolean;
+  email_enabled?: boolean;
+};
+
 export type TWorkspaceNotificationPolicyPage = {
   policies: TWorkspaceNotificationPolicy[];
 };
@@ -38,7 +44,7 @@ export class WorkspaceNotificationPolicyService extends APIService {
   /** Update one or more notification channel policies. */
   async update(
     workspaceSlug: string,
-    policies: Partial<TWorkspaceNotificationPolicy>[]
+    policies: TWorkspaceNotificationPolicyUpdate[]
   ): Promise<TWorkspaceNotificationPolicyPage> {
     return this.patch(`/api/workspaces/${workspaceSlug}/notification-policies/`, { policies }).then(
       (response) => response.data

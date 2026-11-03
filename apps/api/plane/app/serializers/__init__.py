@@ -130,7 +130,6 @@ from .notification import (
     SystemAnnouncementCreateSerializer,
     SystemAnnouncementSerializer,
     UserNotificationPreferenceSerializer,
-    WorkspaceNotificationPolicySerializer,
 )
 
 from .exporter import ExporterHistorySerializer

@@ -59,24 +59,26 @@ class Command(BaseCommand):
             if delivery is None:
                 raise CommandError("Notification delivery was not found")
             if delivery.status != NotificationEmailDelivery.Status.FAILED:
-                raise CommandError(
-                    f"Only failed deliveries can be retried; current status is {delivery.status}"
-                )
+                raise CommandError(f"Only failed deliveries can be retried; current status is {delivery.status}")
 
             previous_status = delivery.status
             now = timezone.now()
             delivery.status = NotificationEmailDelivery.Status.PENDING
             delivery.available_at = now
+            delivery.attempts = 0
             delivery.lease_until = None
             delivery.lease_token = ""
+            delivery.smtp_accepted_at = None
             delivery.last_error_code = ""
             delivery.last_error_at = None
             delivery.save(
                 update_fields=[
                     "status",
                     "available_at",
+                    "attempts",
                     "lease_until",
                     "lease_token",
+                    "smtp_accepted_at",
                     "last_error_code",
                     "last_error_at",
                     "updated_at",
@@ -87,7 +89,9 @@ class Command(BaseCommand):
                     delivery_status=EmailNotificationLog.DeliveryStatus.PENDING,
                     available_at=now,
                     processed_at=None,
+                    sent_at=None,
                     lease_until=None,
+                    attempts=0,
                     last_error_code="",
                 )
             NotificationDeliveryAudit.objects.create(

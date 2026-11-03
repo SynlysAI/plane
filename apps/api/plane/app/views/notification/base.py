@@ -16,7 +16,6 @@ from plane.app.serializers import (
     SystemAnnouncementCreateSerializer,
     SystemAnnouncementSerializer,
     UserNotificationPreferenceSerializer,
-    WorkspaceNotificationPolicySerializer,
 )
 from plane.db.models import (
     EmailNotificationLog,
@@ -802,22 +801,7 @@ class WorkspaceNotificationPolicyEndpoint(BaseAPIView):
     def get(self, request, slug):
         """Return every manageable category with effective defaults included."""
         workspace = Workspace.objects.get(slug=slug)
-        policies = {
-            policy.category: policy
-            for policy in WorkspaceNotificationPolicy.objects.filter(
-                workspace=workspace,
-                deleted_at__isnull=True,
-            )
-        }
-        return Response(
-            {
-                "policies": [
-                    self._policy_payload(policies.get(category), workspace=workspace, category=category)
-                    for category in self.POLICY_CATEGORIES
-                ]
-            },
-            status=status.HTTP_200_OK,
-        )
+        return Response(self._policy_page(workspace), status=status.HTTP_200_OK)
 
     @allow_permission(allowed_roles=[ROLE.ADMIN], level="WORKSPACE")
     def patch(self, request, slug):
@@ -841,6 +825,8 @@ class WorkspaceNotificationPolicyEndpoint(BaseAPIView):
                     if type(item[field]) is not bool:
                         return Response({field: "必须为布尔值。"}, status=status.HTTP_400_BAD_REQUEST)
                     values[field] = item[field]
+            if len(values) == 1:
+                return Response({"policies": "每一项至少包含一个通知开关。"}, status=status.HTTP_400_BAD_REQUEST)
             validated.append(values)
 
         disabled_email_categories = [item["category"] for item in validated if item.get("email_enabled") is False]
@@ -875,26 +861,39 @@ class WorkspaceNotificationPolicyEndpoint(BaseAPIView):
                     actor=request.user,
                 )
 
-        return self.get(request, slug=slug)
+        return Response(self._policy_page(workspace), status=status.HTTP_200_OK)
 
     @staticmethod
-    def _policy_payload(policy, *, workspace, category):
-        """Serialize either a persisted policy or a safe default row.
+    def _policy_page(workspace):
+        """Build the complete effective-policy page.
 
         Args:
-            policy: Persisted policy when one exists.
-            workspace: Workspace used for an unsaved default policy.
-            category: Notification category key.
+            workspace: Workspace whose effective policies are requested.
 
         Returns:
-            A JSON-ready channel policy without notification content.
+            Every category and its effective channel switches.
         """
-        policy = policy or WorkspaceNotificationPolicy(workspace=workspace, category=category)
-        return WorkspaceNotificationPolicySerializer(policy).data
+        policies = {
+            policy.category: policy
+            for policy in WorkspaceNotificationPolicy.objects.filter(
+                workspace=workspace,
+                deleted_at__isnull=True,
+            )
+        }
+        return {
+            "policies": [
+                {
+                    "category": category,
+                    "in_app_enabled": policies[category].in_app_enabled if category in policies else True,
+                    "email_enabled": policies[category].email_enabled if category in policies else True,
+                }
+                for category in WorkspaceNotificationPolicy.Category.values
+            ]
+        }
 
     @staticmethod
     def _suppress_queued_email(*, workspace, categories, actor):
-        """Suppress only unleased mail and leave worker-owned rows fenced.
+        """Suppress queued and pre-submission mail after an administrator action.
 
         Args:
             workspace: Workspace whose email policy changed.
@@ -911,47 +910,54 @@ class WorkspaceNotificationPolicyEndpoint(BaseAPIView):
                 status__in=(
                     NotificationEmailDelivery.Status.PENDING,
                     NotificationEmailDelivery.Status.RETRY,
+                    NotificationEmailDelivery.Status.PROCESSING,
                 ),
             )
         )
-        for delivery in deliveries:
-            previous_status = delivery.status
-            delivery.status = NotificationEmailDelivery.Status.SUPPRESSED
-            delivery.available_at = now
-            delivery.lease_until = None
-            delivery.lease_token = ""
-            delivery.last_error_code = "workspace_policy_disabled"
-            delivery.last_error_at = now
-            delivery.save(
-                update_fields=[
-                    "status",
-                    "available_at",
-                    "lease_until",
-                    "lease_token",
-                    "last_error_code",
-                    "last_error_at",
-                    "updated_at",
-                ]
+        delivery_rows = list(deliveries)
+        if not delivery_rows:
+            return
+
+        delivery_ids = [delivery.pk for delivery in delivery_rows]
+        source_log_ids = [delivery.source_log_id for delivery in delivery_rows if delivery.source_log_id]
+        NotificationEmailDelivery.objects.filter(pk__in=delivery_ids).update(
+            status=NotificationEmailDelivery.Status.SUPPRESSED,
+            available_at=now,
+            lease_until=None,
+            lease_token="",
+            last_error_code="workspace_policy_disabled",
+            last_error_at=now,
+            updated_by=actor,
+            updated_at=now,
+        )
+        if source_log_ids:
+            EmailNotificationLog.objects.filter(pk__in=source_log_ids).update(
+                delivery_status=EmailNotificationLog.DeliveryStatus.SUPPRESSED,
+                available_at=now,
+                processed_at=now,
+                sent_at=None,
+                lease_until=None,
+                last_error_code="workspace_policy_disabled",
+                updated_by=actor,
+                updated_at=now,
             )
-            if delivery.source_log_id:
-                EmailNotificationLog.objects.filter(pk=delivery.source_log_id).update(
-                    delivery_status=EmailNotificationLog.DeliveryStatus.SUPPRESSED,
-                    available_at=now,
-                    processed_at=now,
-                    lease_until=None,
-                    last_error_code="workspace_policy_disabled",
+        NotificationDeliveryAudit.objects.bulk_create(
+            [
+                NotificationDeliveryAudit(
+                    workspace=workspace,
+                    delivery=delivery,
+                    delivery_identifier=delivery.pk,
+                    event_identifier=delivery.event.event_key,
+                    actor=actor,
+                    created_by=actor,
+                    action="policy_suppress",
+                    previous_status=delivery.status,
+                    new_status=NotificationEmailDelivery.Status.SUPPRESSED,
+                    reason="Workspace email policy disabled",
                 )
-            NotificationDeliveryAudit.objects.create(
-                workspace=workspace,
-                delivery=delivery,
-                delivery_identifier=delivery.pk,
-                event_identifier=delivery.event.event_key,
-                actor=actor,
-                action="policy_suppress",
-                previous_status=previous_status,
-                new_status=delivery.status,
-                reason="Workspace email policy disabled",
-            )
+                for delivery in delivery_rows
+            ]
+        )
 
 
 class NotificationDeliveryDiagnosticsEndpoint(BaseAPIView):

@@ -17,7 +17,7 @@ from celery import shared_task
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives, get_connection
 from django.db import transaction
-from django.db.models import F
+from django.db.models import Case, F, When
 from django.template.loader import render_to_string
 
 # Django imports
@@ -40,6 +40,10 @@ from plane.utils.administrative_projects import project_member_roster
 from plane.utils.email import generate_plain_text_from_html
 from plane.utils.notification_outbox import issue_notification_category
 
+MAX_EMAIL_DELIVERY_ATTEMPTS = 6
+EMAIL_DELIVERY_MAX_AGE = timedelta(hours=24)
+EMAIL_DELIVERY_RETRY_DELAYS = (1, 5, 15, 60, 360)
+
 
 def remove_unwanted_characters(input_text):
     # Remove only control characters and potentially problematic characters for email subjects
@@ -52,37 +56,189 @@ def _notification_email_delivery_enabled():
     return bool(getattr(settings, "NOTIFICATION_EMAIL_DELIVERY_ENABLED", True))
 
 
+def _delivery_row_exhausted(attempts, created_at, now):
+    """Decide whether an already-recorded delivery attempt exhausted its budget.
+
+    Args:
+        attempts: Attempts already recorded before this requeue.
+        created_at: Delivery creation time.
+        now: Current aware timestamp.
+
+    Returns:
+        True when the recorded attempts reached the cap or the age window.
+    """
+    return attempts >= MAX_EMAIL_DELIVERY_ATTEMPTS or now - created_at >= EMAIL_DELIVERY_MAX_AGE
+
+
+def _bounded_next_attempt_count():
+    """Increment a retry count without crossing the configured maximum."""
+    return Case(
+        When(attempts__lt=MAX_EMAIL_DELIVERY_ATTEMPTS, then=F("attempts") + 1),
+        default=MAX_EMAIL_DELIVERY_ATTEMPTS,
+    )
+
+
+def _recover_expired_delivery_claims(queryset, *, now, source_logs=False):
+    """Fence expired worker claims and apply the bounded retry budget.
+
+    Args:
+        queryset: Expired processing deliveries to recover.
+        now: Current aware timestamp.
+        source_logs: Whether matching issue source logs should be updated.
+    """
+    rows = list(
+        queryset.select_for_update(skip_locked=True).values(
+            "id",
+            "source_log_id",
+            "attempts",
+            "created_at",
+        )
+    )
+    retry_ids = []
+    failed_ids = []
+    retry_log_ids = []
+    failed_log_ids = []
+    for row in rows:
+        if _delivery_row_exhausted(row["attempts"], row["created_at"], now):
+            failed_ids.append(row["id"])
+            if row["source_log_id"]:
+                failed_log_ids.append(row["source_log_id"])
+        else:
+            retry_ids.append(row["id"])
+            if row["source_log_id"]:
+                retry_log_ids.append(row["source_log_id"])
+
+    if retry_ids:
+        NotificationEmailDelivery.objects.filter(pk__in=retry_ids).update(
+            status=NotificationEmailDelivery.Status.RETRY,
+            available_at=now,
+            lease_until=None,
+            lease_token="",
+            attempts=F("attempts") + 1,
+            last_error_code="delivery_lease_expired",
+            last_error_at=now,
+            updated_at=now,
+        )
+    if failed_ids:
+        NotificationEmailDelivery.objects.filter(pk__in=failed_ids).update(
+            status=NotificationEmailDelivery.Status.FAILED,
+            available_at=now,
+            lease_until=None,
+            lease_token="",
+            attempts=_bounded_next_attempt_count(),
+            last_error_code="delivery_lease_expired",
+            last_error_at=now,
+            updated_at=now,
+        )
+    if source_logs:
+        if retry_log_ids:
+            EmailNotificationLog.objects.filter(pk__in=retry_log_ids).update(
+                delivery_status=EmailNotificationLog.DeliveryStatus.RETRY,
+                available_at=now,
+                lease_until=None,
+                attempts=F("attempts") + 1,
+                last_error_code="delivery_lease_expired",
+                updated_at=now,
+            )
+        if failed_log_ids:
+            EmailNotificationLog.objects.filter(pk__in=failed_log_ids).update(
+                delivery_status=EmailNotificationLog.DeliveryStatus.FAILED,
+                available_at=now,
+                processed_at=now,
+                lease_until=None,
+                attempts=_bounded_next_attempt_count(),
+                last_error_code="delivery_lease_expired",
+                updated_at=now,
+            )
+
+
+def _mark_queue_publish_failed(delivery_ids, lease_token, *, now):
+    """Bounded-requeue deliveries whose Celery publish failed after claiming.
+
+    Args:
+        delivery_ids: Delivery rows claimed by the current scanner.
+        lease_token: Lease token owned by the current scanner.
+        now: Current aware timestamp.
+    """
+    with transaction.atomic():
+        rows = list(
+            NotificationEmailDelivery.objects.select_for_update()
+            .filter(
+                pk__in=delivery_ids,
+                status=NotificationEmailDelivery.Status.PROCESSING,
+                lease_token=lease_token,
+            )
+            .values("id", "source_log_id", "attempts", "created_at")
+        )
+        retry_ids = []
+        failed_ids = []
+        retry_log_ids = []
+        failed_log_ids = []
+        for row in rows:
+            if _delivery_row_exhausted(row["attempts"] + 1, row["created_at"], now):
+                failed_ids.append(row["id"])
+                if row["source_log_id"]:
+                    failed_log_ids.append(row["source_log_id"])
+            else:
+                retry_ids.append(row["id"])
+                if row["source_log_id"]:
+                    retry_log_ids.append(row["source_log_id"])
+
+        available_at = now + timedelta(minutes=1)
+        common_delivery = {
+            "available_at": available_at,
+            "lease_until": None,
+            "lease_token": "",
+            "attempts": _bounded_next_attempt_count(),
+            "last_error_code": "queue_publish_failed",
+            "last_error_at": now,
+            "updated_at": now,
+        }
+        if retry_ids:
+            NotificationEmailDelivery.objects.filter(pk__in=retry_ids).update(
+                status=NotificationEmailDelivery.Status.RETRY,
+                **common_delivery,
+            )
+        if failed_ids:
+            NotificationEmailDelivery.objects.filter(pk__in=failed_ids).update(
+                status=NotificationEmailDelivery.Status.FAILED,
+                available_at=now,
+                **{key: value for key, value in common_delivery.items() if key != "available_at"},
+            )
+        common_log = {
+            "available_at": available_at,
+            "lease_until": None,
+            "attempts": F("attempts") + 1,
+            "last_error_code": "queue_publish_failed",
+            "updated_at": now,
+        }
+        if retry_log_ids:
+            EmailNotificationLog.objects.filter(pk__in=retry_log_ids).update(
+                delivery_status=EmailNotificationLog.DeliveryStatus.RETRY,
+                **common_log,
+            )
+        if failed_log_ids:
+            EmailNotificationLog.objects.filter(pk__in=failed_log_ids).update(
+                delivery_status=EmailNotificationLog.DeliveryStatus.FAILED,
+                available_at=now,
+                processed_at=now,
+                **{key: value for key, value in common_log.items() if key != "available_at"},
+            )
+
+
 def _lease_and_enqueue_email_notifications():
     """Lease at most 100 durable email deliveries and enqueue by receiver and issue."""
     now = timezone.now()
     lease_until = now + timedelta(minutes=5)
     with transaction.atomic():
-        expired_delivery_ids = list(
+        _recover_expired_delivery_claims(
             NotificationEmailDelivery.objects.filter(
                 status=NotificationEmailDelivery.Status.PROCESSING,
                 source_log__isnull=False,
                 lease_until__lte=now,
-            ).values_list("id", flat=True)
-        )
-        expired_log_ids = list(
-            NotificationEmailDelivery.objects.filter(pk__in=expired_delivery_ids).values_list(
-                "source_log_id", flat=True
-            )
-        )
-        NotificationEmailDelivery.objects.filter(pk__in=expired_delivery_ids).update(
-            status=NotificationEmailDelivery.Status.RETRY,
-            lease_until=None,
-            lease_token="",
-            available_at=now,
-        )
-        EmailNotificationLog.objects.filter(
-            pk__in=expired_log_ids,
-            delivery_status=EmailNotificationLog.DeliveryStatus.PROCESSING,
-            lease_until__lte=now,
-        ).update(
-            delivery_status=EmailNotificationLog.DeliveryStatus.RETRY,
-            lease_until=None,
-            available_at=now,
+            ),
+            now=now,
+            source_logs=True,
         )
         deliveries = list(
             NotificationEmailDelivery.objects.select_for_update(skip_locked=True)
@@ -114,6 +270,7 @@ def _lease_and_enqueue_email_notifications():
         )
 
     grouped = defaultdict(list)
+    delivery_by_log_id = {row.source_log_id: row.pk for row in deliveries}
     for row in (delivery.source_log for delivery in deliveries):
         grouped[(str(row.receiver_id), str(row.entity_identifier))].append(row)
 
@@ -133,34 +290,8 @@ def _lease_and_enqueue_email_notifications():
             )
             queued_count += len(ids)
         except Exception as exc:
-            claimed_log_ids = list(
-                NotificationEmailDelivery.objects.filter(
-                    source_log_id__in=ids,
-                    status=NotificationEmailDelivery.Status.PROCESSING,
-                    lease_token=lease_token,
-                ).values_list("source_log_id", flat=True)
-            )
-            NotificationEmailDelivery.objects.filter(
-                source_log_id__in=ids,
-                status=NotificationEmailDelivery.Status.PROCESSING,
-                lease_token=lease_token,
-            ).update(
-                status=NotificationEmailDelivery.Status.RETRY,
-                available_at=now + timedelta(minutes=1),
-                lease_until=None,
-                lease_token="",
-                last_error_code="queue_publish_failed",
-                last_error_at=now,
-            )
-            EmailNotificationLog.objects.filter(
-                pk__in=claimed_log_ids,
-                delivery_status=EmailNotificationLog.DeliveryStatus.PROCESSING,
-            ).update(
-                delivery_status=EmailNotificationLog.DeliveryStatus.RETRY,
-                available_at=now + timedelta(minutes=1),
-                lease_until=None,
-                last_error_code="queue_publish_failed",
-            )
+            claimed_delivery_ids = [delivery_by_log_id[log_id] for log_id in ids]
+            _mark_queue_publish_failed(claimed_delivery_ids, lease_token, now=now)
             logging.getLogger("plane.worker").exception("Failed to enqueue notification email", exc_info=exc)
     return queued_count
 
@@ -179,16 +310,14 @@ def _lease_and_enqueue_research_email_notifications():
     now = timezone.now()
     lease_until = now + timedelta(minutes=5)
     with transaction.atomic():
-        NotificationEmailDelivery.objects.filter(
-            status=NotificationEmailDelivery.Status.PROCESSING,
-            source_log__isnull=True,
-            event__entity_name__startswith="research_",
-            lease_until__lte=now,
-        ).update(
-            status=NotificationEmailDelivery.Status.RETRY,
-            available_at=now,
-            lease_until=None,
-            lease_token="",
+        _recover_expired_delivery_claims(
+            NotificationEmailDelivery.objects.filter(
+                status=NotificationEmailDelivery.Status.PROCESSING,
+                source_log__isnull=True,
+                event__entity_name__startswith="research_",
+                lease_until__lte=now,
+            ),
+            now=now,
         )
         deliveries = list(
             NotificationEmailDelivery.objects.select_for_update(skip_locked=True)
@@ -222,18 +351,7 @@ def _lease_and_enqueue_research_email_notifications():
             send_research_notification_email.delay(delivery_ids=ids, lease_token=lease_token)
             queued_count += len(ids)
         except Exception as exc:
-            NotificationEmailDelivery.objects.filter(
-                pk__in=ids,
-                status=NotificationEmailDelivery.Status.PROCESSING,
-                lease_token=lease_token,
-            ).update(
-                status=NotificationEmailDelivery.Status.RETRY,
-                available_at=now + timedelta(minutes=1),
-                lease_until=None,
-                lease_token="",
-                last_error_code="queue_publish_failed",
-                last_error_at=now,
-            )
+            _mark_queue_publish_failed(ids, lease_token, now=now)
             logging.getLogger("plane.worker").exception("Failed to enqueue research notification email", exc_info=exc)
     return queued_count
 
@@ -426,16 +544,15 @@ def _retry_email_batch(notification_ids, error_code, *, lease_token, retry_after
             if row is None:
                 continue
             age = now - row.created_at
-            if delivery.attempts >= 6 or age >= timedelta(hours=24):
+            if delivery.attempts >= MAX_EMAIL_DELIVERY_ATTEMPTS or age >= EMAIL_DELIVERY_MAX_AGE:
                 next_attempt = now
                 status = EmailNotificationLog.DeliveryStatus.FAILED
             elif retry_after is not None:
                 next_attempt = now + retry_after
                 status = EmailNotificationLog.DeliveryStatus.RETRY
             else:
-                delays = (1, 5, 15, 60, 360)
-                delay_index = max(0, min(delivery.attempts - 1, len(delays) - 1))
-                next_attempt = now + timedelta(minutes=delays[delay_index])
+                delay_index = max(0, min(delivery.attempts - 1, len(EMAIL_DELIVERY_RETRY_DELAYS) - 1))
+                next_attempt = now + timedelta(minutes=EMAIL_DELIVERY_RETRY_DELAYS[delay_index])
                 status = EmailNotificationLog.DeliveryStatus.RETRY
             EmailNotificationLog.objects.filter(pk=row.pk).update(
                 delivery_status=status,
@@ -1163,7 +1280,7 @@ def _retry_research_delivery_batch(delivery_ids, error_code, *, lease_token, ret
         )
         for delivery in deliveries:
             age = now - delivery.created_at
-            if delivery.attempts >= 6 or age >= timedelta(hours=24):
+            if delivery.attempts >= MAX_EMAIL_DELIVERY_ATTEMPTS or age >= EMAIL_DELIVERY_MAX_AGE:
                 status = NotificationEmailDelivery.Status.FAILED
                 available_at = now
             else:
@@ -1171,9 +1288,8 @@ def _retry_research_delivery_batch(delivery_ids, error_code, *, lease_token, ret
                 if retry_after is not None:
                     available_at = now + retry_after
                 else:
-                    delays = (1, 5, 15, 60, 360)
-                    index = max(0, min(delivery.attempts - 1, len(delays) - 1))
-                    available_at = now + timedelta(minutes=delays[index])
+                    index = max(0, min(delivery.attempts - 1, len(EMAIL_DELIVERY_RETRY_DELAYS) - 1))
+                    available_at = now + timedelta(minutes=EMAIL_DELIVERY_RETRY_DELAYS[index])
             NotificationEmailDelivery.objects.filter(pk=delivery.pk, lease_token=lease_token).update(
                 status=status,
                 available_at=available_at,

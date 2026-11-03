@@ -173,38 +173,43 @@ def persist_issue_notification_batch(notifications, email_logs):
             )
             for category in categories
         ]
-        candidates = NotificationEvent.objects.filter(idempotency_key__in=event_keys)
+        candidates = {
+            candidate.category: candidate
+            for candidate in NotificationEvent.objects.filter(idempotency_key__in=event_keys)
+        }
+        primary_category = issue_notification_category(activity, issue_data)
         event = next(
             (
-                candidate
-                for candidate in candidates
-                if policies[candidate.workspace_id][candidate.category]["email_enabled"]
+                candidates[category]
+                for category in (NotificationEvent.Category.MENTION, primary_category)
+                if category in candidates and policies[candidates[category].workspace_id][category]["email_enabled"]
             ),
             None,
         )
         if event is None:
             continue
-        if NotificationEmailDelivery.objects.filter(event=event).exists():
-            continue
-
-        source_log = EmailNotificationLog.objects.create(
-            receiver_id=email_log.receiver_id,
-            triggered_by_id=email_log.triggered_by_id,
-            entity_identifier=email_log.entity_identifier,
-            entity_name=email_log.entity_name,
-            data=email_log.data,
-            available_at=email_log.available_at or timezone.now(),
-            immediate=email_log.immediate,
-            entity=email_log.entity,
-            old_value=email_log.old_value,
-            new_value=email_log.new_value,
-        )
-        NotificationEmailDelivery.objects.create(
+        delivery, delivery_created = NotificationEmailDelivery.objects.get_or_create(
             event=event,
-            source_log=source_log,
-            status=NotificationEmailDelivery.Status.PENDING,
-            available_at=source_log.available_at,
+            defaults={
+                "status": NotificationEmailDelivery.Status.PENDING,
+                "available_at": email_log.available_at or timezone.now(),
+            },
         )
+        if delivery_created:
+            source_log = EmailNotificationLog.objects.create(
+                receiver_id=email_log.receiver_id,
+                triggered_by_id=email_log.triggered_by_id,
+                entity_identifier=email_log.entity_identifier,
+                entity_name=email_log.entity_name,
+                data=email_log.data,
+                available_at=delivery.available_at,
+                immediate=email_log.immediate,
+                entity=email_log.entity,
+                old_value=email_log.old_value,
+                new_value=email_log.new_value,
+            )
+            delivery.source_log = source_log
+            delivery.save(update_fields=["source_log", "updated_at"])
 
 
 def _research_route(notification, data, workspace_slug):

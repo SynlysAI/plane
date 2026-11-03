@@ -50,7 +50,10 @@ def send_account_email(message):
         ) as error:
             raise AccountEmailDeliveryError("smtp_connection_failed", retryable=True) from error
 
-        return message.send()
+        accepted_count = message.send()
+        if accepted_count != 1:
+            raise AccountEmailDeliveryError("smtp_no_recipient_accepted", retryable=True)
+        return accepted_count
     except smtplib.SMTPAuthenticationError as error:
         raise AccountEmailDeliveryError("smtp_authentication_failed") from error
     except smtplib.SMTPRecipientsRefused as error:

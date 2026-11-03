@@ -77,3 +77,39 @@ it("keeps server state visible when saving fails", async () => {
   expect(container.querySelector('[role="alert"]')?.textContent).toContain("通知策略保存失败");
   expect(container.querySelector<HTMLInputElement>('input[name="system_announcement-in-app"]')?.checked).toBe(true);
 });
+
+it("ignores a stale response after a newer policy update finishes first", async () => {
+  let resolveFirst: (value: {
+    policies: Array<{ category: string; in_app_enabled: boolean; email_enabled: boolean }>;
+  }) => void;
+  const firstUpdate = new Promise((resolve) => {
+    resolveFirst = resolve;
+  });
+  service.list.mockResolvedValue({
+    policies: [{ category: "property_change", in_app_enabled: true, email_enabled: true }],
+  });
+  service.update.mockImplementationOnce(() => firstUpdate);
+  service.update.mockResolvedValueOnce({
+    policies: [
+      { category: "state_change", in_app_enabled: true, email_enabled: false },
+      { category: "property_change", in_app_enabled: true, email_enabled: true },
+    ],
+  });
+
+  await render();
+  await act(async () => {
+    container.querySelector<HTMLInputElement>('input[name="property_change-email"]')?.click();
+  });
+  await act(async () => {
+    container.querySelector<HTMLInputElement>('input[name="state_change-email"]')?.click();
+  });
+  await act(async () => {
+    resolveFirst!({
+      policies: [{ category: "property_change", in_app_enabled: true, email_enabled: false }],
+    });
+  });
+  await act(async () => undefined);
+
+  expect(container.querySelector<HTMLInputElement>('input[name="state_change-email"]')?.checked).toBe(false);
+  expect(container.querySelector<HTMLInputElement>('input[name="property_change-email"]')?.checked).toBe(true);
+});

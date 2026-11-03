@@ -1,5 +1,6 @@
 """Contracts for workspace-level notification channel policies."""
 
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
@@ -43,6 +44,7 @@ def test_policy_list_returns_every_category_with_defaults(session_client, worksp
     assert response.status_code == status.HTTP_200_OK, response.data
     assert len(response.data["policies"]) == len(WorkspaceNotificationPolicy.Category.choices)
     assert all(item["in_app_enabled"] is True and item["email_enabled"] is True for item in response.data["policies"])
+    assert all(set(item) == {"category", "in_app_enabled", "email_enabled"} for item in response.data["policies"])
     assert not WorkspaceNotificationPolicy.objects.filter(workspace=workspace).exists()
 
 
@@ -90,6 +92,34 @@ def test_policy_update_suppresses_queued_email_and_records_audit(session_client,
         status=NotificationEmailDelivery.Status.RETRY,
         available_at=timezone.now(),
     )
+    processing_event = NotificationEvent.objects.create(
+        idempotency_key=f"policy-processing-{uuid4()}",
+        workspace=workspace,
+        receiver=create_user,
+        entity_name="issue",
+        entity_identifier=uuid4(),
+        action="mentioned",
+        category=NotificationEvent.Category.MENTION,
+        title="Mention before submit",
+    )
+    processing_log = EmailNotificationLog.objects.create(
+        receiver=create_user,
+        triggered_by=create_user,
+        entity_identifier=processing_event.entity_identifier,
+        entity_name="issue",
+        data={},
+        entity="issue",
+        delivery_status=EmailNotificationLog.DeliveryStatus.PROCESSING,
+        lease_until=timezone.now() + timedelta(minutes=5),
+    )
+    processing_delivery = NotificationEmailDelivery.objects.create(
+        event=processing_event,
+        source_log=processing_log,
+        status=NotificationEmailDelivery.Status.PROCESSING,
+        available_at=timezone.now(),
+        lease_until=timezone.now() + timedelta(minutes=5),
+        lease_token="worker-token",
+    )
 
     response = session_client.patch(
         URL.format(slug=workspace.slug),
@@ -99,9 +129,14 @@ def test_policy_update_suppresses_queued_email_and_records_audit(session_client,
     assert response.status_code == status.HTTP_200_OK, response.data
     delivery.refresh_from_db()
     log.refresh_from_db()
+    processing_delivery.refresh_from_db()
+    processing_log.refresh_from_db()
     assert delivery.status == NotificationEmailDelivery.Status.SUPPRESSED
     assert delivery.last_error_code == "workspace_policy_disabled"
     assert log.delivery_status == EmailNotificationLog.DeliveryStatus.SUPPRESSED
+    assert processing_delivery.status == NotificationEmailDelivery.Status.SUPPRESSED
+    assert processing_delivery.lease_token == ""
+    assert processing_log.delivery_status == EmailNotificationLog.DeliveryStatus.SUPPRESSED
     assert NotificationDeliveryAudit.objects.filter(
         delivery=delivery,
         action="policy_suppress",
@@ -141,10 +176,20 @@ def test_issue_policy_separates_in_app_and_email_generation(workspace, project, 
     )
 
     persist_issue_notification_batch([notification], [email_log])
+    duplicate_log = EmailNotificationLog(
+        receiver=create_user,
+        triggered_by=create_user,
+        entity_identifier=entity_id,
+        entity_name="issue",
+        data=notification.data,
+        entity="issue",
+    )
+    persist_issue_notification_batch([notification], [duplicate_log])
 
     assert Notification.objects.filter(entity_identifier=entity_id).count() == 1
     assert NotificationEvent.objects.filter(entity_identifier=entity_id).count() == 1
     assert NotificationEmailDelivery.objects.filter(event__entity_identifier=entity_id).exists() is False
+    assert EmailNotificationLog.objects.filter(entity_identifier=entity_id).count() == 0
 
 
 @pytest.mark.django_db

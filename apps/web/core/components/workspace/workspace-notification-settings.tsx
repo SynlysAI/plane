@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   type TWorkspaceNotificationCategory,
   type TWorkspaceNotificationPolicy,
@@ -68,6 +68,7 @@ export function WorkspaceNotificationSettings({ workspaceSlug }: { workspaceSlug
   const [loading, setLoading] = useState(true);
   const [savingCategory, setSavingCategory] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const updateVersion = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -96,13 +97,23 @@ export function WorkspaceNotificationSettings({ workspaceSlug }: { workspaceSlug
     field: "in_app_enabled" | "email_enabled",
     enabled: boolean
   ) => {
+    const version = ++updateVersion.current;
     setSavingCategory(category);
     setError(null);
     service
       .update(workspaceSlug, [{ category, [field]: enabled }])
-      .then((response) => setPolicies(Object.fromEntries(response.policies.map((policy) => [policy.category, policy]))))
-      .catch(() => setError("通知策略保存失败，已保留服务器上的当前设置。"))
-      .finally(() => setSavingCategory(null));
+      .then((response) => {
+        if (version !== updateVersion.current) return null;
+        setPolicies(Object.fromEntries(response.policies.map((policy) => [policy.category, policy])));
+        return null;
+      })
+      .catch(() => {
+        if (version !== updateVersion.current) return;
+        setError("通知策略保存失败，已保留服务器上的当前设置。");
+      })
+      .finally(() => {
+        if (version === updateVersion.current) setSavingCategory(null);
+      });
   };
 
   return (
