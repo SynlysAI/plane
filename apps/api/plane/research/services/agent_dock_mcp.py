@@ -113,6 +113,11 @@ def resolve_agent_dock_mcp_credentials(
         A live credential with a token recovered only for this call path.
     """
     now = timezone.now()
+    # Existing Agent connections were sometimes issued with administrative-only
+    # scope while research MCP was disabled. Rotate them as soon as research is
+    # enabled so a healthy-looking old credential cannot pin the session to a
+    # reduced domain set.
+    requires_research = bool(getattr(settings, "RESEARCH_MCP_ENABLED", False))
     healthy = (
         connection is not None
         and connection.owner_id == user.id
@@ -124,6 +129,11 @@ def resolve_agent_dock_mcp_credentials(
             item.get("workspace_id") == str(workspace.id)
             for item in (connection.scope or {}).get("workspaces", [])
         )
+        and (not requires_research or any(
+            "research" in item.get("domains", {})
+            for item in (connection.scope or {}).get("workspaces", [])
+            if item.get("workspace_id") == str(workspace.id)
+        ))
     )
     if healthy and connection.token_encrypted:
         try:
