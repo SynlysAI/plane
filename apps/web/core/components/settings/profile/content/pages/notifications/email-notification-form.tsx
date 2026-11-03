@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { observer } from "mobx-react";
 import { Controller, useForm } from "react-hook-form";
 // plane imports
@@ -29,23 +29,38 @@ export const NotificationsProfileSettingsForm = observer(function NotificationsP
   // translation
   const { t } = useTranslation();
   // form data
-  const { control, reset } = useForm<IUserEmailNotificationSettings>({
+  const { control, reset, setValue } = useForm<IUserEmailNotificationSettings>({
     defaultValues: {
       ...data,
     },
   });
+  const persistedValues = useRef<IUserEmailNotificationSettings>(data);
+  const updateQueues = useRef(new Map<keyof IUserEmailNotificationSettings, Promise<void>>());
+  const updateVersions = useRef(new Map<keyof IUserEmailNotificationSettings, number>());
 
   const handleSettingChange = async (key: keyof IUserEmailNotificationSettings, value: boolean) => {
-    try {
-      await userService.updateCurrentUserEmailNotificationSettings({
-        [key]: value,
+    const version = (updateVersions.current.get(key) ?? 0) + 1;
+    updateVersions.current.set(key, version);
+    const previousUpdate = updateQueues.current.get(key) ?? Promise.resolve();
+    const update = previousUpdate
+      .catch(() => undefined)
+      .then(() => userService.updateCurrentUserEmailNotificationSettings({ [key]: value }))
+      .then(() => {
+        persistedValues.current = { ...persistedValues.current, [key]: value };
+        return undefined;
       });
+    updateQueues.current.set(key, update);
+    try {
+      await update;
       setToast({
         title: t("success"),
         type: TOAST_TYPE.SUCCESS,
         message: t("email_notification_setting_updated_successfully"),
       });
     } catch (_error) {
+      if (updateVersions.current.get(key) === version) {
+        setValue(key, persistedValues.current[key]);
+      }
       setToast({
         title: t("error"),
         type: TOAST_TYPE.ERROR,
@@ -56,10 +71,32 @@ export const NotificationsProfileSettingsForm = observer(function NotificationsP
 
   useEffect(() => {
     reset(data);
+    persistedValues.current = data;
   }, [reset, data]);
 
   return (
     <div className="flex flex-col gap-y-1">
+      <SettingsControlItem
+        title={t("assignment")}
+        description={t("assignment_notification_description")}
+        control={
+          <Controller
+            control={control}
+            name="assignment"
+            render={({ field: { value, onChange } }) => (
+              <Switch
+                size="sm"
+                checked={value}
+                onCheckedChange={(newValue) => {
+                  onChange(newValue);
+                  void handleSettingChange("assignment", newValue);
+                }}
+                aria-label={t("assignment")}
+              />
+            )}
+          />
+        }
+      />
       <SettingsControlItem
         title={t("property_changes")}
         description={t("property_changes_description")}
@@ -167,6 +204,39 @@ export const NotificationsProfileSettingsForm = observer(function NotificationsP
           />
         }
       />
+      <h3 className="text-sm pt-4 font-medium text-primary">{t("research_notifications")}</h3>
+      {(
+        [
+          ["research_property_change", "research_property_changes", "research_property_changes_description"],
+          ["research_state_change", "research_state_changes", "research_state_changes_description"],
+          ["research_comment", "research_comments", "research_comments_description"],
+          ["research_mention", "research_mentions", "research_mentions_description"],
+          ["research_completion", "research_completion", "research_completion_description"],
+        ] as const
+      ).map(([key, label, description]) => (
+        <SettingsControlItem
+          key={key}
+          title={t(label)}
+          description={t(description)}
+          control={
+            <Controller
+              control={control}
+              name={key}
+              render={({ field: { value, onChange } }) => (
+                <Switch
+                  size="sm"
+                  checked={value}
+                  onCheckedChange={(newValue) => {
+                    onChange(newValue);
+                    void handleSettingChange(key, newValue);
+                  }}
+                  aria-label={t(label)}
+                />
+              )}
+            />
+          }
+        />
+      ))}
     </div>
   );
 });

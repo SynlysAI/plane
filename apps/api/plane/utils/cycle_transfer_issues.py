@@ -28,10 +28,11 @@ from plane.db.models import (
     Project,
 )
 from plane.utils.analytics_plot import burndown_plot
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.utils.issue_mutations import notification_atomic_mutation, queue_issue_activity
 from plane.utils.host import base_host
 
 
+@notification_atomic_mutation
 def transfer_cycle_issues(
     slug,
     project_id,
@@ -458,7 +459,7 @@ def transfer_cycle_issues(
     cycle_issues = CycleIssue.objects.bulk_update(updated_cycles, ["cycle_id"], batch_size=100)
 
     # Capture Issue Activity
-    issue_activity.delay(
+    queue_issue_activity(
         type="cycle.activity.created",
         requested_data=json.dumps({"cycles_list": []}),
         actor_id=str(user_id),

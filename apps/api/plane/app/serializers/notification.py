@@ -5,7 +5,12 @@
 # Module imports
 from .base import BaseSerializer
 from .user import UserLiteSerializer
-from plane.db.models import Notification, SystemAnnouncement, UserNotificationPreference
+from plane.db.models import (
+    Notification,
+    SystemAnnouncement,
+    UserNotificationPreference,
+    WorkspaceNotificationPolicy,
+)
 
 # Third Party imports
 from rest_framework import serializers
@@ -63,3 +68,21 @@ class UserNotificationPreferenceSerializer(BaseSerializer):
     class Meta:
         model = UserNotificationPreference
         fields = "__all__"
+        read_only_fields = ("user", "workspace", "project", "created_at", "updated_at", "deleted_at")
+
+
+class WorkspaceNotificationPolicySerializer(BaseSerializer):
+    class Meta:
+        model = WorkspaceNotificationPolicy
+        fields = (
+            "id",
+            "workspace",
+            "category",
+            "in_app_enabled",
+            "email_enabled",
+            "created_by",
+            "updated_by",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("workspace", "created_by", "updated_by", "created_at", "updated_at")

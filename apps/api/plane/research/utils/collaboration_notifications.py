@@ -8,8 +8,9 @@ from html import escape
 
 from django.utils import timezone
 
-from plane.db.models import Notification, ResearchTaskSubscriber, User
+from plane.db.models import Notification, NotificationEvent, ResearchTaskSubscriber, User
 from plane.research.utils.acl import direct_advisor_ids
+from plane.utils.notification_outbox import persist_research_notification_batch
 
 RESEARCH_CHAIN_TASK_ENTITY = "research_chain_task"
 RESEARCH_PAPER_REVIEW_ENTITY = "research_paper_review"
@@ -29,20 +30,49 @@ def _notify(task, receivers, *, actor, action, title, extra=None, include_subscr
     Returns:
         The notification rows created for this action.
     """
-    receiver_users = {receiver.id: receiver for receiver in receivers if receiver is not None}
+    direct_users = {receiver.id: receiver for receiver in receivers if receiver is not None}
+    receiver_users = dict(direct_users)
     if include_subscribers:
         receiver_users.update({receiver.id: receiver for receiver in task_subscriber_users(task)})
 
     created = []
+    email_policy = {}
     for receiver_id, receiver in receiver_users.items():
         if receiver is None or receiver.id == actor.id:
             continue
+        is_direct = receiver_id in direct_users
+        if action == "assigned":
+            category = (
+                NotificationEvent.Category.ASSIGNMENT
+                if is_direct
+                else NotificationEvent.Category.RESEARCH_PROPERTY_CHANGE
+            )
+            immediate = is_direct
+        elif action == "completed":
+            category = NotificationEvent.Category.RESEARCH_COMPLETION
+            immediate = is_direct
+        elif action in {"reopened", "cancelled"}:
+            category = NotificationEvent.Category.RESEARCH_STATE_CHANGE
+            immediate = is_direct
+        elif action == "commented":
+            category = NotificationEvent.Category.RESEARCH_COMMENT
+            immediate = False
+        else:
+            category = NotificationEvent.Category.RESEARCH_PROPERTY_CHANGE
+            immediate = action == "cc_added"
+        email_policy[str(receiver_id)] = {
+            "category": category,
+            "reason": "direct" if is_direct else "subscriber",
+            "immediate": immediate,
+        }
         created.append(
             Notification(
                 workspace_id=task.workspace_id,
                 project_id=task.chain.project_id,
                 data={
                     "task_id": str(task.id),
+                    "chain_id": str(task.chain_id),
+                    "node_id": str(task.node_id),
                     "action": action,
                     "status": task.status,
                     **(extra or {}),
@@ -58,8 +88,11 @@ def _notify(task, receivers, *, actor, action, title, extra=None, include_subscr
                 receiver=receiver,
             )
         )
-    if created:
-        Notification.objects.bulk_create(created, batch_size=100)
+    persist_research_notification_batch(
+        created,
+        category=NotificationEvent.Category.RESEARCH_ACTION,
+        email_policy=email_policy,
+    )
     return created
 
 
@@ -181,7 +214,7 @@ def notify_task_cc_added(task, actor, receivers):
     )
 
 
-def _notify_paper(review, receivers, *, actor, action, title, extra=None):
+def _notify_paper(review, receivers, *, actor, action, title, event_id=None, extra=None):
     """Create paper-review notifications without a new delivery channel.
 
     Args:
@@ -190,6 +223,7 @@ def _notify_paper(review, receivers, *, actor, action, title, extra=None):
         actor: User who performed the paper action.
         action: Stable notification action for clients.
         title: Short notification title.
+        event_id: Stable identifier of the persisted paper event.
         extra: Optional additional JSON metadata.
 
     Returns:
@@ -197,6 +231,14 @@ def _notify_paper(review, receivers, *, actor, action, title, extra=None):
     """
     receiver_users = {
         receiver.id: receiver for receiver in receivers if receiver is not None and receiver.id != actor.id
+    }
+    email_policy = {
+        str(receiver_id): {
+            "category": NotificationEvent.Category.RESEARCH_ACTION,
+            "reason": "direct_reviewer",
+            "immediate": True,
+        }
+        for receiver_id in receiver_users
     }
     rows = [
         Notification(
@@ -208,6 +250,7 @@ def _notify_paper(review, receivers, *, actor, action, title, extra=None):
                 "review_id": str(review.id),
                 "action": action,
                 "status": review.status,
+                "event_id": str(event_id) if event_id else None,
                 "route": f"/research/paper-reviews/{review.id}",
                 **(extra or {}),
             },
@@ -223,12 +266,15 @@ def _notify_paper(review, receivers, *, actor, action, title, extra=None):
         )
         for receiver_id in receiver_users
     ]
-    if rows:
-        Notification.objects.bulk_create(rows, batch_size=100)
+    persist_research_notification_batch(
+        rows,
+        category=NotificationEvent.Category.RESEARCH_ACTION,
+        email_policy=email_policy,
+    )
     return rows
 
 
-def notify_paper_version_submitted(review, actor):
+def notify_paper_version_submitted(review, actor, event_id=None):
     """Notify the direct advisor and explicit final reviewer."""
     receiver_ids = set(direct_advisor_ids(review.owner_id, review.workspace_id))
     if review.final_reviewer_id:
@@ -240,10 +286,11 @@ def notify_paper_version_submitted(review, actor):
         actor=actor,
         action="submitted",
         title="论文评审已提交新版本",
+        event_id=event_id,
     )
 
 
-def notify_paper_returned(review, actor, comment=""):
+def notify_paper_returned(review, actor, comment="", event_id=None):
     """Notify the review owner that a version needs revision."""
     receiver = User.objects.filter(pk=review.owner_id, is_active=True).first()
     return _notify_paper(
@@ -252,11 +299,12 @@ def notify_paper_returned(review, actor, comment=""):
         actor=actor,
         action="returned",
         title="论文评审版本被退回",
+        event_id=event_id,
         extra={"comment": (comment or "")[:500]},
     )
 
 
-def notify_paper_accepted(review, actor, comment=""):
+def notify_paper_accepted(review, actor, comment="", event_id=None):
     """Notify the review owner, chain owner, and final reviewer."""
     receiver_ids = {review.owner_id, review.chain.owner_id, review.final_reviewer_id}
     receivers = User.objects.filter(id__in=receiver_ids, is_active=True)
@@ -266,5 +314,6 @@ def notify_paper_accepted(review, actor, comment=""):
         actor=actor,
         action="accepted",
         title="论文评审已最终确认",
+        event_id=event_id,
         extra={"comment": (comment or "")[:500]},
     )

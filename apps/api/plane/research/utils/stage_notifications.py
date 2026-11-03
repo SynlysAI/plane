@@ -10,7 +10,8 @@ new ``entity_name`` so the existing notification centre keeps working (T-06).
 
 from django.utils import timezone
 
-from plane.db.models import Notification
+from plane.db.models import Notification, NotificationEvent
+from plane.utils.notification_outbox import persist_research_notification_batch
 from plane.research.utils.acl import direct_advisor_ids, org_unit_scope_ids
 
 RESEARCH_STAGE_ENTITY = "research_stage"
@@ -43,8 +44,10 @@ def _create(instance, receivers, *, actor, action, title, extra=None):
                 receiver=receiver,
             )
         )
-    if created:
-        Notification.objects.bulk_create(created, batch_size=100)
+    persist_research_notification_batch(
+        created,
+        category=NotificationEvent.Category.RESEARCH_STATE_CHANGE,
+    )
     return created
 
 

@@ -11,7 +11,16 @@ import pytest
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from plane.db.models import Issue, IssueComment, Project, ProjectMember, State, User, WorkspaceMember
+from plane.db.models import (
+    Issue,
+    IssueComment,
+    NotificationGenerationOutbox,
+    Project,
+    ProjectMember,
+    State,
+    User,
+    WorkspaceMember,
+)
 
 
 def comment_url(workspace, project, issue, comment):
@@ -23,7 +32,7 @@ def comment_url(workspace, project, issue, comment):
 
 @pytest.fixture(autouse=True)
 def _no_comment_activity():
-    with mock.patch("plane.app.views.issue.comment.issue_activity.delay"):
+    with mock.patch("plane.utils.issue_mutations.process_notification_generation_outbox.delay"):
         yield
 
 
@@ -70,11 +79,33 @@ def test_author_delete_soft_deletes_comment_and_hides_it_from_list(
     deleted_comment = IssueComment.all_objects.get(id=comment.id)
     assert deleted_comment.deleted_at is not None
     assert not IssueComment.objects.filter(id=comment.id).exists()
+    assert NotificationGenerationOutbox.objects.filter(
+        payload__type="comment.activity.deleted",
+        payload__issue_id=str(issue.id),
+    ).exists()
     list_response = session_client.get(
         f"/api/workspaces/{workspace.slug}/projects/{project.id}/issues/{issue.id}/comments/"
     )
     assert list_response.status_code == status.HTTP_200_OK
     assert str(comment.id) not in str(list_response.data)
+
+
+@pytest.mark.django_db
+def test_author_edit_persists_comment_notification_request(session_client, workspace, issue_with_comment):
+    """Comment edits and their notification requests commit together."""
+    project, issue, comment = issue_with_comment
+
+    response = session_client.patch(
+        comment_url(workspace, project, issue, comment),
+        {"comment_html": "<p>Updated comment</p>"},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert NotificationGenerationOutbox.objects.filter(
+        payload__type="comment.activity.updated",
+        payload__issue_id=str(issue.id),
+    ).exists()
 
 
 @pytest.mark.django_db

@@ -286,6 +286,7 @@ class ResearchApprovalRequestListCreateEndpoint(ResearchAPIView):
             status=status.HTTP_200_OK,
         )
 
+    @transaction.atomic
     def post(self, request, slug):
         workspace, error = self.get_workspace(section="approvals")
         if error:

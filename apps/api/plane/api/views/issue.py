@@ -10,7 +10,7 @@ import re
 # Django imports
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import HttpResponseRedirect
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import (
     Case,
     CharField,
@@ -64,7 +64,11 @@ from plane.app.permissions import (
     ProjectLitePermission,
     ProjectMemberPermission,
 )
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.utils.issue_mutations import (
+    enqueue_task_on_commit,
+    notification_atomic_mutation,
+    queue_issue_activity,
+)
 from plane.db.models import (
     Issue,
     IssueActivity,
@@ -458,6 +462,7 @@ class IssueListCreateAPIEndpoint(BaseAPIView):
             409: EXTERNAL_ID_EXISTS_RESPONSE,
         },
     )
+    @transaction.atomic
     def post(self, request, slug, project_id):
         """Create work item
 
@@ -509,7 +514,7 @@ class IssueListCreateAPIEndpoint(BaseAPIView):
             issue.save(update_fields=["created_at", "created_by"])
 
             # Track the issue
-            issue_activity.delay(
+            queue_issue_activity(
                 type="issue.activity.created",
                 requested_data=json.dumps(self.request.data, cls=DjangoJSONEncoder),
                 actor_id=str(request.user.id),
@@ -522,7 +527,8 @@ class IssueListCreateAPIEndpoint(BaseAPIView):
             )
 
             # Send the model activity
-            model_activity.delay(
+            enqueue_task_on_commit(
+                model_activity,
                 model_name="issue",
                 model_id=str(serializer.data["id"]),
                 requested_data=request.data,
@@ -626,7 +632,8 @@ class IssueDetailAPIEndpoint(BaseAPIView):
             404: WORK_ITEM_NOT_FOUND_RESPONSE,
         },
     )
-    def put(self, request, slug, project_id):
+    @transaction.atomic
+    def put(self, request, slug, project_id, pk=None):
         """Update or create work item
 
         Update an existing work item identified by external ID and source, or create a new one if it doesn't exist.
@@ -671,7 +678,7 @@ class IssueDetailAPIEndpoint(BaseAPIView):
                     # If the serializer is valid, save the issue and dispatch
                     # the update issue activity worker event.
                     serializer.save()
-                    issue_activity.delay(
+                    queue_issue_activity(
                         type="issue.activity.updated",
                         requested_data=requested_data,
                         actor_id=str(request.user.id),
@@ -683,7 +690,8 @@ class IssueDetailAPIEndpoint(BaseAPIView):
                         origin=base_host(request=request, is_app=True),
                     )
                     # Send the model activity for webhook dispatch
-                    model_activity.delay(
+                    enqueue_task_on_commit(
+                        model_activity,
                         model_name="issue",
                         model_id=str(issue.id),
                         requested_data=request.data,
@@ -732,7 +740,7 @@ class IssueDetailAPIEndpoint(BaseAPIView):
                     issue.created_by_id = request.data.get("created_by", request.user.id)
                     issue.save(update_fields=["created_at", "created_by"])
 
-                    issue_activity.delay(
+                    queue_issue_activity(
                         type="issue.activity.created",
                         requested_data=json.dumps(self.request.data, cls=DjangoJSONEncoder),
                         actor_id=str(request.user.id),
@@ -744,7 +752,8 @@ class IssueDetailAPIEndpoint(BaseAPIView):
                         origin=base_host(request=request, is_app=True),
                     )
                     # Send the model activity for webhook dispatch
-                    model_activity.delay(
+                    enqueue_task_on_commit(
+                        model_activity,
                         model_name="issue",
                         model_id=str(serializer.data["id"]),
                         requested_data=request.data,
@@ -783,6 +792,7 @@ class IssueDetailAPIEndpoint(BaseAPIView):
             409: EXTERNAL_ID_EXISTS_RESPONSE,
         },
     )
+    @transaction.atomic
     def patch(self, request, slug, project_id, pk):
         """Update work item
 
@@ -819,7 +829,7 @@ class IssueDetailAPIEndpoint(BaseAPIView):
                 )
 
             serializer.save()
-            issue_activity.delay(
+            queue_issue_activity(
                 type="issue.activity.updated",
                 requested_data=requested_data,
                 actor_id=str(request.user.id),
@@ -831,7 +841,8 @@ class IssueDetailAPIEndpoint(BaseAPIView):
                 origin=base_host(request=request, is_app=True),
             )
             # Send the model activity for webhook dispatch
-            model_activity.delay(
+            enqueue_task_on_commit(
+                model_activity,
                 model_name="issue",
                 model_id=str(pk),
                 requested_data=request.data,
@@ -856,6 +867,7 @@ class IssueDetailAPIEndpoint(BaseAPIView):
             404: WORK_ITEM_NOT_FOUND_RESPONSE,
         },
     )
+    @transaction.atomic
     def delete(self, request, slug, project_id, pk):
         """Delete work item
 
@@ -878,7 +890,7 @@ class IssueDetailAPIEndpoint(BaseAPIView):
             )
         current_instance = json.dumps(IssueSerializer(issue).data, cls=DjangoJSONEncoder)
         issue.delete()
-        issue_activity.delay(
+        queue_issue_activity(
             type="issue.activity.deleted",
             requested_data=json.dumps({"issue_id": str(pk)}),
             actor_id=str(request.user.id),
@@ -1212,6 +1224,7 @@ class IssueLinkListCreateAPIEndpoint(BaseAPIView):
             404: ISSUE_NOT_FOUND_RESPONSE,
         },
     )
+    @transaction.atomic
     def post(self, request, slug, project_id, issue_id):
         """Create issue link
 
@@ -1221,11 +1234,11 @@ class IssueLinkListCreateAPIEndpoint(BaseAPIView):
         serializer = IssueLinkCreateSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(project_id=project_id, issue_id=issue_id)
-            crawl_work_item_link_title.delay(serializer.instance.id, serializer.instance.url)
+            enqueue_task_on_commit(crawl_work_item_link_title, serializer.instance.id, serializer.instance.url)
             link = IssueLink.objects.get(pk=serializer.instance.id)
             link.created_by_id = request.data.get("created_by", request.user.id)
             link.save(update_fields=["created_by"])
-            issue_activity.delay(
+            queue_issue_activity(
                 type="link.activity.created",
                 requested_data=json.dumps(serializer.data, cls=DjangoJSONEncoder),
                 issue_id=str(self.kwargs.get("issue_id")),
@@ -1323,6 +1336,7 @@ class IssueLinkDetailAPIEndpoint(BaseAPIView):
             404: LINK_NOT_FOUND_RESPONSE,
         },
     )
+    @transaction.atomic
     def patch(self, request, slug, project_id, issue_id, pk):
         """Update issue link
 
@@ -1338,8 +1352,8 @@ class IssueLinkDetailAPIEndpoint(BaseAPIView):
             serializer.save()
             updated_url = serializer.data.get("url")
             if updated_url and updated_url != previous_url:
-                crawl_work_item_link_title.delay(serializer.data.get("id"), updated_url)
-            issue_activity.delay(
+                enqueue_task_on_commit(crawl_work_item_link_title, serializer.data.get("id"), updated_url)
+            queue_issue_activity(
                 type="link.activity.updated",
                 requested_data=requested_data,
                 actor_id=str(request.user.id),
@@ -1364,6 +1378,7 @@ class IssueLinkDetailAPIEndpoint(BaseAPIView):
             404: OpenApiResponse(description="Work item link not found"),
         },
     )
+    @transaction.atomic
     def delete(self, request, slug, project_id, issue_id, pk):
         """Delete work item link
 
@@ -1372,7 +1387,7 @@ class IssueLinkDetailAPIEndpoint(BaseAPIView):
         """
         issue_link = IssueLink.objects.get(workspace__slug=slug, project_id=project_id, issue_id=issue_id, pk=pk)
         current_instance = json.dumps(IssueLinkSerializer(issue_link).data, cls=DjangoJSONEncoder)
-        issue_activity.delay(
+        queue_issue_activity(
             type="link.activity.deleted",
             requested_data=json.dumps({"link_id": str(pk)}),
             actor_id=str(request.user.id),
@@ -1474,6 +1489,7 @@ class IssueCommentListCreateAPIEndpoint(BaseAPIView):
             409: EXTERNAL_ID_EXISTS_RESPONSE,
         },
     )
+    @transaction.atomic
     def post(self, request, slug, project_id, issue_id):
         """Create work item comment
 
@@ -1515,7 +1531,7 @@ class IssueCommentListCreateAPIEndpoint(BaseAPIView):
             issue_comment.actor_id = request.data.get("created_by", request.user.id)
             issue_comment.save(update_fields=["created_at", "created_by"])
 
-            issue_activity.delay(
+            queue_issue_activity(
                 type="comment.activity.created",
                 requested_data=json.dumps(serializer.data, cls=DjangoJSONEncoder),
                 actor_id=str(issue_comment.created_by_id),
@@ -1523,10 +1539,12 @@ class IssueCommentListCreateAPIEndpoint(BaseAPIView):
                 project_id=str(self.kwargs.get("project_id")),
                 current_instance=None,
                 epoch=int(timezone.now().timestamp()),
+                notification=True,
             )
 
             # Send the model activity
-            model_activity.delay(
+            enqueue_task_on_commit(
+                model_activity,
                 model_name="issue_comment",
                 model_id=str(serializer.instance.id),
                 requested_data=request.data,
@@ -1623,6 +1641,7 @@ class IssueCommentDetailAPIEndpoint(BaseAPIView):
             409: EXTERNAL_ID_EXISTS_RESPONSE,
         },
     )
+    @transaction.atomic
     def patch(self, request, slug, project_id, issue_id, pk):
         """Update work item comment
 
@@ -1655,7 +1674,7 @@ class IssueCommentDetailAPIEndpoint(BaseAPIView):
         serializer = IssueCommentCreateSerializer(issue_comment, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
-            issue_activity.delay(
+            queue_issue_activity(
                 type="comment.activity.updated",
                 requested_data=requested_data,
                 actor_id=str(request.user.id),
@@ -1663,9 +1682,11 @@ class IssueCommentDetailAPIEndpoint(BaseAPIView):
                 project_id=str(project_id),
                 current_instance=current_instance,
                 epoch=int(timezone.now().timestamp()),
+                notification=True,
             )
             # Send the model activity
-            model_activity.delay(
+            enqueue_task_on_commit(
+                model_activity,
                 model_name="issue_comment",
                 model_id=str(pk),
                 requested_data=request.data,
@@ -1692,6 +1713,7 @@ class IssueCommentDetailAPIEndpoint(BaseAPIView):
             404: COMMENT_NOT_FOUND_RESPONSE,
         },
     )
+    @transaction.atomic
     def delete(self, request, slug, project_id, issue_id, pk):
         """Delete issue comment
 
@@ -1701,7 +1723,7 @@ class IssueCommentDetailAPIEndpoint(BaseAPIView):
         issue_comment = IssueComment.objects.get(workspace__slug=slug, project_id=project_id, issue_id=issue_id, pk=pk)
         current_instance = json.dumps(IssueCommentSerializer(issue_comment).data, cls=DjangoJSONEncoder)
         issue_comment.delete()
-        issue_activity.delay(
+        queue_issue_activity(
             type="comment.activity.deleted",
             requested_data=json.dumps({"comment_id": str(pk)}),
             actor_id=str(request.user.id),
@@ -1905,6 +1927,7 @@ class IssueAttachmentListCreateAPIEndpoint(BaseAPIView):
             ),
         },
     )
+    @notification_atomic_mutation
     def post(self, request, slug, project_id, issue_id):
         """Create work item attachment
 
@@ -2061,6 +2084,7 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
             404: ATTACHMENT_NOT_FOUND_RESPONSE,
         },
     )
+    @notification_atomic_mutation
     def delete(self, request, slug, project_id, issue_id, pk):
         """Delete work item attachment
 
@@ -2086,7 +2110,7 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
         issue_attachment.deleted_at = timezone.now()
         issue_attachment.save()
 
-        issue_activity.delay(
+        queue_issue_activity(
             type="attachment.activity.deleted",
             requested_data=None,
             actor_id=str(self.request.user.id),
@@ -2100,7 +2124,7 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
 
         # Get the storage metadata
         if not issue_attachment.storage_metadata:
-            get_asset_object_metadata.delay(str(issue_attachment.id))
+            enqueue_task_on_commit(get_asset_object_metadata, str(issue_attachment.id))
         issue_attachment.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -2198,6 +2222,7 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
             404: ATTACHMENT_NOT_FOUND_RESPONSE,
         },
     )
+    @notification_atomic_mutation
     def patch(self, request, slug, project_id, issue_id, pk):
         """Confirm attachment upload
 
@@ -2224,7 +2249,7 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
 
         # Send this activity only if the attachment is not uploaded before
         if not issue_attachment.is_uploaded:
-            issue_activity.delay(
+            queue_issue_activity(
                 type="attachment.activity.created",
                 requested_data=None,
                 actor_id=str(self.request.user.id),
@@ -2242,7 +2267,7 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
 
         # Get the storage metadata
         if not issue_attachment.storage_metadata:
-            get_asset_object_metadata.delay(str(issue_attachment.id))
+            enqueue_task_on_commit(get_asset_object_metadata, str(issue_attachment.id))
         issue_attachment.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -2530,6 +2555,7 @@ class IssueRelationListCreateAPIEndpoint(BaseAPIView):
             404: ISSUE_NOT_FOUND_RESPONSE,
         },
     )
+    @notification_atomic_mutation
     def post(self, request, slug, project_id, issue_id):
         """Create work item relation
 
@@ -2574,7 +2600,7 @@ class IssueRelationListCreateAPIEndpoint(BaseAPIView):
             ignore_conflicts=True,
         )
 
-        issue_activity.delay(
+        queue_issue_activity(
             type="issue_relation.activity.created",
             requested_data=json.dumps(request.data, cls=DjangoJSONEncoder),
             actor_id=str(request.user.id),

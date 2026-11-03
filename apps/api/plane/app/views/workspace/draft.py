@@ -38,7 +38,7 @@ from plane.db.models import (
     FileAsset,
 )
 from .. import BaseViewSet
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.utils.issue_mutations import notification_atomic_mutation, queue_issue_activity
 from plane.utils.issue_filters import issue_filters
 from plane.utils.host import base_host
 
@@ -205,6 +205,7 @@ class WorkspaceDraftIssueViewSet(BaseViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    @notification_atomic_mutation
     def create_draft_to_issue(self, request, slug, draft_id):
         draft_issue = self.get_queryset().filter(pk=draft_id).first()
 
@@ -227,7 +228,7 @@ class WorkspaceDraftIssueViewSet(BaseViewSet):
         if serializer.is_valid():
             serializer.save()
 
-            issue_activity.delay(
+            queue_issue_activity(
                 type="issue.activity.created",
                 requested_data=json.dumps(self.request.data, cls=DjangoJSONEncoder),
                 actor_id=str(request.user.id),
@@ -249,7 +250,7 @@ class WorkspaceDraftIssueViewSet(BaseViewSet):
                     updated_by_id=draft_issue.updated_by_id,
                 )
                 # Capture Issue Activity
-                issue_activity.delay(
+                queue_issue_activity(
                     type="cycle.activity.created",
                     requested_data=None,
                     actor_id=str(self.request.user.id),
@@ -285,7 +286,7 @@ class WorkspaceDraftIssueViewSet(BaseViewSet):
                 )
                 # Update the activity
                 _ = [
-                    issue_activity.delay(
+                    queue_issue_activity(
                         type="module.activity.created",
                         requested_data=json.dumps({"module_id": str(module)}),
                         actor_id=str(request.user.id),

@@ -34,6 +34,7 @@ from plane.db.models import (
     ProjectUserProperty,
 )
 from plane.db.models.project import ProjectNetwork
+from plane.bgtasks.project_invitation_task import project_invitation
 from plane.utils.host import base_host
 
 
@@ -61,34 +62,14 @@ class ProjectInvitationsViewset(BaseViewSet):
         if not emails:
             return Response({"error": "Emails are required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        for email in emails:
-            workspace_role = WorkspaceMember.objects.filter(
-                workspace__slug=slug, member__email=email.get("email"), is_active=True
-            ).role
-
-            if workspace_role in [5, 20] and workspace_role != email.get("role", 5):
-                return Response({"error": "You cannot invite a user with different role than workspace role"})
-
         workspace = Workspace.objects.get(slug=slug)
-
-        project_invitations = []
+        normalized_emails = set()
+        invitations_to_send = []
+        current_site = base_host(request=request, is_app=True)
         for email in emails:
             try:
-                validate_email(email.get("email"))
-                project_invitations.append(
-                    ProjectMemberInvite(
-                        email=email.get("email").strip().lower(),
-                        project_id=project_id,
-                        workspace_id=workspace.id,
-                        token=jwt.encode(
-                            {"email": email, "timestamp": datetime.now().timestamp()},
-                            settings.SECRET_KEY,
-                            algorithm="HS256",
-                        ),
-                        role=email.get("role", 5),
-                        created_by=request.user,
-                    )
-                )
+                normalized_email = email.get("email", "").strip().lower()
+                validate_email(normalized_email)
             except ValidationError:
                 return Response(
                     {
@@ -96,16 +77,50 @@ class ProjectInvitationsViewset(BaseViewSet):
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            if normalized_email in normalized_emails:
+                continue
+            normalized_emails.add(normalized_email)
 
-        # Create workspace member invite
-        project_invitations = ProjectMemberInvite.objects.bulk_create(
-            project_invitations, batch_size=10, ignore_conflicts=True
-        )
-        current_site = base_host(request=request, is_app=True)
+            workspace_member = WorkspaceMember.objects.filter(
+                workspace=workspace,
+                member__email__iexact=normalized_email,
+                is_active=True,
+                deleted_at__isnull=True,
+            ).first()
+            requested_role = int(email.get("role", 5))
+            if workspace_member and workspace_member.role in [5, 20] and workspace_member.role != requested_role:
+                return Response(
+                    {"error": "You cannot invite a user with different role than workspace role"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-        # Send invitations
-        for invitation in project_invitations:
-            project_invitations.delay(
+            pending = ProjectMemberInvite.objects.filter(
+                project_id=project_id,
+                email__iexact=normalized_email,
+                accepted=False,
+                responded_at__isnull=True,
+                deleted_at__isnull=True,
+            ).first()
+            if pending:
+                continue
+
+            token = jwt.encode(
+                {"email": normalized_email, "timestamp": timezone.now().timestamp()},
+                settings.SECRET_KEY,
+                algorithm="HS256",
+            )
+            invitation = ProjectMemberInvite.objects.create(
+                email=normalized_email,
+                project_id=project_id,
+                workspace_id=workspace.id,
+                token=token,
+                role=requested_role,
+                created_by=request.user,
+            )
+            invitations_to_send.append(invitation)
+
+        for invitation in invitations_to_send:
+            project_invitation.delay(
                 invitation.email,
                 project_id,
                 invitation.token,
@@ -113,7 +128,10 @@ class ProjectInvitationsViewset(BaseViewSet):
                 request.user.email,
             )
 
-        return Response({"message": "Email sent successfully"}, status=status.HTTP_200_OK)
+        return Response(
+            {"message": "Email sent successfully", "invited": len(invitations_to_send)},
+            status=status.HTTP_200_OK,
+        )
 
 
 class UserProjectInvitationsViewset(BaseViewSet):

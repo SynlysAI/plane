@@ -23,7 +23,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from .. import BaseAPIView
 from plane.app.serializers import IssueAttachmentSerializer
 from plane.db.models import FileAsset, Issue, Workspace
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.utils.issue_mutations import notification_atomic_mutation, queue_issue_activity
 from plane.app.permissions import allow_permission, ROLE
 from plane.settings.storage import S3Storage
 from plane.utils.comment_attachments import (
@@ -77,6 +77,7 @@ class IssueAttachmentEndpoint(BaseAPIView):
     parser_classes = (MultiPartParser, FormParser)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @notification_atomic_mutation
     def post(self, request, slug, project_id, issue_id):
         serializer = IssueAttachmentSerializer(data=request.data)
         workspace = Workspace.objects.get(slug=slug)
@@ -93,7 +94,7 @@ class IssueAttachmentEndpoint(BaseAPIView):
                     workspace_id=workspace.id,
                     entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
                 )
-            issue_activity.delay(
+            queue_issue_activity(
                 type="attachment.activity.created",
                 requested_data=None,
                 actor_id=str(self.request.user.id),
@@ -108,6 +109,7 @@ class IssueAttachmentEndpoint(BaseAPIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER], creator=True, model=FileAsset)
+    @notification_atomic_mutation
     def delete(self, request, slug, project_id, issue_id, pk):
         issue_attachment = FileAsset.objects.filter(
             pk=pk,
@@ -121,9 +123,11 @@ class IssueAttachmentEndpoint(BaseAPIView):
                 {"error": "Issue attachment not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        issue_attachment.asset.delete(save=False)
+        asset_storage = issue_attachment.asset.storage
+        asset_name = issue_attachment.asset.name
+        transaction.on_commit(lambda: asset_storage.delete(asset_name), robust=True)
         issue_attachment.delete()
-        issue_activity.delay(
+        queue_issue_activity(
             type="attachment.activity.deleted",
             requested_data=None,
             actor_id=str(self.request.user.id),
@@ -232,6 +236,7 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
         )
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER], creator=True, model=FileAsset)
+    @notification_atomic_mutation
     def delete(self, request, slug, project_id, issue_id, pk):
         issue_attachment = get_object_or_404(
             FileAsset,
@@ -245,7 +250,7 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
         issue_attachment.deleted_at = timezone.now()
         issue_attachment.save()
 
-        issue_activity.delay(
+        queue_issue_activity(
             type="attachment.activity.deleted",
             requested_data=None,
             actor_id=str(self.request.user.id),
@@ -320,7 +325,7 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
 
         # Send this activity only if the attachment is not uploaded before
         if not issue_attachment.is_uploaded:
-            issue_activity.delay(
+            queue_issue_activity(
                 type="attachment.activity.created",
                 requested_data=None,
                 actor_id=str(self.request.user.id),

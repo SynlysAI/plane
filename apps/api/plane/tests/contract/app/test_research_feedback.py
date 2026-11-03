@@ -372,7 +372,7 @@ def test_status_update_is_audited_and_returned_as_history(env, storage):
 @pytest.mark.django_db
 def test_operations_account_can_reply_without_gaining_management_permissions(env, storage):
     """运维账号仅获得回复权限，不能进入管理范围或修改状态。"""
-    from plane.db.models import ResearchFeedbackReply
+    from plane.db.models import NotificationEmailDelivery, NotificationEvent, ResearchFeedbackReply
 
     feedback = client_for(env["student"]).post(feedback_url(env), submission(), format="multipart").json()["data"]
     reply_url = feedback_url(env, f"{feedback['feedback_id']}/replies/")
@@ -404,6 +404,14 @@ def test_operations_account_can_reply_without_gaining_management_permissions(env
     assert reply["author_name"] == env["colleague"].display_name
     assert reply["author_name"] == env["colleague"].display_name
     assert ResearchFeedbackReply.objects.filter(feedback_id=feedback["feedback_id"]).count() == 2
+    event = NotificationEvent.objects.get(
+        entity_name="research_feedback",
+        entity_identifier=feedback["feedback_id"],
+        receiver=env["student"],
+        category=NotificationEvent.Category.RESEARCH_COMMENT,
+    )
+    delivery = NotificationEmailDelivery.objects.get(event=event)
+    assert delivery.status == NotificationEmailDelivery.Status.PENDING
 
     listed = operator_client.get(feedback_url(env), {"scope": "workspace"}).json()["data"]["results"][0]
     assert any(item["id"] == reply["id"] for item in listed["replies"])
@@ -479,7 +487,10 @@ def test_failed_notification_rolls_back_reply_and_audit(env, storage):
     """通知写入失败时回复和审计一并回滚，避免讨论状态不一致。"""
     feedback = client_for(env["student"]).post(feedback_url(env), submission(), format="multipart").json()["data"]
 
-    with mock.patch.object(Notification.objects, "bulk_create", side_effect=IntegrityError("notification failed")):
+    with mock.patch(
+        "plane.research.services.feedback.persist_research_notification_batch",
+        side_effect=IntegrityError("notification failed"),
+    ):
         response = client_for(env["pi"]).post(
             feedback_url(env, f"{feedback['feedback_id']}/replies/"),
             {"content": "This reply must roll back"},

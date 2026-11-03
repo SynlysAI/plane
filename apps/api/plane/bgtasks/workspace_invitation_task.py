@@ -16,10 +16,10 @@ from django.template.loader import render_to_string
 from plane.db.models import User, Workspace, WorkspaceMemberInvite
 from plane.license.utils.instance_value import get_email_configuration
 from plane.utils.email import generate_plain_text_from_html
-from plane.utils.exception_logger import log_exception
+from plane.utils.account_email import handle_account_email_error, send_account_email
 
 
-@shared_task
+@shared_task(max_retries=2)
 def workspace_invitation(email, workspace_id, token, current_site, inviter):
     try:
         user = User.objects.get(email=inviter)
@@ -79,11 +79,11 @@ def workspace_invitation(email, workspace_id, token, current_site, inviter):
             connection=connection,
         )
         msg.attach_alternative(html_content, "text/html")
-        msg.send()
+        send_account_email(msg)
         logging.getLogger("plane.worker").info("Email sent successfully")
         return
     except (Workspace.DoesNotExist, WorkspaceMemberInvite.DoesNotExist):
         return
     except Exception as e:
-        log_exception(e)
+        handle_account_email_error(e)
         return

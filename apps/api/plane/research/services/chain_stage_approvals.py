@@ -988,6 +988,7 @@ def submit_chain_stage(
         return locked_stage
 
 
+@transaction.atomic
 def _return_stage(stage, actor, reviewer_role, comment, request_id, request):
     stage.status = "NEEDS_REVISION"
     stage.save(update_fields=["status", "updated_at"])
@@ -1008,6 +1009,7 @@ def _return_stage(stage, actor, reviewer_role, comment, request_id, request):
     return stage
 
 
+@transaction.atomic
 def _approve_stage(stage, actor, reviewer_role, request_id, request, escalate_to_pi=False):
     principal = resolve_principal(stage.chain) if escalate_to_pi else None
     stage.status = "AWAITING_PI" if escalate_to_pi else "APPROVED"

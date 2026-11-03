@@ -960,6 +960,7 @@ class WeeklyReportService:
             self.audit("cancel", operation)
         return self.readback(operation) if operation.status == "COMMITTED" else self.present(operation)
 
+    @transaction.atomic
     def execute_report_review(self, operation):
         """Commit one already-authorized withdrawal or routed review proposal."""
         report = self.visible_report(operation.report_id, lock=True)
@@ -1002,7 +1003,7 @@ class WeeklyReportService:
         snapshot_version = (
             report.official_snapshots.order_by("-version_no").values_list("version_no", flat=True).first()
         )
-        db.ReportReviewLog.objects.create(
+        review_log = db.ReportReviewLog.objects.create(
             report=report,
             actor=self.user,
             action={
@@ -1036,9 +1037,15 @@ class WeeklyReportService:
             },
         )
         notifications = {
-            "withdraw": lambda: notify_report_withdrawn(report, self.user, comment, route=route),
-            "return": lambda: notify_report_returned(report, self.user, comment, route=route),
-            "accept": lambda: notify_report_accepted(report, self.user, route=route),
+            "withdraw": lambda: notify_report_withdrawn(
+                report, self.user, comment, route=route, event_id=review_log.pk
+            ),
+            "return": lambda: notify_report_returned(
+                report, self.user, comment, route=route, event_id=review_log.pk
+            ),
+            "accept": lambda: notify_report_accepted(
+                report, self.user, route=route, event_id=review_log.pk
+            ),
         }[action]()
         if len(notifications) > 1000:
             raise WeeklyReportError("response_too_large", "Too many notification recipients.", 413)

@@ -635,7 +635,7 @@ class ResearchReportWithdrawEndpoint(ResearchAPIView):
             report.accepted_at = None
             report.reviewer = None
             report.save(update_fields=["status", "submitted_at", "accepted_at", "reviewer", "updated_at"])
-            ReportReviewLog.objects.create(
+            review_log = ReportReviewLog.objects.create(
                 report=report,
                 actor=request.user,
                 action=ReportReviewLog.Action.REOPEN,
@@ -661,7 +661,7 @@ class ResearchReportWithdrawEndpoint(ResearchAPIView):
             },
             request=request,
         )
-        notify_report_withdrawn(report, request.user, comment, route=route)
+        notify_report_withdrawn(report, request.user, comment, route=route, event_id=review_log.pk)
         return Response(serialize_report(report, request, include_draft_content=True), status=status.HTTP_200_OK)
 
 
@@ -724,7 +724,7 @@ class ResearchReportReturnEndpoint(ResearchAPIView):
             report.status = target
             report.reviewer = request.user
             report.save(update_fields=["status", "reviewer", "updated_at"])
-            ReportReviewLog.objects.create(
+            review_log = ReportReviewLog.objects.create(
                 report=report,
                 actor=request.user,
                 action=ReportReviewLog.Action.RETURN,
@@ -747,7 +747,7 @@ class ResearchReportReturnEndpoint(ResearchAPIView):
             },
             request=request,
         )
-        notify_report_returned(report, request.user, comment, route=route)
+        notify_report_returned(report, request.user, comment, route=route, event_id=review_log.pk)
         return Response(serialize_report(report, request, include_draft_content=True), status=status.HTTP_200_OK)
 
 
@@ -779,7 +779,7 @@ class ResearchReportAcceptEndpoint(ResearchAPIView):
             report.accepted_at = timezone.now()
             report.reviewer = request.user
             report.save(update_fields=["status", "accepted_at", "reviewer", "updated_at"])
-            ReportReviewLog.objects.create(
+            review_log = ReportReviewLog.objects.create(
                 report=report,
                 actor=request.user,
                 action=ReportReviewLog.Action.ACCEPT,
@@ -802,7 +802,7 @@ class ResearchReportAcceptEndpoint(ResearchAPIView):
             },
             request=request,
         )
-        notify_report_accepted(report, request.user, route=route)
+        notify_report_accepted(report, request.user, route=route, event_id=review_log.pk)
         return Response(serialize_report(report, request, include_draft_content=True), status=status.HTTP_200_OK)
 
 

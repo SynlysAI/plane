@@ -24,6 +24,12 @@ app = Celery("plane")
 # Using a string here means the worker will not have to
 # pickle the object when using Windows.
 app.config_from_object("django.conf:settings", namespace="CELERY")
+app.conf.task_routes = {
+    "plane.bgtasks.issue_activities_task.process_notification_generation_outbox": {
+        "queue": "notification-generation",
+    },
+    "plane.bgtasks.email_notification_task.*": {"queue": "notification-email"},
+}
 
 app.conf.beat_schedule = {
     "cleanup-attachment-previews": {
@@ -37,7 +43,11 @@ app.conf.beat_schedule = {
     # Intra day recurring jobs
     "check-every-five-minutes-to-send-email-notifications": {
         "task": "plane.bgtasks.email_notification_task.stack_email_notification",
-        "schedule": crontab(minute="*/5"),  # Every 5 minutes
+        "schedule": crontab(minute="*"),  # Scan durable deliveries every minute
+    },
+    "recover-notification-generation-outbox": {
+        "task": "plane.bgtasks.issue_activities_task.process_notification_generation_outbox",
+        "schedule": crontab(minute="*"),
     },
     # Occurs once every day
     "check-every-day-to-delete-hard-delete": {
