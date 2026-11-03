@@ -16,6 +16,7 @@ import { AIAssistantPanel } from "./ai-assistant-panel";
 // helpers
 import { AssistantService, type TAssistantStatus } from "@/services/assistant";
 // store
+import { useUser } from "@/hooks/store/user";
 import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
 
 const assistantService = new AssistantService();
@@ -47,6 +48,7 @@ export const AIAssistantRoot = observer(function AIAssistantRoot({ children }: P
   const params = useParams();
   const workspaceSlug = params?.workspaceSlug?.toString();
   const assistantStore = useAIAssistant();
+  const { data: currentUser } = useUser();
 
   const {
     data: status,
@@ -77,8 +79,8 @@ export const AIAssistantRoot = observer(function AIAssistantRoot({ children }: P
   }, [assistantStore, resolvedStatus]);
 
   useEffect(() => {
-    if (workspaceSlug) assistantStore.hydrate(workspaceSlug);
-  }, [workspaceSlug, assistantStore]);
+    if (workspaceSlug && currentUser?.id) assistantStore.hydrate(workspaceSlug, currentUser.id);
+  }, [workspaceSlug, assistantStore, currentUser?.id]);
 
   // document-level capture: works while any input (including the composer) is focused
   useEffect(() => {

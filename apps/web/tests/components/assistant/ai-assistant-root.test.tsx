@@ -39,6 +39,10 @@ vi.mock("@plane/i18n", async (importOriginal) => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
+vi.mock("@/hooks/store/user", () => ({
+  useUser: () => ({ data: { id: "user-a" } }),
+}));
+
 vi.mock("@/components/assistant/ai-assistant-panel", () => ({
   AIAssistantPanel: () => <div data-testid="assistant-panel" />,
 }));
@@ -128,4 +132,28 @@ it("keeps the dock shell and page outlet alive across route content changes", { 
   expect(container.firstElementChild).toBe(shell);
   expect(container.querySelector('[data-testid="assistant-panel"]')).not.toBeNull();
   expect(container.textContent).toContain("research-chain");
+});
+
+it("hydrates the assistant thread with the current user scope", { timeout: 20000 }, async () => {
+  window.localStorage.setItem("PLANE_AI_ASSISTANT_THREAD_lab:user-a", "thread-a");
+  window.localStorage.setItem("PLANE_AI_ASSISTANT_THREAD_lab:user-b", "thread-b");
+  const { AIAssistantRoot } = await import("@/components/assistant/ai-assistant-root");
+  const { AIAssistantStore } = await import("@/store/ai-assistant");
+  const { StoreContext } = await import("@/lib/store-context");
+  const store = new AIAssistantStore();
+
+  act(() => {
+    root.render(
+      // eslint-disable-next-line react/jsx-no-constructed-context-values -- test-only provider value
+      <StoreContext.Provider value={{ aiAssistant: store } as never}>
+        <AIAssistantRoot>
+          <main>user scope</main>
+        </AIAssistantRoot>
+      </StoreContext.Provider>
+    );
+  });
+  await act(async () => undefined);
+
+  expect(store.threadId).toBe("thread-a");
+  expect(window.localStorage.getItem("PLANE_AI_ASSISTANT_THREAD_lab:user-b")).toBe("thread-b");
 });

@@ -55,6 +55,14 @@ const TERMINAL_EVENTS: Record<string, TAssistantPhase> = {
   "run.cancelled": "cancelled",
 };
 const agentDockService = new AgentDockService();
+const CONTEXT_REFRESH_SKEW_MS = 30_000;
+
+/** Determine whether a browser-held context envelope can still authorize a turn. */
+function isContextFresh(context: TAgentContextEnvelope): boolean {
+  if (!["linked", "refreshed"].includes(context.status)) return false;
+  const expiresAt = Date.parse(context.expiry);
+  return Number.isFinite(expiresAt) && expiresAt > Date.now() + CONTEXT_REFRESH_SKEW_MS;
+}
 
 /** 规范化 SSE 事件名和历史 JSON 事件，保持一个运行时 reducer 输入。 */
 function normalizeEvent(value: unknown, eventName?: string, id?: string): TAgentDockEvent | null {
@@ -307,6 +315,15 @@ export const useAssistantChat = (workspaceSlug: string, { enabled = true }: TUse
           activeRunIdRef.current = null;
           return;
         }
+        if ([400, 406].includes(status)) {
+          setStreamState({
+            phase: "failed",
+            error: status === 406 ? "stream_not_acceptable" : "stream_request_invalid",
+            canRetry: false,
+          });
+          activeRunIdRef.current = null;
+          return;
+        }
         scheduleReconnect(runId, generation);
       }
     })();
@@ -433,7 +450,19 @@ export const useAssistantChat = (workspaceSlug: string, { enabled = true }: TUse
           setStreamState({ phase: "failed", error: session.last_error || "run_failed", canRetry: true });
         }
       }
-    } catch {
+    } catch (error) {
+      const status = Number((error as { status?: number }).status ?? 0);
+      const code = String((error as { error?: string }).error ?? "");
+      if (status === 404 || code === "agent_session_not_found") {
+        assistantStore.clearThreadId(workspaceSlug);
+        activeRunIdRef.current = null;
+        setMessages([]);
+        setRuntimeEvents([]);
+        latestSeqRef.current = -1;
+        processedSeqRef.current = new Set();
+        setStreamState({ phase: "idle" });
+        return;
+      }
       assistantStore.clearThreadId(workspaceSlug);
       setStreamState({ phase: "failed", error: "session_unavailable", canRetry: true });
     }
@@ -488,7 +517,7 @@ export const useAssistantChat = (workspaceSlug: string, { enabled = true }: TUse
       setStreamState({ phase: "connecting" });
       try {
         let context = contextEnvelope;
-        if (!context || context.status === "expired" || context.status === "failed") context = await resolveContext();
+        if (!context || !isContextFresh(context)) context = await resolveContext();
         if (generationRef.current !== generation) return;
         if (!context) return;
         setStreamState({ phase: "connecting" });
