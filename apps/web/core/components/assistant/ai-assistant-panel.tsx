@@ -123,7 +123,10 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
 
   const provider = assistantStore.activeProvider;
   const busy =
-    provider === "cloud" ? cloud.streamState.phase === "streaming" || cloud.streamState.phase === "queued" : local.busy;
+    provider === "cloud"
+      ? ["connecting", "running", "waiting_approval", "cancelling", "disconnected"].includes(cloud.streamState.phase)
+      : local.busy;
+  const disconnectCloud = cloud.disconnect;
   const localAvailable = Boolean(assistantStore.contextNodeId);
   const effectiveDockMode = assistantStore.dockMode === "docked" && isDesktop;
 
@@ -140,8 +143,8 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
   }, []);
 
   useEffect(() => {
-    if (!assistantStore.isOpen) cloud.disconnect();
-  }, [assistantStore.isOpen, cloud]);
+    if (!assistantStore.isOpen) disconnectCloud();
+  }, [assistantStore.isOpen, disconnectCloud]);
 
   useEffect(() => {
     if (
@@ -309,34 +312,6 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
     </>
   );
 
-  const contextView = (
-    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-      <section className="border border-subtle bg-surface-1">
-        <h3 className="border-b border-subtle px-4 py-2.5 text-12 font-semibold text-primary">
-          {t("aiAssistant.current_context")}
-        </h3>
-        <div className="space-y-2 px-4 py-3">
-          <p className="text-11 leading-relaxed break-words text-secondary">
-            {cloud.contextEnvelope
-              ? cloud.contextEnvelope.target_hierarchy.map((item) => item.title).join(" / ")
-              : t("aiAssistant.context_workspace_only")}
-          </p>
-          <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-10">
-            <div>
-              <dt className="text-tertiary">Resources</dt>
-              <dd className="text-secondary">{cloud.contextEnvelope?.resources_summary.total ?? 0}</dd>
-            </div>
-            <div>
-              <dt className="text-tertiary">Tools</dt>
-              <dd className="text-secondary">{cloud.contextEnvelope?.capabilities.allowed_tools.length ?? 0}</dd>
-            </div>
-          </dl>
-          <p className="text-10 text-tertiary">{t("aiAssistant.context_snapshot_pending")}</p>
-        </div>
-      </section>
-    </div>
-  );
-
   const runtimeTools = useMemo(() => mergeRuntimeToolCalls(cloud.runtimeEvents), [cloud.runtimeEvents]);
   const approvalEvents = useMemo(
     () => cloud.runtimeEvents.filter((event) => event.event_type === "APPROVAL"),
@@ -345,6 +320,115 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
   const contextSnapshots = useMemo(
     () => cloud.runtimeEvents.filter((event) => event.event_type === "CONTEXT_ASSEMBLED"),
     [cloud.runtimeEvents]
+  );
+  const contextAccessEvents = useMemo(
+    () => cloud.runtimeEvents.filter((event) => event.event_type === "CONTEXT_ACCESSED"),
+    [cloud.runtimeEvents]
+  );
+  const currentRunningTool = runtimeTools.find((tool) => tool.status === "running");
+  const phaseLabels: Record<string, string> = {
+    idle: "空闲",
+    connecting: "连接中",
+    running: "执行中",
+    waiting_approval: "等待审批",
+    cancelling: "正在停止",
+    completed: "已完成",
+    failed: "执行失败",
+    cancelled: "已取消",
+    disconnected: "连接中断，正在重连",
+    expired: "上下文已过期",
+  };
+  const phaseLabel = phaseLabels[cloud.streamState.phase] ?? cloud.streamState.phase;
+  const latestEventLabel = cloud.latestEventAt
+    ? new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(
+        new Date(cloud.latestEventAt)
+      )
+    : "暂无事件";
+
+  const contextView = (
+    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 text-11">
+      <section className="pb-4">
+        <h3 className="mb-2 text-12 font-semibold text-primary">已注入摘要</h3>
+        <p className="leading-relaxed break-words text-secondary">
+          {cloud.contextEnvelope?.target_hierarchy.map((item) => item.title).join(" / ") ||
+            t("aiAssistant.context_workspace_only")}
+        </p>
+        <p className="mt-2 text-tertiary">
+          资源 {cloud.contextEnvelope?.resources_summary.total ?? 0} 项 · 授权版本 v
+          {cloud.contextEnvelope?.context_version ?? "—"}
+        </p>
+        <ul className="mt-1 space-y-1 text-secondary">
+          {Object.entries(cloud.contextEnvelope?.resources_summary.by_kind ?? {}).map(([kind, count]) => (
+            <li key={kind}>
+              {kind}: {count}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-1 text-10 break-all text-tertiary">Manifest {cloud.contextEnvelope?.manifest_hash || "—"}</p>
+        <p className="mt-2 leading-relaxed break-words whitespace-pre-wrap text-secondary">
+          {cloud.contextEnvelope?.manifest_summary?.summary || "暂无摘要"}
+        </p>
+        {Boolean(cloud.contextEnvelope?.manifest_summary?.resources.length) && (
+          <details className="mt-2">
+            <summary className="cursor-pointer text-secondary">
+              资源清单（{cloud.contextEnvelope?.manifest_summary?.resources.length ?? 0}）
+            </summary>
+            <ul className="mt-2 divide-y divide-subtle">
+              {cloud.contextEnvelope?.manifest_summary?.resources.map((resource) => (
+                <li key={`${resource.kind}-${resource.id}`} className="py-1.5">
+                  <p className="break-words text-primary">{resource.title || resource.id}</p>
+                  <p className="text-tertiary">
+                    {resource.kind}
+                    {resource.status ? ` · ${resource.status}` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </section>
+
+      <section className="border-t border-subtle py-4">
+        <h3 className="mb-2 text-12 font-semibold text-primary">已授权能力</h3>
+        <p className="text-tertiary">工具白名单</p>
+        <p className="mt-1 break-words text-secondary">
+          {cloud.contextEnvelope?.capabilities.allowed_tools.join(" · ") || "未授权工具"}
+        </p>
+        <p className="mt-2 text-tertiary">插件 · MCP · 知识库 · 文件范围</p>
+        <p className="mt-1 break-words text-secondary">
+          {[
+            ...(cloud.contextEnvelope?.capabilities.allowed_plugins ?? []),
+            ...(cloud.contextEnvelope?.capabilities.allowed_mcp_ids ?? []),
+            ...(cloud.contextEnvelope?.capabilities.allowed_knowledge_base_ids ?? []),
+            ...(cloud.contextEnvelope?.capabilities.allowed_file_ids ?? []),
+          ].join(" · ") || "无额外授权范围"}
+        </p>
+        <p className="mt-2 text-tertiary">有效期至 {cloud.contextEnvelope?.expiry ?? "—"}</p>
+      </section>
+
+      <section className="border-t border-subtle pt-4">
+        <h3 className="mb-2 text-12 font-semibold text-primary">实际访问证据</h3>
+        {contextAccessEvents.length === 0 ? (
+          <p className="text-secondary">尚未读取</p>
+        ) : (
+          <ul className="space-y-2">
+            {contextAccessEvents.map((event) => (
+              <li key={`${event.run_id}-${event.source_seq ?? event.seq}`} className="border-l border-subtle pl-3">
+                <p className="font-medium text-primary">
+                  {String(event.payload.name ?? event.raw_event_type ?? "上下文资源")}
+                </p>
+                <p className="mt-0.5 text-secondary">
+                  {String(event.payload.status ?? "已访问")} · {event.created_at}
+                </p>
+                {Boolean(event.payload.resource_id) && (
+                  <p className="mt-0.5 break-all text-tertiary">{String(event.payload.resource_id)}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
   );
   const localRuntimeFacts =
     provider === "local"
@@ -360,26 +444,45 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
 
   const runtimeView = (
     <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
-      <section className="border border-subtle bg-surface-1">
-        <h3 className="border-b border-subtle px-4 py-2.5 text-12 font-semibold text-primary">
-          {t("aiAssistant.runtime_allowed_tools")}
-        </h3>
-        <div className="flex flex-wrap gap-1.5 px-4 py-3">
-          {(cloud.contextEnvelope?.capabilities.allowed_tools ?? []).map((tool) => (
-            <span key={tool} className="rounded-md border border-subtle bg-surface-2 px-2 py-1 text-10 text-secondary">
-              {tool}
-            </span>
-          ))}
-          {!(cloud.contextEnvelope?.capabilities.allowed_tools ?? []).length && (
-            <span className="text-11 text-tertiary">{t("aiAssistant.runtime_empty")}</span>
-          )}
-        </div>
+      <section>
+        <h3 className="mb-2 text-12 font-semibold text-primary">实时事件</h3>
+        {cloud.runtimeEvents.length ? (
+          <ol className="space-y-2">
+            {cloud.runtimeEvents.map((event) => {
+              const summary =
+                event.payload.summary ??
+                event.payload.error ??
+                event.payload.content ??
+                event.payload.status ??
+                event.payload.name;
+              return (
+                <li key={`${event.run_id}-${event.source_seq ?? event.seq}`} className="border-l border-subtle pl-3">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="min-w-0 truncate font-medium text-primary">
+                      {String(event.raw_event_type ?? event.event_type)}
+                    </span>
+                    <time className="shrink-0 text-10 text-tertiary">
+                      {event.created_at
+                        ? new Intl.DateTimeFormat(undefined, {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                          }).format(new Date(event.created_at))
+                        : ""}
+                    </time>
+                  </div>
+                  {summary !== undefined && <p className="mt-0.5 break-words text-secondary">{String(summary)}</p>}
+                </li>
+              );
+            })}
+          </ol>
+        ) : (
+          <p className="text-11 text-tertiary">{t("aiAssistant.runtime_empty")}</p>
+        )}
       </section>
 
-      <section className="border border-subtle bg-surface-1">
-        <h3 className="border-b border-subtle px-4 py-2.5 text-12 font-semibold text-primary">
-          {t("aiAssistant.runtime_events")}
-        </h3>
+      <section className="border-t border-subtle pt-4">
+        <h3 className="mb-2 text-12 font-semibold text-primary">{t("aiAssistant.runtime_events")}</h3>
         {provider === "cloud" && runtimeTools.length ? (
           runtimeTools.map((tool) => (
             <details key={tool.id} className="border-b border-subtle last:border-b-0">
@@ -412,10 +515,8 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
       </section>
 
       {(approvalEvents.length > 0 || contextSnapshots.length > 0) && (
-        <section className="border border-subtle bg-surface-1">
-          <h3 className="border-b border-subtle px-4 py-2.5 text-12 font-semibold text-primary">
-            {t("aiAssistant.runtime_trace")}
-          </h3>
+        <section className="border-t border-subtle pt-4">
+          <h3 className="mb-2 text-12 font-semibold text-primary">{t("aiAssistant.runtime_trace")}</h3>
           {approvalEvents.map((event) => (
             <ToolLine key={event.seq} name={t("aiAssistant.approval_pending")} status={event.event_type} />
           ))}
@@ -522,6 +623,21 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
         </div>
       )}
 
+      {provider === "cloud" && assistantStore.activeView === "conversation" && (
+        <aside className="shrink-0 border-b border-subtle px-4 py-2 text-10 text-secondary" aria-label="当前运行状态">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span>{cloud.contextEnvelope?.status === "linked" ? "上下文已绑定" : `上下文 ${cloud.contextStatus}`}</span>
+            <span>Grant v{cloud.contextEnvelope?.context_version ?? "—"}</span>
+            <span>{phaseLabel}</span>
+            <span>{runtimeTools.length} 次工具调用</span>
+            {currentRunningTool && <span>当前工具：{currentRunningTool.name}</span>}
+            {cloud.streamState.phase === "waiting_approval" && <span>等待审批</span>}
+            <span>最近事件：{latestEventLabel}</span>
+          </div>
+          {cloud.streamState.error && <p className="mt-1 break-words text-danger-primary">{cloud.streamState.error}</p>}
+        </aside>
+      )}
+
       {provider === "cloud" && !cloudReady ? (
         <>
           {statusGuidance}
@@ -566,35 +682,42 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
                 )
               )}
 
-            {provider === "cloud" && (cloud.streamingAnswer || cloud.streamState.phase === "streaming") && (
-              <div className="flex gap-3">
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-accent-primary/10 text-accent-primary">
-                  <Sparkles className="size-3.5" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  {cloud.streamingAnswer ? (
-                    <>
-                      <AnswerMarkdown content={cloud.streamingAnswer} />
-                      <span className="ml-0.5 inline-block animate-pulse text-accent-primary">▍</span>
-                    </>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 text-11 text-tertiary">
-                      <Loader2 className="size-3 animate-spin" />
-                      {cloud.streamState.phase === "queued" ? t("aiAssistant.queued") : t("aiAssistant.working")}
-                    </span>
-                  )}
+            {provider === "cloud" &&
+              (cloud.streamingAnswer ||
+                ["connecting", "running", "waiting_approval", "cancelling"].includes(cloud.streamState.phase)) && (
+                <div className="flex gap-3">
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-accent-primary/10 text-accent-primary">
+                    <Sparkles className="size-3.5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    {cloud.streamingAnswer ? (
+                      <>
+                        <AnswerMarkdown content={cloud.streamingAnswer} />
+                        <span className="ml-0.5 inline-block animate-pulse text-accent-primary">▍</span>
+                      </>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-11 text-tertiary">
+                        <Loader2 className="size-3 animate-spin" />
+                        {cloud.streamState.phase === "connecting" ? "正在连接…" : "正在处理…"}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {provider === "cloud" && cloud.streamState.phase === "interrupted" && (
-              <p className="rounded-lg bg-layer-1 px-3 py-2 text-11 text-secondary">
-                {t("aiAssistant.interrupt_notice")}
-              </p>
+            {provider === "cloud" && cloud.streamState.phase === "waiting_approval" && (
+              <p className="rounded-lg bg-layer-1 px-3 py-2 text-11 text-secondary">正在等待审批，批准后会继续执行。</p>
             )}
-            {provider === "cloud" && cloud.streamState.phase === "error" && (
+            {provider === "cloud" && cloud.streamState.phase === "disconnected" && (
+              <p className="px-3 py-2 text-11 text-secondary">连接已断开，正在从最近事件位置恢复。</p>
+            )}
+            {provider === "cloud" && ["failed", "expired"].includes(cloud.streamState.phase) && (
               <div className="flex items-center justify-between gap-2 rounded-lg bg-danger-subtle/50 px-3 py-2 text-12 text-danger-primary">
-                <span>{t("aiAssistant.error_generic")}</span>
+                <span>
+                  {cloud.streamState.phase === "expired"
+                    ? "上下文授权已过期，请刷新上下文后重试。"
+                    : (cloud.streamState.error ?? t("aiAssistant.error_generic"))}
+                </span>
                 {cloud.streamState.canRetry && (
                   <Button
                     variant="secondary"

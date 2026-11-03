@@ -51,7 +51,11 @@ function duration(startedAt: string | undefined, endedAt: string | undefined) {
 export function mergeRuntimeToolCalls(events: TAgentDockEvent[]): TRuntimeToolCall[] {
   const calls = new Map<string, TRuntimeToolCall>();
   for (const event of events) {
-    if (event.event_type !== "TOOL_CALL") continue;
+    if (
+      event.event_type !== "TOOL_CALL" &&
+      !(event.event_type === "CONTEXT_ACCESSED" && typeof event.payload.name === "string")
+    )
+      continue;
     const payload = event.payload ?? {};
     const request = payload.request as { id?: unknown } | undefined;
     const id = String(payload.tool_call_id ?? request?.id ?? event.seq);

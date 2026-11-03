@@ -13,9 +13,11 @@ const mocks = vi.hoisted(() => ({
   resolveContext: vi.fn(),
   listSessions: vi.fn(),
   getSession: vi.fn(),
+  getContext: vi.fn(),
   createSession: vi.fn(),
   sendMessage: vi.fn(),
   getEvents: vi.fn(),
+  streamEvents: vi.fn(),
   cancelRun: vi.fn(),
 }));
 
@@ -24,9 +26,11 @@ vi.mock("@/services/agent-dock", () => ({
     resolveContext = mocks.resolveContext;
     listSessions = mocks.listSessions;
     getSession = mocks.getSession;
+    getContext = mocks.getContext;
     createSession = mocks.createSession;
     sendMessage = mocks.sendMessage;
     getEvents = mocks.getEvents;
+    streamEvents = mocks.streamEvents;
     cancelRun = mocks.cancelRun;
   },
 }));
@@ -62,6 +66,12 @@ const envelope = {
     { type: "project", id: "project-1", title: "新材料研究" },
   ],
   resources_summary: { total: 7, by_kind: { task: 3, file: 4 } },
+  manifest_summary: {
+    summary: "当前节点：表征分析",
+    resources: [
+      { kind: "file", id: "file-1", title: "谱图数据.csv", status: "READY", updated_at: "2026-11-03T00:00:00Z" },
+    ],
+  },
   capabilities: {
     agent: "Synlora workspace assistant",
     allowed_tools: ["knowledge.search", "file.read"],
@@ -86,6 +96,7 @@ const session = {
   provider: "SYNLORA",
   assembly: {},
   latest_seq: 2,
+  source_cursor: 2,
 };
 
 const event = (seq: number, event_type: string, payload: Record<string, unknown> = {}) => ({
@@ -97,6 +108,37 @@ const event = (seq: number, event_type: string, payload: Record<string, unknown>
   request_id: `request-${seq}`,
   created_at: "2026-11-02T00:00:00Z",
 });
+
+/** Build an SSE response that can finish normally or remain active until aborted. */
+function sseResponse(
+  events: Array<{ type: string; seq: number; payload?: Record<string, unknown> }>,
+  signal?: AbortSignal,
+  runId = "run-1"
+) {
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const item of events) {
+        const eventEnvelope = {
+          schema_version: "agent-dock-event.v1",
+          run_id: runId,
+          seq: item.seq,
+          source_seq: item.seq,
+          created_at: "2026-11-02T00:00:00Z",
+          event_type: item.type,
+          raw_event_type: item.type,
+          payload: item.payload ?? {},
+        };
+        controller.enqueue(
+          encoder.encode(`event: ${item.type}\nid: ${item.seq}\ndata: ${JSON.stringify(eventEnvelope)}\n\n`)
+        );
+      }
+      if (signal) signal.addEventListener("abort", () => controller.close(), { once: true });
+      else controller.close();
+    },
+  });
+  return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+}
 
 const MARKDOWN_TABLE = [
   "| Category | Capability |",
@@ -117,6 +159,7 @@ beforeEach(() => {
   window.localStorage.clear();
   mocks.resolveContext.mockReset().mockResolvedValue(envelope);
   mocks.getSession.mockReset().mockResolvedValue(session);
+  mocks.getContext.mockReset().mockResolvedValue(envelope);
   mocks.createSession.mockReset().mockResolvedValue(session);
   mocks.sendMessage.mockReset().mockResolvedValue({ ...session, status: "STREAMING" });
   mocks.getEvents.mockReset().mockResolvedValue({
@@ -125,6 +168,20 @@ beforeEach(() => {
     latest_seq: 2,
     session,
   });
+  mocks.streamEvents
+    .mockReset()
+    .mockImplementation((_workspace: string, _run: string, _cursor: number, signal: AbortSignal) =>
+      Promise.resolve(
+        sseResponse(
+          [
+            { type: "run.started", seq: 3 },
+            { type: "output.delta", seq: 4, payload: { content: "你好，世界" } },
+            { type: "run.completed", seq: 5 },
+          ],
+          signal
+        )
+      )
+    );
   mocks.cancelRun.mockReset().mockResolvedValue({ ...session, status: "CLOSED" });
 });
 
@@ -255,6 +312,17 @@ describe("AIAssistantPanel", () => {
   });
 
   it("cancels a busy run before starting a new conversation", async () => {
+    mocks.streamEvents.mockImplementation((_workspace: string, _run: string, _cursor: number, signal: AbortSignal) =>
+      Promise.resolve(
+        sseResponse(
+          [
+            { type: "run.started", seq: 3 },
+            { type: "output.delta", seq: 4, payload: { content: "处理中" } },
+          ],
+          signal
+        )
+      )
+    );
     const store = new AIAssistantStore();
     store.hydrate("lab");
     store.open();
@@ -262,7 +330,7 @@ describe("AIAssistantPanel", () => {
     await waitForText("新材料研究");
 
     typeAndSend();
-    await waitForText("介绍这个项目");
+    await waitForText("处理中");
     store.setActiveView("runtime");
     await act(async () => {
       document
@@ -275,6 +343,72 @@ describe("AIAssistantPanel", () => {
     expect(store.activeView).toBe("conversation");
   });
 
+  it("ignores a late event from a stopped run after the next question starts", async () => {
+    let staleController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const encoder = new TextEncoder();
+    mocks.sendMessage
+      .mockResolvedValueOnce({ ...session, status: "STREAMING", run_id: "run-1", source_cursor: 2 })
+      .mockResolvedValueOnce({ ...session, status: "STREAMING", run_id: "run-2", source_cursor: 2 });
+    mocks.streamEvents.mockImplementation((_workspace: string, runId: string, _cursor: number, signal: AbortSignal) => {
+      if (runId === "run-1") {
+        return Promise.resolve(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                staleController = controller;
+              },
+            }),
+            { status: 200, headers: { "Content-Type": "text/event-stream" } }
+          )
+        );
+      }
+      return Promise.resolve(
+        sseResponse(
+          [
+            { type: "run.started", seq: 3 },
+            { type: "output.delta", seq: 4, payload: { content: "新轮次答案" } },
+            { type: "run.completed", seq: 5 },
+          ],
+          signal,
+          runId
+        )
+      );
+    });
+
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+
+    typeAndSend("第一轮");
+    await waitForText("正在处理…");
+    await act(async () => {
+      document
+        .querySelector('[aria-label="aiAssistant.stop"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await waitForText("已取消");
+
+    typeAndSend("第二轮");
+    await waitForText("新轮次答案");
+    const late = {
+      schema_version: "agent-dock-event.v1",
+      run_id: "run-1",
+      seq: 6,
+      source_seq: 6,
+      created_at: "2026-11-03T00:00:00Z",
+      event_type: "output.delta",
+      payload: { content: "旧轮次迟到" },
+    };
+    await act(async () => {
+      staleController?.enqueue(encoder.encode(`event: output.delta\nid: 6\ndata: ${JSON.stringify(late)}\n\n`));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(document.body.textContent).not.toContain("旧轮次迟到");
+    staleController?.close();
+  });
+
   it("restores an existing dock session without leaking context bodies", async () => {
     window.localStorage.setItem("PLANE_AI_ASSISTANT_THREAD_lab", "session-1");
     const store = new AIAssistantStore();
@@ -283,7 +417,109 @@ describe("AIAssistantPanel", () => {
     renderPanel(store);
     await waitForText("你好，世界");
     expect(mocks.getSession).toHaveBeenCalledWith("lab", "session-1");
+    expect(mocks.getContext).toHaveBeenCalledWith("lab", "context-1");
     expect(mocks.createSession).not.toHaveBeenCalled();
+    expect(mocks.streamEvents).not.toHaveBeenCalled();
+  });
+
+  it("resumes an active run from the browser cursor instead of the persisted event cursor", async () => {
+    const activeSession = {
+      ...session,
+      status: "STREAMING",
+      source_cursor: 12,
+      run_start_cursor: 5,
+      assembly: { run_start_cursor: 5 },
+    };
+    mocks.getSession.mockResolvedValue(activeSession);
+    mocks.getEvents.mockResolvedValue({
+      results: [
+        event(1, "TOOL_CALL", { remote_seq: 9, remote_type: "tool/call", name: "file.read", tool_call_id: "call-9" }),
+      ],
+      count: 1,
+      latest_seq: 1,
+      session: activeSession,
+    });
+    mocks.streamEvents.mockImplementation((_workspace: string, _run: string, _cursor: number, signal: AbortSignal) =>
+      Promise.resolve(
+        sseResponse(
+          [
+            { type: "output.delta", seq: 8, payload: { content: "恢复的增量" } },
+            { type: "run.completed", seq: 13 },
+          ],
+          signal
+        )
+      )
+    );
+    window.localStorage.setItem("PLANE_AI_ASSISTANT_THREAD_lab", "session-1");
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+
+    await waitForText("恢复的增量");
+    expect(mocks.streamEvents).toHaveBeenCalled();
+    expect(mocks.streamEvents.mock.calls[0]?.[2]).toBe(5);
+  });
+
+  it("restores the completed phase from durable terminal events", async () => {
+    mocks.getEvents.mockResolvedValue({
+      results: [
+        event(1, "OUTPUT", { remote_seq: 7, remote_type: "assistant.snapshot", content: "已保存回答", final: true }),
+        event(2, "OUTPUT", { remote_seq: 8, remote_type: "run.completed", message: { content: "" } }),
+      ],
+      count: 2,
+      latest_seq: 2,
+      session,
+    });
+    window.localStorage.setItem("PLANE_AI_ASSISTANT_THREAD_lab", "session-1");
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+
+    await waitForText("已保存回答");
+    expect(document.body.textContent).toContain("已完成");
+    expect(mocks.streamEvents).not.toHaveBeenCalled();
+  });
+
+  it("keeps approval waiting state after the SSE reconnects", async () => {
+    let connectionCount = 0;
+    mocks.streamEvents.mockImplementation((_workspace: string, _run: string, _cursor: number, signal: AbortSignal) => {
+      connectionCount += 1;
+      if (connectionCount === 1) {
+        return Promise.resolve(
+          sseResponse([
+            { type: "tool.started", seq: 3, payload: { name: "file.write", tool_call_id: "approval-call" } },
+            { type: "approval.required", seq: 4, payload: { tool_call_id: "approval-call" } },
+          ])
+        );
+      }
+      return Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              signal.addEventListener("abort", () => controller.close(), { once: true });
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "text/event-stream" } }
+        )
+      );
+    });
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+
+    typeAndSend();
+    await waitForText("连接已断开，正在从最近事件位置恢复。");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1150));
+    });
+
+    expect(connectionCount).toBeGreaterThanOrEqual(2);
+    expect(document.body.textContent).toContain("等待审批");
+    expect(document.body.textContent).not.toContain("旧轮次");
   });
 
   it("renders markdown from durable assistant events", async () => {
@@ -318,6 +554,43 @@ describe("AIAssistantPanel", () => {
     expect(document.body.textContent).toContain("Lab / 新材料研究");
     expect(document.body.textContent).toContain("7");
     expect(document.body.textContent).toContain("2");
+    expect(document.body.textContent).toContain("当前节点：表征分析");
+    expect(document.body.textContent).toContain("谱图数据.csv");
+    expect(document.body.textContent).toContain("尚未读取");
+  });
+
+  it("shows actual context access evidence after a read tool event", async () => {
+    mocks.streamEvents.mockImplementation((_workspace: string, _run: string, _cursor: number, signal: AbortSignal) =>
+      Promise.resolve(
+        sseResponse(
+          [
+            {
+              type: "context.accessed",
+              seq: 3,
+              payload: { name: "file.read", resource_id: "file-1", status: "completed" },
+            },
+            { type: "run.completed", seq: 4 },
+          ],
+          signal
+        )
+      )
+    );
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+
+    typeAndSend();
+    await waitForText("已完成");
+    await act(async () => {
+      [...document.querySelectorAll("button")]
+        .find((button) => button.textContent === "aiAssistant.view_context")
+        ?.click();
+    });
+    expect(document.body.textContent).toContain("file.read");
+    expect(document.body.textContent).toContain("file-1");
+    expect(document.body.textContent).not.toContain("尚未读取");
   });
 
   it("uses a themed surface instead of the application canvas", async () => {
@@ -338,6 +611,6 @@ describe("AIAssistantPanel", () => {
     store.hydrate("lab");
     store.open();
     renderPanel(store);
-    await waitForText("aiAssistant.error_generic");
+    await waitForText("session_unavailable");
   });
 });

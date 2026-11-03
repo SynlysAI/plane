@@ -35,6 +35,14 @@ describe("createSSEParser", () => {
     expect(frames).toEqual([{ event: "turn/end", data: "{}" }]);
   });
 
+  it("parses retry metadata and flushes a complete EOF frame", () => {
+    const frames: TSSEFrame[] = [];
+    const parse = createSSEParser((frame) => frames.push(frame));
+    parse('event: output.delta\r\nretry: 2500\r\nid: 18\r\ndata: {"content":"tail"}');
+    parse.flush();
+    expect(frames).toEqual([{ event: "output.delta", retry: 2500, id: "18", data: '{"content":"tail"}' }]);
+  });
+
   it("joins multiple data lines with newlines", () => {
     const frames: TSSEFrame[] = [];
     const parse = createSSEParser((frame) => frames.push(frame));

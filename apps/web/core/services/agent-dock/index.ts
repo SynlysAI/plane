@@ -15,6 +15,18 @@ export type TAgentContextEnvelope = {
   target_type: "WORKSPACE" | "PROJECT" | "RESEARCH_CHAIN" | "RESEARCH_CHAIN_NODE";
   target_hierarchy: Array<{ type: string; id: string; title: string }>;
   resources_summary: { total: number; by_kind: Record<string, number> };
+  manifest_summary?: {
+    summary: string;
+    resources: Array<{
+      kind: string;
+      id: string;
+      title: string;
+      status: string;
+      updated_at: string;
+      version?: number;
+    }>;
+  };
+  manifest_hash: string;
   capabilities: {
     agent: string;
     allowed_tools: string[];
@@ -39,13 +51,17 @@ export type TAgentDockSession = {
   provider: string;
   assembly: Record<string, unknown>;
   latest_seq: number;
+  source_cursor?: number;
+  run_start_cursor?: number;
 };
 
 export type TAgentDockEvent = {
   schema_version: string;
   run_id: string;
   seq: number;
+  source_seq?: number;
   event_type: string;
+  raw_event_type?: string;
   payload: Record<string, unknown>;
   request_id: string;
   created_at: string;
@@ -89,6 +105,14 @@ export class AgentDockService extends APIService {
       });
   }
 
+  async getContext(workspaceSlug: string, contextId: string) {
+    return this.get(`/api/workspaces/${workspaceSlug}/agent-dock/context/${contextId}/`)
+      .then((response) => response?.data as TAgentContextEnvelope)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
   async createSession(workspaceSlug: string, contextId: string) {
     return this.post(`/api/workspaces/${workspaceSlug}/agent-dock/sessions/`, {
       request_id: requestId("session"),
@@ -109,6 +133,34 @@ export class AgentDockService extends APIService {
       .catch((error) => {
         throw error?.response?.data ?? error;
       });
+  }
+
+  /** Open the authenticated Plane BFF event stream for one run. */
+  async streamEvents(workspaceSlug: string, runId: string, afterSeq: number, signal: AbortSignal): Promise<Response> {
+    const url = new URL(
+      `${API_BASE_URL}/api/workspaces/${workspaceSlug}/agent-dock/runs/${runId}/events/stream/`,
+      window.location.origin
+    );
+    url.searchParams.set("after_seq", String(afterSeq));
+    const response = await fetch(url, {
+      method: "GET",
+      credentials: "include",
+      headers: {
+        Accept: "text/event-stream",
+        ...(afterSeq >= 0 ? { "Last-Event-ID": String(afterSeq) } : {}),
+      },
+      signal,
+    });
+    if (!response.ok) {
+      let detail: unknown = response.statusText;
+      try {
+        detail = await response.json();
+      } catch {
+        // Keep the HTTP status text when the BFF returns a non-JSON error.
+      }
+      throw Object.assign(new Error("Agent Dock event stream failed"), { status: response.status, detail });
+    }
+    return response;
   }
 
   async getEvents(workspaceSlug: string, runId: string, afterSeq = 0) {
