@@ -13,6 +13,7 @@ import { AIAssistantPanel } from "./ai-assistant-panel";
 // helpers
 import { AssistantService, type TAssistantStatus } from "@/services/assistant";
 import { RightDockProvider, RightDockShell, useRightDockState } from "@/components/right-dock";
+import { useAgentDockDesktop } from "@/hooks/use-agent-dock-desktop";
 // store
 import { useUser } from "@/hooks/store/user";
 import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
@@ -47,6 +48,7 @@ const AIAssistantRootContent = observer(function AIAssistantRootContent({ childr
   const assistantStore = useAIAssistant();
   const { data: currentUser } = useUser();
   const { hasDetail } = useRightDockState();
+  const isDesktop = useAgentDockDesktop();
 
   const {
     data: status,
@@ -81,8 +83,8 @@ const AIAssistantRootContent = observer(function AIAssistantRootContent({ childr
   }, [workspaceSlug, assistantStore, currentUser?.id]);
 
   useEffect(() => {
-    if (hasDetail && assistantStore.dockMode === "floating") assistantStore.setDockMode("docked");
-  }, [assistantStore, hasDetail]);
+    if (hasDetail && isDesktop && assistantStore.dockMode === "floating") assistantStore.setDockMode("docked");
+  }, [assistantStore, hasDetail, isDesktop]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -109,7 +111,8 @@ const AIAssistantRootContent = observer(function AIAssistantRootContent({ childr
   return (
     <RightDockShell
       agentOpen={assistantStore.isOpen}
-      agentDocked={assistantStore.dockMode === "docked"}
+      agentDocked={assistantStore.dockMode === "docked" && isDesktop}
+      agentWidth={assistantStore.width}
       launcherVisible={resolvedStatus !== null}
       onOpenAgent={() => assistantStore.open()}
       agentPanel={

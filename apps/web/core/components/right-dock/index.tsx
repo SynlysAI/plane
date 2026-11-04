@@ -6,7 +6,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "@plane/i18n";
-import { FileText, Sparkles, X } from "lucide-react";
+import { Sparkles, X } from "lucide-react";
 import { cn } from "@plane/utils";
 import type { TAgentFocusRef } from "@/services/agent-dock";
 
@@ -113,17 +113,17 @@ export function RightDockPortal({
   return createPortal(children, container);
 }
 
-export function RightDockOutlet({ visible }: { visible: boolean }) {
+export function RightDockOutlet({ compact }: { compact: boolean }) {
   const { activeDetail, closeActiveDetail } = useRightDock() ?? {};
   if (!activeDetail) return null;
   return (
     <aside
       data-right-dock-detail={activeDetail.id}
-      className={cn(
-        "h-full min-w-0 flex-col overflow-hidden border-l border-subtle bg-surface-1",
-        visible ? "flex" : "hidden"
-      )}
-      style={{ width: "clamp(360px, 32vw, 560px)" }}
+      className={cn("@container h-full min-w-0 flex-col overflow-hidden border-l border-subtle bg-surface-1")}
+      style={{
+        flexBasis: compact ? "min(34%, 520px)" : "min(45%, 720px)",
+        minWidth: "min(320px, 100%)",
+      }}
     >
       <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-subtle px-4">
         <div className="min-w-0">
@@ -144,27 +144,12 @@ export function RightDockOutlet({ visible }: { visible: boolean }) {
   );
 }
 
-function useMediaWidth(width: number) {
-  const [matches, setMatches] = useState(false);
-  useEffect(() => {
-    if (typeof window.matchMedia !== "function") {
-      setMatches(window.innerWidth >= width);
-      return;
-    }
-    const query = window.matchMedia(`(min-width: ${width}px)`);
-    const update = () => setMatches(query.matches);
-    update();
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, [width]);
-  return matches;
-}
-
 export function RightDockShell({
   children,
   agentPanel,
   agentOpen,
   agentDocked = false,
+  agentWidth = 420,
   launcherVisible = true,
   onOpenAgent,
 }: {
@@ -172,32 +157,39 @@ export function RightDockShell({
   agentPanel: ReactNode;
   agentOpen: boolean;
   agentDocked?: boolean;
+  agentWidth?: number;
   launcherVisible?: boolean;
   onOpenAgent: () => void;
 }) {
   const { t } = useTranslation();
   const { hasDetail } = useRightDockState();
-  const wide = useMediaWidth(1440);
-  const [preferred, setPreferred] = useState<"agent" | "detail">("agent");
 
-  useEffect(() => {
-    if (hasDetail) setPreferred("detail");
-  }, [hasDetail]);
-
-  const showDetail = hasDetail && (wide || preferred === "detail");
-  const showDockedAgent = agentDocked && agentOpen && (wide || preferred === "agent");
+  const showDockedAgent = agentDocked && agentOpen;
   const showFloatingAgent = agentOpen && !agentDocked;
-  const showRail = hasDetail || (agentOpen && agentDocked);
+  const showRail = hasDetail && !showDockedAgent;
   const showLauncher = launcherVisible && !agentOpen && !hasDetail;
 
   return (
     <div className="relative flex size-full min-h-0 min-w-0 flex-1 items-stretch overflow-hidden">
-      <div data-right-dock-workspace className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <div
+        data-right-dock-workspace
+        className="relative flex min-h-0 min-w-0 flex-col overflow-hidden"
+        style={{ flexBasis: "min(320px, 100%)", flexGrow: 1, flexShrink: 0 }}
+      >
         {children}
       </div>
-      <RightDockOutlet visible={showDetail} />
+      <RightDockOutlet compact={showDockedAgent} />
       {showDockedAgent ? (
-        <div data-right-dock-agent className="flex h-full min-h-0">
+        <div
+          data-right-dock-agent
+          className="flex h-full min-h-0 min-w-0"
+          style={{
+            flexBasis: `${agentWidth}px`,
+            flexGrow: 0,
+            flexShrink: 1,
+            minWidth: "min(320px, 100%)",
+          }}
+        >
           {agentPanel}
         </div>
       ) : showFloatingAgent ? (
@@ -224,7 +216,6 @@ export function RightDockShell({
           <button
             type="button"
             onClick={() => {
-              setPreferred("agent");
               onOpenAgent();
             }}
             aria-pressed={showDockedAgent}
@@ -234,18 +225,6 @@ export function RightDockShell({
           >
             <Sparkles className="size-4" />
           </button>
-          {hasDetail ? (
-            <button
-              type="button"
-              onClick={() => setPreferred("detail")}
-              aria-pressed={showDetail}
-              aria-label="任务详情"
-              title="任务详情"
-              className="flex size-8 items-center justify-center rounded-md text-secondary transition hover:bg-surface-1 hover:text-primary"
-            >
-              <FileText className="size-4" />
-            </button>
-          ) : null}
         </nav>
       ) : null}
     </div>
