@@ -340,6 +340,9 @@ def test_agent_dock_session_is_target_bound_and_projects_durable_events(env, mon
             assert kwargs["mcp_token"]
             assert kwargs["external_run_id"]
             assert kwargs["page_context"]["focus"]["type"] == "RESEARCH_NODE"
+            assert kwargs["plane_meta"]["workspace"]["slug"] == env["workspace"].slug
+            assert kwargs["plane_meta"]["target"]["type"] == "WORKSPACE"
+            assert kwargs["plane_meta"]["page"]["route"]
             assert thread_id == "synlora-session-1"
             assert content == "总结当前节点"
             assert research_context["schema_version"] == "agent-context.v3"

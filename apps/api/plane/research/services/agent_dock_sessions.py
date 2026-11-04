@@ -14,6 +14,7 @@ from django.utils import timezone
 from plane.db.models import (
     ResearchChain,
     ResearchChainNode,
+    ResearchAgentBackendConnection,
     ResearchAgentRunEvent,
     ResearchAgentSession,
     ResearchChainEvent,
@@ -89,6 +90,51 @@ def _plane_mcp_metadata(grant: ResearchContextGrant, credential) -> dict:
         "url": credential.url,
         "connection_id": str(credential.connection.id),
         "allowed_tools": list(grant.allowed_tools or []),
+    }
+
+
+def _plane_metadata(grant: ResearchContextGrant, page_context: dict | None = None) -> dict:
+    """Build the bounded Synlora workspace/page metadata for a grant."""
+
+    target_id = (
+        str(grant.chain_node_id or "")
+        or str(grant.research_chain_id or "")
+        or str(grant.project_id or "")
+        or str(grant.workspace_id)
+    )
+    hierarchy = [{"type": "WORKSPACE", "id": str(grant.workspace_id), "title": grant.workspace.name}]
+    if grant.project is not None:
+        hierarchy.append({"type": "PROJECT", "id": str(grant.project_id), "title": grant.project.name})
+    if grant.research_chain is not None:
+        hierarchy.append(
+            {"type": "RESEARCH_CHAIN", "id": str(grant.research_chain_id), "title": str(grant.research_chain_id)}
+        )
+    if grant.chain_node is not None:
+        hierarchy.append(
+            {"type": "RESEARCH_CHAIN_NODE", "id": str(grant.chain_node_id), "title": grant.chain_node.title}
+        )
+    page_context = page_context or (grant.context_manifest or {}).get("page_context") or {}
+    focus = page_context.get("focus") if isinstance(page_context.get("focus"), dict) else {}
+    return {
+        "workspace": {
+            "id": str(grant.workspace_id),
+            "slug": grant.workspace.slug,
+            "name": grant.workspace.name,
+        },
+        "target": {
+            "type": grant.target_type,
+            "id": target_id,
+            "title": _target_title(grant),
+            "hierarchy": hierarchy,
+        },
+        "page": {
+            "route": str(page_context.get("route") or ""),
+            "page_kind": str(page_context.get("page_kind") or ""),
+            "focus_id": str(focus.get("id") or target_id),
+            "focus_title": str(focus.get("title") or _target_title(grant)),
+            "hash": str(page_context.get("hash") or ""),
+            "generated_at": str(page_context.get("generated_at") or ""),
+        },
     }
 
 
@@ -223,6 +269,7 @@ def create_agent_dock_session(
             "Plane unified MCP is unavailable", 503, "agent_mcp_unavailable"
         ) from exc
     plane_mcp = _plane_mcp_metadata(grant, credential)
+    plane_metadata = _plane_metadata(grant)
     try:
         synlora_session_id = runtime.create_session(
             title=_target_title(grant),
@@ -230,6 +277,7 @@ def create_agent_dock_session(
             context_token=context_token,
             plane_mcp=plane_mcp,
             mcp_token=credential.token,
+            plane_meta=plane_metadata,
         )
     except SynloraRuntimeError as exc:
         revoke_agent_dock_mcp_connection(credential.connection)
@@ -248,7 +296,11 @@ def create_agent_dock_session(
             status=ResearchAgentSession.Status.READY,
             provider=ResearchAgentSession.Provider.SYNLORA,
             synlora_session_id=synlora_session_id,
-            delegated_subject=f"plane-ws-{workspace.id}-user-{user.id}",
+            delegated_subject=(
+                ""
+                if getattr(runtime, "auth_mode", "") == "PERSONAL_API_KEY"
+                else f"plane-ws-{workspace.id}-user-{user.id}"
+            ),
             context_token_encrypted=grant.context_token_encrypted,
             assembly=_assembly(grant),
             request_id=request_id,
@@ -280,6 +332,20 @@ def create_agent_dock_session(
             # session; failing to clean it must not hide the authoritative local one.
             pass
         return bound_session
+    backend_connection = (
+        ResearchAgentBackendConnection.objects.filter(
+            workspace=workspace,
+            user=user,
+            system="SYNLORA",
+            deleted_at__isnull=True,
+            is_enabled=True,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    if backend_connection is not None:
+        session.backend_connection = backend_connection
+        session.save(update_fields=["backend_connection", "updated_at"])
     _append_event(
         session,
         "CONTEXT_ASSEMBLED",
@@ -439,6 +505,7 @@ def start_agent_dock_message(
         selected_text=selected_text,
     )
     plane_mcp = _plane_mcp_metadata(grant, credential)
+    plane_metadata = _plane_metadata(grant, page_context)
     _sync_page_focus_on_session(session, page_context)
     try:
         synlora_run_id = runtime.start_run(
@@ -450,6 +517,7 @@ def start_agent_dock_message(
             plane_mcp=plane_mcp,
             mcp_token=credential.token,
             page_context=page_context,
+            plane_meta=plane_metadata,
             external_run_id=str(session.run_id),
         )
     except SynloraRuntimeError as exc:

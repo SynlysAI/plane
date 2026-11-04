@@ -53,6 +53,11 @@ from plane.research.services.agent_runtime import (
     resolve_synlora_runtime,
     synlora_research_context,
 )
+from plane.research.services.agent_identity import (
+    SynloraIdentityConflict,
+    SynloraIdentityError,
+    bind_synlora_api_key,
+)
 from plane.research.services.chain_projection import project_science_discovery_events
 from plane.research.services.sciencediscovery import ScienceDiscoveryClient, ScienceDiscoveryError
 from plane.research.services.idempotency import conflict_response, payload_hash, request_id_from
@@ -1372,6 +1377,15 @@ class ResearchAgentBackendConnectionEndpoint(AgentPluginMixin):
                         "health_status": connection.health_status,
                         "last_health_at": connection.last_health_at,
                         "last_error": connection.last_error,
+                        "external_user": (
+                            {
+                                "id": connection.identity_binding.external_user_id,
+                                "username": connection.identity_binding.external_username,
+                            }
+                            if connection.identity_binding_id is not None
+                            and connection.identity_binding.deleted_at is None
+                            else None
+                        ),
                     }
                     if connection is not None
                     else None
@@ -1410,6 +1424,34 @@ class ResearchAgentBackendConnectionEndpoint(AgentPluginMixin):
             .order_by("-created_at")
             .first()
         )
+        identity_binding = None
+        if system == "SYNLORA" and token:
+            config = resolve_assistant_config(workspace, user=request.user)
+            synlora_base_url = base_url or config.base_url
+            if not synlora_base_url:
+                return research_error(
+                    ResearchErrorCode.AGENT_SCOPE_INVALID, "Synlora base URL is required."
+                )
+            try:
+                identity_binding = bind_synlora_api_key(
+                    workspace,
+                    user=request.user,
+                    base_url=synlora_base_url,
+                    token=token,
+                    connection=connection,
+                )
+            except SynloraIdentityConflict:
+                return research_error(
+                    ResearchErrorCode.AGENT_SCOPE_INVALID,
+                    "This Synlora account or key is already bound to another Plane user.",
+                    status.HTTP_409_CONFLICT,
+                )
+            except SynloraIdentityError as exc:
+                return research_error(
+                    ResearchErrorCode.AGENT_SCOPE_INVALID,
+                    f"Synlora key validation failed: {exc}",
+                    status.HTTP_400_BAD_REQUEST,
+                )
         if connection is None:
             existing_row = (
                 ResearchAgentBackendConnection.objects.filter(workspace=workspace, user=request.user, system=system)
@@ -1424,6 +1466,7 @@ class ResearchAgentBackendConnectionEndpoint(AgentPluginMixin):
                 system=system,
                 base_url=base_url,
                 credential_encrypted=encrypt_data(token) if token else "",
+                identity_binding=identity_binding,
                 is_enabled=is_enabled,
                 created_by=request.user,
             )
@@ -1432,6 +1475,8 @@ class ResearchAgentBackendConnectionEndpoint(AgentPluginMixin):
                 connection.base_url = base_url
             if token:
                 connection.credential_encrypted = encrypt_data(token)
+                if identity_binding is not None:
+                    connection.identity_binding = identity_binding
             connection.is_enabled = is_enabled
             connection.health_status = ResearchAgentBackendConnection.HealthStatus.UNKNOWN
             connection.updated_by = request.user
@@ -1439,6 +1484,7 @@ class ResearchAgentBackendConnectionEndpoint(AgentPluginMixin):
                 update_fields=[
                     "base_url",
                     "credential_encrypted",
+                    "identity_binding",
                     "is_enabled",
                     "health_status",
                     "updated_by",
@@ -1460,6 +1506,14 @@ class ResearchAgentBackendConnectionEndpoint(AgentPluginMixin):
                 "base_url": connection.base_url,
                 "is_enabled": connection.is_enabled,
                 "has_credential": bool(connection.credential_encrypted),
+                "external_user": (
+                    {
+                        "id": connection.identity_binding.external_user_id,
+                        "username": connection.identity_binding.external_username,
+                    }
+                    if connection.identity_binding_id is not None
+                    else None
+                ),
                 "governance_enabled": self._governance_enabled(workspace),
             },
             status=status.HTTP_201_CREATED,

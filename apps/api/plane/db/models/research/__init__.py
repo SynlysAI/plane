@@ -38,7 +38,7 @@ from .chain_stage import (
 from .context import ResearchContextGrant
 from .agent_operation import ResearchAgentOperation, ResearchAgentOperationApproval, ResearchAgentWriteGrant
 from .agent import ResearchAgentRunEvent, ResearchAgentSession
-from .backend import ResearchAgentBackendConnection
+from .backend import ResearchAgentBackendConnection, ResearchAgentIdentityBinding
 from .integration import (
     ExternalReferenceLink,
     ExternalSystemConnection,
@@ -125,6 +125,7 @@ __all__ = [
     "ResearchContextGrant",
     "ResearchAgentSession",
     "ResearchAgentBackendConnection",
+    "ResearchAgentIdentityBinding",
     "ResearchAgentRunEvent",
     "CodeArtifact",
     "ProjectCodeRepository",

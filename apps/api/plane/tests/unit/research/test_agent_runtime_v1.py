@@ -15,8 +15,38 @@ from plane.research.services.agent_runtime import (
 from plane.research.services.agent_dock_sessions import _project_synlora_replay_event
 
 
-def test_runtime_accepts_delegated_service_token_without_legacy_token(monkeypatch):
-    """有 Plane 用户身份时，服务令牌即可建立 Synlora runtime。"""
+def test_runtime_uses_verified_personal_api_key_for_plane_user(monkeypatch):
+    """有 Plane 用户身份时必须使用个人 yxkey，不能回落全局服务令牌。"""
+    workspace = object()
+    user = object()
+    config = SimpleNamespace(
+        base_url="https://synlora.example",
+        token="",
+        service_token="plane-service-token",
+        is_enabled=True,
+        timeout_seconds=5,
+    )
+    binding = SimpleNamespace(
+        base_url="https://synlora.example",
+        credential_encrypted="encrypted-yxkey",
+    )
+    monkeypatch.setattr(agent_runtime, "resolve_assistant_config", lambda *_args, **_kwargs: config)
+    monkeypatch.setattr(agent_runtime, "decrypt_data", lambda _value: "yxkey_private")
+    monkeypatch.setattr(
+        agent_runtime, "ensure_synlora_identity_binding", lambda *_args, **_kwargs: binding
+    )
+
+    runtime = resolve_synlora_runtime(workspace, user=user)
+
+    assert isinstance(runtime, SynloraRuntimeClient)
+    assert runtime.workspace is workspace
+    assert runtime.user is user
+    assert runtime.auth_mode == "PERSONAL_API_KEY"
+    assert runtime._headers() == {"Authorization": "Bearer yxkey_private"}
+
+
+def test_runtime_rejects_plane_user_without_personal_binding(monkeypatch):
+    """全局 delegated 服务令牌不能再替代缺失的个人身份绑定。"""
     workspace = object()
     user = object()
     config = SimpleNamespace(
@@ -26,12 +56,11 @@ def test_runtime_accepts_delegated_service_token_without_legacy_token(monkeypatc
         is_enabled=True,
     )
     monkeypatch.setattr(agent_runtime, "resolve_assistant_config", lambda *_args, **_kwargs: config)
+    monkeypatch.setattr(
+        agent_runtime, "ensure_synlora_identity_binding", lambda *_args, **_kwargs: None
+    )
 
-    runtime = resolve_synlora_runtime(workspace, user=user)
-
-    assert isinstance(runtime, SynloraRuntimeClient)
-    assert runtime.workspace is workspace
-    assert runtime.user is user
+    assert resolve_synlora_runtime(workspace, user=user) is None
 
 
 def test_runtime_without_delegated_identity_requires_legacy_token(monkeypatch):

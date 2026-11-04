@@ -11,6 +11,7 @@ replayed before the live session SSE stream is forwarded.
 
 import json
 from uuid import uuid4
+from dataclasses import replace
 
 import httpx
 from django.http import StreamingHttpResponse
@@ -30,6 +31,8 @@ from .client import (
     resolve_assistant_config,
     assistant_history_messages,
 )
+from plane.license.utils.encryption import decrypt_data
+from plane.research.services.agent_identity import ensure_synlora_identity_binding
 
 UPSTREAM_UNAVAILABLE = "synlora_unavailable"
 UPSTREAM_ERROR = "synlora_error"
@@ -81,25 +84,27 @@ class AssistantStatusEndpoint(BaseAPIView):
         if workspace is None:
             return Response({"error": "Workspace not found"}, status=status.HTTP_404_NOT_FOUND)
         config = resolve_assistant_config(workspace, user=request.user)
+        binding = ensure_synlora_identity_binding(workspace, request.user)
+        if binding is not None:
+            config = replace(
+                config,
+                base_url=binding.base_url or config.base_url,
+                token=decrypt_data(binding.credential_encrypted),
+                service_token="",
+                auth_mode="PERSONAL_API_KEY",
+            )
         enabled = bool(config.base_url and config.token and config.is_enabled)
         ready = False
         state = "not_configured"
         if not config.is_enabled or not config.base_url:
             state = "not_configured"
-        elif not config.token:
-            state = (
-                "personal_credential_required"
-                if config.credential_mode == "PERSONAL"
-                else "not_configured"
-            )
-        elif not config.service_token:
-            state = "service_unavailable"
+        elif binding is None:
+            state = "personal_credential_required"
         elif enabled:
             try:
                 client = SynloraAssistantClient(config, workspace=workspace, user=request.user)
                 state = "service_unavailable"
                 if client.health().status_code == 200:
-                    client.verify_delegated_auth()
                     ready = True
                     state = "ready"
             except Exception as e:

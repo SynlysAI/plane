@@ -9,7 +9,13 @@ from unittest.mock import patch
 import pytest
 from rest_framework.test import APIClient
 
-from plane.db.models import ExternalSystemConnection, IntegrationSystem
+from plane.db.models import (
+    ExternalSystemConnection,
+    IntegrationSystem,
+    ResearchAgentBackendConnection,
+    ResearchAgentIdentityBinding,
+)
+from plane.license.utils.encryption import encrypt_data
 from plane.tests.research_fixtures import make_user, make_workspace
 
 pytestmark = pytest.mark.django_db
@@ -29,6 +35,28 @@ def _configure(workspace, credential="yxkey-shared", credential_mode=ExternalSys
         connection.set_credential(credential)
         connection.save(update_fields=["credential"])
     return connection
+
+
+def _personal_binding(workspace, user, token="yxkey_personal"):
+    """创建已验证的 Synlora 个人身份绑定。"""
+    binding = ResearchAgentIdentityBinding.objects.create(
+        user=user,
+        system="SYNLORA",
+        base_url="http://synlora.internal:5050",
+        external_user_id="synlora-user",
+        external_username="synlora",
+        credential_hash="hash-" + token,
+        credential_encrypted=encrypt_data(token),
+    )
+    ResearchAgentBackendConnection.objects.create(
+        workspace=workspace,
+        user=user,
+        system="SYNLORA",
+        identity_binding=binding,
+        credential_encrypted=encrypt_data(token),
+        is_enabled=True,
+    )
+    return binding
 
 
 @pytest.fixture
@@ -100,6 +128,7 @@ def test_unconfigured_connection_maps_to_503_on_chat(env):
 
 def test_status_reports_ready_when_synlora_answers(env):
     _configure(env["workspace"])
+    _personal_binding(env["workspace"], env["owner"])
 
     class FakeResponse:
         status_code = 200
@@ -109,7 +138,6 @@ def test_status_reports_ready_when_synlora_answers(env):
 
     client = _client_for(env["owner"])
     with (
-        patch("plane.app.views.assistant.client.httpx.post", return_value=FakeDelegatedResponse()),
         patch("plane.app.views.assistant.client.httpx.get", return_value=FakeResponse()) as fake_get,
     ):
         response = client.get(f"/api/workspaces/{env['workspace'].slug}/assistant/status/")
@@ -138,13 +166,13 @@ def test_status_reports_personal_token_missing(env):
 
 def test_status_reports_service_unavailable_when_synlora_health_fails(env):
     _configure(env["workspace"])
+    _personal_binding(env["workspace"], env["owner"])
 
     class FakeResponse:
         status_code = 503
 
     client = _client_for(env["owner"])
     with (
-        patch("plane.app.views.assistant.client.httpx.post", return_value=FakeDelegatedResponse()),
         patch("plane.app.views.assistant.client.httpx.get", return_value=FakeResponse()),
     ):
         response = client.get(f"/api/workspaces/{env['workspace'].slug}/assistant/status/")

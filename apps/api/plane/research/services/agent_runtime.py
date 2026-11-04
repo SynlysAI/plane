@@ -4,22 +4,24 @@
 
 """Synlora v1 Sessions adapter for the research agent workbench.
 
-Plane keeps the browser, Synlora credentials, and Research Context token behind
-its BFF. The adapter exchanges a delegated service credential for a short-lived
-Synlora user token, starts background runs, and projects Synlora's stable event
-stream into the event vocabulary already consumed by Plane's append-only store.
+Plane keeps the browser, Synlora credentials, and Research Context token behind its
+BFF. User sessions authenticate with a verified personal Synlora API key and never
+fall back to the platform service credential.
 """
 
 from __future__ import annotations
 
 import json
 import time
+from types import SimpleNamespace
 from typing import Any, Iterator
 
 import httpx
 
 from plane.app.views.assistant.client import resolve_assistant_config
 from plane.db.models import Workspace
+from plane.license.utils.encryption import decrypt_data
+from plane.research.services.agent_identity import ensure_synlora_identity_binding
 
 DELEGATED_SUBJECT_PREFIX = "plane-ws"
 
@@ -41,6 +43,7 @@ class SynloraRuntimeClient:
         self.config = config
         self.workspace = workspace
         self.user = user
+        self.auth_mode = str(getattr(config, "auth_mode", "DELEGATED_SERVICE"))
         self._delegated_token: str | None = None
         self._delegated_expires_at = 0.0
 
@@ -111,7 +114,12 @@ class SynloraRuntimeClient:
         return token
 
     def _headers(self, context_token: str | None = None) -> dict[str, str]:
-        headers = {"Authorization": f"Bearer {self._ensure_delegated_token()}"}
+        access_token = (
+            self.config.token
+            if self.auth_mode == "PERSONAL_API_KEY" and self.config.token
+            else self._ensure_delegated_token()
+        )
+        headers = {"Authorization": f"Bearer {access_token}"}
         if context_token:
             headers["X-Research-Context-Token"] = context_token
         return headers
@@ -134,6 +142,7 @@ class SynloraRuntimeClient:
         context_token: str | None = None,
         plane_mcp: dict[str, Any] | None = None,
         mcp_token: str | None = None,
+        plane_meta: dict[str, Any] | None = None,
     ) -> str:
         """Create a Synlora v1 session and bind optional Plane research context."""
         body: dict[str, Any] = {"title": title}
@@ -141,6 +150,8 @@ class SynloraRuntimeClient:
             body["research_context"] = research_context
         if plane_mcp is not None:
             body["plane_mcp"] = plane_mcp
+        if plane_meta is not None:
+            body["plane_meta"] = plane_meta
         try:
             response = httpx.post(
                 f"{self.config.base_url}/api/v1/sessions",
@@ -174,6 +185,7 @@ class SynloraRuntimeClient:
         plane_mcp: dict[str, Any] | None = None,
         mcp_token: str | None = None,
         page_context: dict[str, Any] | None = None,
+        plane_meta: dict[str, Any] | None = None,
         external_run_id: str = "",
     ) -> str:
         """Start a background Synlora run and return its stable run id."""
@@ -186,6 +198,7 @@ class SynloraRuntimeClient:
                     **({"research_context": research_context} if research_context else {}),
                     **({"plane_mcp": plane_mcp} if plane_mcp else {}),
                     **({"page_context": page_context} if page_context else {}),
+                    **({"plane_meta": plane_meta} if plane_meta else {}),
                     **({"external_run_id": external_run_id} if external_run_id else {}),
                 },
                 timeout=self.config.timeout_seconds,
@@ -349,9 +362,20 @@ class SynloraRuntimeClient:
 def resolve_synlora_runtime(workspace: Workspace, user=None) -> SynloraRuntimeClient | None:
     """Return a configured v1 runtime client, or ``None`` when unavailable."""
     config = resolve_assistant_config(workspace, user=user)
-    has_delegated_identity = workspace is not None and user is not None
-    has_credentials = bool(config.service_token) if has_delegated_identity else bool(config.token)
-    if not config.base_url or not has_credentials or not config.is_enabled:
+    if workspace is not None and user is not None:
+        binding = ensure_synlora_identity_binding(workspace, user)
+        if binding is None:
+            return None
+        config = SimpleNamespace(
+            **{
+                **vars(config),
+                "base_url": binding.base_url or config.base_url,
+                "token": decrypt_data(binding.credential_encrypted),
+                "service_token": "",
+                "auth_mode": "PERSONAL_API_KEY",
+            }
+        )
+    if not config.base_url or not config.token or not config.is_enabled:
         return None
     return SynloraRuntimeClient(config, workspace=workspace, user=user)
 
