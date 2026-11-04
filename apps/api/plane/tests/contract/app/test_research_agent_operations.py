@@ -67,6 +67,47 @@ def test_separate_catalogue_preserves_read_only_entry(operations):
     assert rpc.json()["result"]["isError"] is True
 
 
+def test_workbuddy_protocol_and_client_safe_schemas(operations):
+    """WorkBuddy 可用新版协议发现科研提案工具并解析简化 Schema。"""
+    e = operations
+    api = APIClient()
+    api.credentials(HTTP_X_RESEARCH_CONTEXT_TOKEN=e["raw"], HTTP_X_RESEARCH_CONTEXT_HASH=e["grant"].context_hash,
+                    HTTP_ACCEPT="application/json", HTTP_MCP_PROTOCOL_VERSION="2025-11-25")
+    initialize = api.post(e["operations_root"] + "mcp/", {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "WorkBuddy"}}}, format="json")
+    assert initialize.json()["result"]["protocolVersion"] == "2025-06-18"
+    api.credentials(HTTP_X_RESEARCH_CONTEXT_TOKEN=e["raw"], HTTP_X_RESEARCH_CONTEXT_HASH=e["grant"].context_hash,
+                    HTTP_ACCEPT="application/json", HTTP_MCP_PROTOCOL_VERSION="2025-06-18")
+    initialized = api.post(e["operations_root"] + "mcp/", {"jsonrpc": "2.0", "method": "notifications/initialized"}, format="json")
+    assert initialized.status_code == 202
+    listed = api.post(e["operations_root"] + "mcp/", {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}, format="json")
+    tools = listed.json()["result"]["tools"]
+
+    def schemas(value):
+        if isinstance(value, dict):
+            yield value
+            for item in value.values():
+                yield from schemas(item)
+        elif isinstance(value, list):
+            for item in value:
+                yield from schemas(item)
+
+    assert not [(tool["name"], key) for tool in tools for schema in schemas(tool["inputSchema"])
+                for key in ("anyOf", "oneOf", "const") if key in schema]
+    assert not [schema["type"] for tool in tools for schema in schemas(tool["inputSchema"])
+                if isinstance(schema.get("type"), list)]
+    bad_accept = APIClient()
+    bad_accept.credentials(HTTP_X_RESEARCH_CONTEXT_TOKEN=e["raw"], HTTP_X_RESEARCH_CONTEXT_HASH=e["grant"].context_hash,
+                           HTTP_ACCEPT="text/plain")
+    rejected = bad_accept.post(e["operations_root"] + "mcp/", {"jsonrpc": "2.0", "id": 3, "method": "ping"}, format="json")
+    assert rejected.status_code == 406
+    bad_version = APIClient()
+    bad_version.credentials(HTTP_X_RESEARCH_CONTEXT_TOKEN=e["raw"], HTTP_X_RESEARCH_CONTEXT_HASH=e["grant"].context_hash,
+                            HTTP_ACCEPT="application/json", HTTP_MCP_PROTOCOL_VERSION="2024-01-01")
+    rejected = bad_version.post(e["operations_root"] + "mcp/", {"jsonrpc": "2.0", "id": 4, "method": "ping"}, format="json")
+    assert rejected.status_code == 400
+
+
 def test_read_key_read_grant_and_session_cannot_gain_write_permission(operations):
     e = operations
     assert e["api"].get(e["operations_root"] + "tools/").status_code == 403
@@ -284,7 +325,8 @@ def test_human_issues_and_revokes_a_node_connection(operations):
     api.credentials(**{"HTTP_" + key.upper().replace("-", "_"): value for key, value in response.json()["headers"].items()})
     catalogue = api.get(e["operations_root"] + "tools/").json()["tools"]
     prepare_schema = next(tool for tool in catalogue if tool["name"] == "prepare_research_operation")["inputSchema"]
-    assert [schema["properties"]["action"]["const"] for schema in prepare_schema["oneOf"]] == ["create_task"]
+    assert prepare_schema["properties"]["action"]["enum"] == ["create_task"]
+    assert "oneOf" not in prepare_schema and "const" not in prepare_schema["properties"]["action"]
     args = {"request_id": uuid4().hex, "node_id": str(e["node"].pk), "action": "append_research_note", "payload": {"text": "Not granted"}}
     assert call(e, "prepare_research_operation", args, api).status_code == 403
     assert e["owner_client"].post(e["human"], {"kind": "revoke_grant", "context_id": response.json()["context_id"]}, format="json").status_code == 200

@@ -11,6 +11,12 @@ import type { ConfigurationFiles, ConnectionMetadata } from "./use-connection-ma
 export const MCP_INPUT = "w-full rounded border border-subtle bg-surface-1 px-3 py-2 text-primary";
 const ICON_BUTTON = "rounded p-2 text-secondary hover:bg-surface-2 focus-visible:outline-2 disabled:opacity-50";
 export const DEFAULT_LIFETIMES = [1, 7, 30, 365, null];
+type ConfigurationFormat = "toml" | "json" | "workbuddy";
+const CONFIG_FORMAT_LABELS: Record<ConfigurationFormat, string> = {
+  toml: "Codex TOML",
+  json: "通用 MCP JSON",
+  workbuddy: "WorkBuddy JSON",
+};
 
 /** 显示连接生命周期，永久连接不依赖浏览器日期解析。 */
 export function ConnectionStatus({ row }: { row: ConnectionMetadata }) {
@@ -185,9 +191,12 @@ function ConfigurationPanel({
   hide: () => void;
   notice: (value: string) => void;
 }) {
-  const [format, setFormat] = useState<"toml" | "json">("toml");
+  const [format, setFormat] = useState<ConfigurationFormat>("toml");
   const id = useId();
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const formats = config?.workbuddy ? (["toml", "json", "workbuddy"] as const) : (["toml", "json"] as const);
+  const activeFormat = (formats as readonly ConfigurationFormat[]).includes(format) ? format : "toml";
+  const selectedText = config?.[activeFormat] ?? "";
   return (
     <section aria-label="客户端配置" className="space-y-3 border-t border-subtle pt-5">
       <div className="flex items-center justify-between gap-3">
@@ -214,64 +223,81 @@ function ConfigurationPanel({
       )}
       {active && config && (
         <>
-          <div className="flex items-center gap-2">
-            <div role="tablist" aria-label="配置格式" className="flex min-w-0 flex-1 gap-4 border-b border-subtle">
-              {(["toml", "json"] as const).map((value, index) => (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div
+              role="tablist"
+              aria-label="配置格式"
+              className="flex min-w-0 flex-1 gap-4 overflow-x-auto border-b border-subtle"
+            >
+              {formats.map((value, index) => (
                 <button
                   key={value}
                   role="tab"
                   type="button"
                   id={`${id}-${value}`}
                   aria-controls={`${id}-panel`}
-                  aria-selected={format === value}
-                  tabIndex={format === value ? 0 : -1}
+                  aria-selected={activeFormat === value}
+                  tabIndex={activeFormat === value ? 0 : -1}
                   ref={(el) => {
                     tabRefs.current[index] = el;
                   }}
-                  className={`py-2 text-12 ${format === value ? "border-accent-primary border-b-2 font-medium" : "text-secondary"}`}
+                  className={`py-2 text-12 whitespace-nowrap ${
+                    activeFormat === value ? "border-accent-primary border-b-2 font-medium" : "text-secondary"
+                  }`}
                   onClick={() => setFormat(value)}
                   onKeyDown={(event) => {
                     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
                     event.preventDefault();
-                    const next = event.key === "Home" ? 0 : event.key === "End" ? 1 : 1 - index;
-                    setFormat(next ? "json" : "toml");
+                    let next = index;
+                    if (event.key === "Home") next = 0;
+                    else if (event.key === "End") next = formats.length - 1;
+                    else {
+                      const direction = event.key === "ArrowLeft" ? -1 : 1;
+                      next = (index + direction + formats.length) % formats.length;
+                    }
+                    setFormat(formats[next]);
                     tabRefs.current[next]?.focus();
                   }}
                 >
-                  {value === "toml" ? "Codex TOML" : "通用 MCP JSON"}
+                  {CONFIG_FORMAT_LABELS[value]}
                 </button>
               ))}
             </div>
-            <button
-              className={ICON_BUTTON}
-              title="复制配置"
-              aria-label="复制配置"
-              onClick={() => {
-                void copyTextToClipboard(config[format]).then(
-                  () => notice("配置已复制。"),
-                  () => notice("复制失败，请手动选择配置。")
-                );
-              }}
-            >
-              <Copy className="size-4" />
-            </button>
-            <button
-              className={ICON_BUTTON}
-              title="导出配置"
-              aria-label="导出配置"
-              onClick={() => downloadMCPConfiguration(config[format], format)}
-            >
-              <Download className="size-4" />
-            </button>
+            <div className="flex justify-end gap-2">
+              <button
+                className={ICON_BUTTON}
+                title="复制配置"
+                aria-label="复制配置"
+                onClick={() => {
+                  void copyTextToClipboard(selectedText).then(
+                    () => notice("配置已复制。"),
+                    () => notice("复制失败，请手动选择配置。")
+                  );
+                }}
+              >
+                <Copy className="size-4" />
+              </button>
+              <button
+                className={ICON_BUTTON}
+                title="导出配置"
+                aria-label="导出配置"
+                onClick={() => downloadMCPConfiguration(selectedText, activeFormat === "toml" ? "toml" : "json")}
+              >
+                <Download className="size-4" />
+              </button>
+            </div>
           </div>
-          <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-${format}`}>
+          {activeFormat === "workbuddy" && (
+            <p className="text-12 text-secondary">此文件可直接导入 WorkBuddy 的自定义 MCP 连接。</p>
+          )}
+          <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-${activeFormat}`}>
             <textarea
-              aria-label={`${format.toUpperCase()} 配置`}
+              aria-label={`${CONFIG_FORMAT_LABELS[activeFormat]} 配置`}
               readOnly
               spellCheck={false}
               wrap="off"
               className="font-mono h-60 w-full min-w-0 resize-y rounded border border-subtle bg-surface-2 p-3 text-12"
-              value={config[format]}
+              value={selectedText}
             />
           </div>
         </>

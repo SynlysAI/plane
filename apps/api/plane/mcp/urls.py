@@ -13,6 +13,7 @@ from plane.mcp.endpoints import (
 )
 
 urlpatterns = [
+    path("mcp", UnifiedMCPEndpoint.as_view(), name="unified-mcp-without-slash"),
     path("mcp/", UnifiedMCPEndpoint.as_view(), name="unified-mcp"),
     path("mcp/connections/", UnifiedConnectionsEndpoint.as_view(), name="unified-mcp-connections"),
     path("mcp/connections/options/", UnifiedConnectionOptionsEndpoint.as_view(), name="unified-mcp-options"),

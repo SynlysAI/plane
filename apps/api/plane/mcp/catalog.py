@@ -5,6 +5,7 @@ from datetime import date, datetime
 import re
 from uuid import UUID as UUIDValue
 
+from plane.mcp.schema_compat import project_tools
 from plane.research.services.mcp_catalog import RESOURCE_KINDS, ResearchReadError
 
 
@@ -509,7 +510,7 @@ def tools_for(connection):
                 current["description"] += " " + item["description"]
             else:
                 result.append(item)
-    return result
+    return project_tools(result)
 
 
 CREATE_SCHEMA = obj(

@@ -19,13 +19,23 @@ export function unifiedMetadata(value: UnifiedConnection): UnifiedConnection {
 export function unifiedConfiguration(value: UnifiedIssued) {
   try {
     const key = value.server_key;
-    const servers = JSON.parse(value.sciencediscovery_json).mcpServers ?? {};
+    const decoded = JSON.parse(value.sciencediscovery_json) as { mcpServers?: Record<string, unknown> };
+    const servers = decoded.mcpServers ?? {};
     const server = servers[key] as {
       type?: string;
       url?: string;
       headers?: Record<string, string>;
     };
+    const workbuddyDecoded = JSON.parse(value.workbuddy_json) as { mcpServers?: Record<string, unknown> };
+    const workbuddyServers = workbuddyDecoded.mcpServers ?? {};
+    const workbuddyServer = workbuddyServers[value.workbuddy_server_key] as {
+      url?: string;
+      headers?: Record<string, string>;
+    };
+    const expectedWorkbuddyKey = `plane-unified-${value.id.replaceAll("-", "")}`;
     const url = new URL(value.mcp_url);
+    const workbuddyUrl = new URL(url.href);
+    workbuddyUrl.pathname = workbuddyUrl.pathname.replace(/\/$/, "");
     if (
       key !== value.name.trim() ||
       Object.keys(servers).length !== 1 ||
@@ -40,10 +50,22 @@ export function unifiedConfiguration(value: UnifiedIssued) {
       url.pathname !== "/api/mcp/" ||
       !/^pum_[A-Za-z0-9_-]{43}$/.test(value.secret) ||
       Object.keys(server.headers ?? {}).join() !== "Authorization" ||
-      server.headers?.Authorization !== `Bearer ${value.secret}`
+      server.headers?.Authorization !== `Bearer ${value.secret}` ||
+      !/^plane-unified-[a-f0-9]{32}$/.test(value.workbuddy_server_key) ||
+      value.workbuddy_server_key !== expectedWorkbuddyKey ||
+      Object.keys(workbuddyDecoded).join() !== "mcpServers" ||
+      Object.keys(workbuddyServers).length !== 1 ||
+      !workbuddyServer.url ||
+      new URL(workbuddyServer.url).href !== workbuddyUrl.href ||
+      Object.keys(workbuddyServer).toSorted().join() !== "headers,url" ||
+      Object.keys(workbuddyServer.headers ?? {}).join() !== "Authorization" ||
+      workbuddyServer.headers?.Authorization !== `Bearer ${value.secret}`
     )
       throw new Error();
-    return configurationFiles([{ name: key, url: url.href, headers: { Authorization: `Bearer ${value.secret}` } }]);
+    return {
+      ...configurationFiles([{ name: key, url: url.href, headers: { Authorization: `Bearer ${value.secret}` } }]),
+      workbuddy: value.workbuddy_json,
+    };
   } catch {
     // Parser diagnostics can include credential text. Never expose them.
     throw new Error("客户端配置格式无法识别，请重新查看或联系管理员。");

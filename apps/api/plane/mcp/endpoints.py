@@ -23,8 +23,9 @@ from rest_framework.utils.encoders import JSONEncoder
 
 from plane.db.models import UnifiedMCPConnection, Workspace, WorkspaceMember
 from plane.mcp.authorization import UnifiedTokenAuthentication, issue_connection, token_hash, workspace_access
-from plane.mcp.client_config import client_files, public_url, server_key
+from plane.mcp.client_config import client_files, public_url, server_key, workbuddy_server_key
 from plane.mcp.api_documentation import document_unified_tools, full_unified_catalog
+from plane.mcp.protocol import DEFAULT_PROTOCOL, accepts_json_response, negotiate_protocol, protocol_header_valid
 from plane.mcp.credentials import (
     DEFAULT_TTL_DAYS,
     TTL_DAYS,
@@ -41,8 +42,6 @@ from plane.research.utils.audit import record_audit_event
 from plane.research.services.agent_operations import workspace_policy
 from plane.research.services.token_lifetimes import node_mcp_token_ttl_seconds
 from plane.utils.workspace_access import filter_workspaces_for_private_access
-
-PROTOCOL = "2025-03-26"
 
 
 @method_decorator(sensitive_post_parameters(), name="dispatch")
@@ -222,7 +221,8 @@ class UnifiedConnectionsEndpoint(UnifiedEndpointBase):
         url = public_url(request, "/api/mcp/")
         headers = {"Authorization": "Bearer " + raw}
         key = server_key(connection.name)
-        files = client_files(key, url, headers)
+        safe_key = workbuddy_server_key(connection.pk)
+        files = client_files(key, url, headers, workbuddy_key=safe_key)
         return {
             **UnifiedConnectionsEndpoint.present(connection),
             "secret": raw,
@@ -458,7 +458,7 @@ class UnifiedToolsEndpoint(UnifiedEndpointBase):
                 "server": {
                     "name": "plane-unified-mcp",
                     "version": "2.0.0",
-                    "protocol_version": PROTOCOL,
+                    "protocol_version": DEFAULT_PROTOCOL,
                     "server_key": server_key(connection.name),
                     "url": public_url(request, "/api/mcp/"),
                     "auth_header": "Authorization",
@@ -487,18 +487,16 @@ class UnifiedMCPEndpoint(UnifiedEndpointBase):
     http_method_names = ["post", "options"]
 
     def post(self, request):
-        if not {"application/json", "text/event-stream"} <= {
-            item.split(";", 1)[0].strip() for item in request.headers.get("Accept", "").split(",")
-        }:
+        if not accepts_json_response(request):
             return Response(
-                {"error_code": "not_acceptable", "message": "Accept application/json and text/event-stream."},
+                {"error_code": "not_acceptable", "message": "Accept must permit application/json."},
                 status=406,
             )
-        if request.headers.get("MCP-Protocol-Version", PROTOCOL) != PROTOCOL:
+        message = request.data
+        if not protocol_header_valid(request, message):
             return Response(
                 {"error_code": "unsupported_protocol", "message": "Unsupported protocol version."}, status=400
             )
-        message = request.data
         if isinstance(message, list):
             if not 1 <= len(message) <= 20:
                 return Response(self.error(None, -32600, "Use a batch of 1 to 20 messages."), status=400)
@@ -529,7 +527,7 @@ class UnifiedMCPEndpoint(UnifiedEndpointBase):
             if not isinstance(params.get("protocolVersion"), str):
                 return self.error(identity, -32602, "protocolVersion is required")
             result = {
-                "protocolVersion": PROTOCOL,
+                "protocolVersion": negotiate_protocol(params["protocolVersion"]),
                 "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": "plane-unified-mcp", "version": "2.0.0"},
                 "instructions": (
@@ -562,13 +560,9 @@ class UnifiedMCPEndpoint(UnifiedEndpointBase):
                     start = state["start"]
                     if type(start) is not int or not 0 <= start < len(tools):
                         raise ValueError()
-                result = {"tools": tools[start : start + 5]}
-                if start + 5 < len(tools):
-                    result["nextCursor"] = signing.dumps(
-                        {"connection": str(request.auth.pk), "scope": scope_digest, "start": start + 5},
-                        salt="unified-mcp.catalogue",
-                        compress=True,
-                    )
+                # Return the complete authorized catalogue by default. Old cursors
+                # remain valid so in-flight clients can finish their previous page.
+                result = {"tools": tools[start:]}
             except (signing.BadSignature, ValueError, TypeError, KeyError):
                 return self.error(identity, -32602, "Invalid catalogue cursor")
         elif method == "tools/call":

@@ -7,6 +7,7 @@
 import { expect, it, vi } from "vitest";
 vi.mock("@plane/constants", () => ({ API_BASE_URL: "https://plane.test" }));
 import { configurationFiles, nativeConfig, researchConfig } from "@/components/mcp/connection-config";
+import { unifiedConfiguration } from "@/components/mcp/unified-config";
 import type { TNativeConnection, TResearchIssued } from "@/services/mcp.service";
 it("exports stable distinct service names using each existing protocol and credential", () => {
   const native = nativeConfig({
@@ -63,4 +64,69 @@ it("validates the endpoint and supports the existing embedded endpoint fallback"
   for (const mcp_url of ["invalid", "javascript:alert(1)", "https://user:password@native.test/mcp"]) {
     expect(() => nativeConfig({ ...connection, mcp_url })).toThrow("连接配置格式无效");
   }
+});
+
+it("accepts and preserves the WorkBuddy-specific configuration", () => {
+  const secret = "pum_" + "c".repeat(43);
+  const issued = {
+    id: "11111111-2222-4333-8444-555555555555",
+    name: " 我的项目 ",
+    secret,
+    server_key: "我的项目",
+    mcp_url: "https://plane.test/api/mcp/",
+    workbuddy_server_key: "plane-unified-11111111222243338444555555555555",
+    workbuddy_json: JSON.stringify({
+      mcpServers: {
+        "plane-unified-11111111222243338444555555555555": {
+          url: "https://plane.test/api/mcp",
+          headers: { Authorization: `Bearer ${secret}` },
+        },
+      },
+    }),
+    sciencediscovery_json: JSON.stringify({
+      mcpServers: {
+        我的项目: {
+          type: "http",
+          url: "https://plane.test/api/mcp/",
+          headers: { Authorization: `Bearer ${secret}` },
+        },
+      },
+    }),
+  };
+  const files = unifiedConfiguration(issued as any);
+  expect(JSON.parse(files.workbuddy!).mcpServers["plane-unified-11111111222243338444555555555555"].url).toBe(
+    "https://plane.test/api/mcp"
+  );
+  expect(files.toml).toContain("https://plane.test/api/mcp/");
+});
+
+it("rejects mismatched WorkBuddy configuration without echoing credentials", () => {
+  const secret = "pum_" + "d".repeat(43);
+  const issued = {
+    id: "11111111-2222-4333-8444-555555555555",
+    name: "我的连接",
+    secret,
+    server_key: "我的连接",
+    mcp_url: "https://plane.test/api/mcp/",
+    workbuddy_server_key: "plane-unified-11111111222243338444555555555555",
+    workbuddy_json: JSON.stringify({
+      mcpServers: {
+        "plane-unified-11111111222243338444555555555555": {
+          type: "http",
+          url: "https://plane.test/api/mcp",
+          headers: { Authorization: `Bearer ${secret}` },
+        },
+      },
+    }),
+    sciencediscovery_json: JSON.stringify({
+      mcpServers: {
+        我的连接: {
+          type: "http",
+          url: "https://plane.test/api/mcp/",
+          headers: { Authorization: `Bearer ${secret}` },
+        },
+      },
+    }),
+  };
+  expect(() => unifiedConfiguration(issued as any)).toThrow("客户端配置格式无法识别，请重新查看或联系管理员。");
 });

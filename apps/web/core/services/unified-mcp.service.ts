@@ -35,6 +35,8 @@ export type UnifiedIssued = UnifiedConnection & {
   mcp_url: string;
   codex_toml: string;
   sciencediscovery_json: string;
+  workbuddy_server_key: string;
+  workbuddy_json: string;
   api_docs_url: string;
 };
 export type UnifiedPage<T> = { results: T[]; next_cursor: string | null; csrf_token: string };
