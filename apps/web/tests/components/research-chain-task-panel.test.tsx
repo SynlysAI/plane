@@ -464,6 +464,15 @@ it("shows task metadata, status text, and scoped candidates", async () => {
   expect(peek?.textContent).toContain("2026/10/9");
   expect(peek?.textContent).toContain("完成人");
 
+  const propertyRow = peek?.querySelector<HTMLElement>("[data-research-task-property-row]");
+  const propertyLabel = peek?.querySelector<HTMLElement>("[data-research-task-property-label]");
+  const propertyValue = peek?.querySelector<HTMLElement>("[data-research-task-property-value]");
+  expect(propertyRow?.className).toContain("@max-md:flex-col");
+  expect(propertyLabel?.className).toContain("@max-md:w-full");
+  expect(propertyLabel?.className).not.toContain("truncate");
+  expect(propertyValue?.className).toContain("@max-md:w-full");
+  expect(propertyValue?.className).toContain("min-w-0");
+
   const assignee = container.querySelector('button[aria-label="责任人"]') as HTMLButtonElement;
   await act(async () => assignee.click());
   const groups = [...container.querySelectorAll('[role="group"]')];

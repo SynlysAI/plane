@@ -162,11 +162,11 @@ export const IssuePeekOverviewHeader = observer(function IssuePeekOverviewHeader
 
   return (
     <div
-      className={`relative flex items-center justify-between p-4 ${
+      className={`relative flex flex-wrap items-center justify-between gap-3 p-4 ${
         currentMode?.key === "full-screen" ? "border-b border-subtle" : ""
       }`}
     >
-      <div className="flex items-center gap-4">
+      <div className="flex min-w-0 flex-wrap items-center gap-4">
         <Tooltip label={t("common.close_peek_view")} disabled={isMobile}>
           <button onClick={removeRoutePeekId}>
             <ArrowNarrowRightOutline className="h-4 w-4 text-tertiary hover:text-secondary" />
@@ -208,7 +208,7 @@ export const IssuePeekOverviewHeader = observer(function IssuePeekOverviewHeader
           </div>
         )}
       </div>
-      <div className="flex items-center gap-x-4">
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-4">
         <NameDescriptionUpdateStatus isSubmitting={isSubmitting} />
         <div className="flex items-center gap-2">
           {currentUser && !isArchived && (
