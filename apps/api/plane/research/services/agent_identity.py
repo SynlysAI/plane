@@ -340,6 +340,7 @@ def repair_synlora_account_links(*, dry_run: bool = False, transport: httpx.Base
         ResearchAgentBackendConnection.objects.filter(
             system="SYNLORA",
             deleted_at__isnull=True,
+            identity_binding__isnull=False,
             identity_binding__deleted_at__isnull=True,
         )
         .select_related("workspace", "user", "identity_binding")
