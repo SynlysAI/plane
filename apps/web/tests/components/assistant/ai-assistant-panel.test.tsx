@@ -357,6 +357,25 @@ describe("AIAssistantPanel", () => {
     expect(store.threadId).toBe("session-2");
   });
 
+  it("restores the user prompt while an active run resumes after refresh", async () => {
+    const activeSession = { ...session, session_id: "session-active", status: "STREAMING" };
+    mocks.getSession.mockResolvedValue(activeSession);
+    mocks.getEvents.mockResolvedValue({
+      results: [event(1, "USER_MESSAGE", { content: "刷新后的问题", remote_type: "user/message", remote_seq: 1 })],
+      count: 1,
+      latest_seq: 1,
+      session: activeSession,
+    });
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.setThreadId("lab", "session-active");
+    store.open();
+    renderPanel(store);
+
+    await waitForText("刷新后的问题");
+    expect(mocks.getEvents).toHaveBeenCalledWith("lab", "run-1", 0);
+  });
+
   it("navigates before restoring a history session from another target", async () => {
     globalThis.sessionStorage.setItem(
       "PLANE_AGENT_DOCK_LAUNCH_HISTORY_lab:anonymous",

@@ -528,7 +528,7 @@ export const useAssistantChat = (
           if (remoteType === "assistant/message") {
             normalized.payload = { ...normalized.payload, final: true };
           }
-          if (!isActive && normalized.event_type === "user.message") {
+          if (normalized.event_type === "user.message") {
             appendUserMessage(String(normalized.payload.content ?? normalized.payload.text ?? ""));
             continue;
           }
