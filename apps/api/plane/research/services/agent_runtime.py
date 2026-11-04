@@ -439,6 +439,15 @@ def project_synlora_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]
         if remote_type == "turn/start":
             shaped_type = "run.started"
             shaped_payload["remote_run_id"] = synlora_event_run_id(payload)
+        elif remote_type == "user/message":
+            shaped_type = "user.message"
+            shaped_payload.update(
+                {
+                    "role": "user",
+                    "content": str(payload.get("text") or "")[:4000],
+                    "kind": str(payload.get("kind") or ""),
+                }
+            )
         elif remote_type == "llm/delta":
             shaped_type = "assistant.delta"
             shaped_payload["content"] = str(payload.get("text") or "")
@@ -519,7 +528,7 @@ def project_synlora_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]
         elif remote_type == "turn/aborted":
             shaped_type = "run.cancelled"
         else:
-            # User text, transient deltas, and finalized reasoning are not exported.
+            # Transient deltas and finalized reasoning are not exported.
             continue
 
         remote_run_id = synlora_event_run_id(payload)
@@ -542,6 +551,7 @@ def project_synlora_stream_event(event: dict[str, Any], *, run_id: str, created_
     shaped_payload = {"remote_run_id": remote_run_id} if remote_type == "turn/start" else _safe_preview(payload)
     event_type = {
         "turn/start": "run.started",
+        "user/message": "user.message",
         "llm/delta": "output.delta",
         "reasoning/delta": "output.delta",
         "assistant/reasoning": "output.delta",
@@ -560,6 +570,12 @@ def project_synlora_stream_event(event: dict[str, Any], *, run_id: str, created_
 
     if remote_type == "llm/delta":
         shaped_payload = {"content": str(payload.get("text") or ""), "delta": True}
+    elif remote_type == "user/message":
+        shaped_payload = {
+            "role": "user",
+            "content": str(payload.get("text") or "")[:4000],
+            "kind": str(payload.get("kind") or ""),
+        }
     elif remote_type == "reasoning/delta":
         event_type = "run.progress"
         shaped_payload = {"phase": "thinking"}

@@ -323,6 +323,15 @@ describe("AIAssistantPanel", () => {
       },
     };
     mocks.listSessions.mockResolvedValue({ results: [historySession], count: 1 });
+    mocks.getEvents.mockResolvedValue({
+      results: [
+        event(1, "USER_MESSAGE", { content: "历史问题", remote_type: "user/message", remote_seq: 1 }),
+        event(2, "OUTPUT", { content: "你好，世界" }),
+      ],
+      count: 2,
+      latest_seq: 2,
+      session: historySession,
+    });
     const store = new AIAssistantStore();
     store.hydrate("lab");
     store.open();
@@ -343,6 +352,8 @@ describe("AIAssistantPanel", () => {
         .find((button) => button.textContent?.includes("新材料研究"))
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
+    await waitForText("历史问题");
+    await waitForText("你好，世界");
     expect(store.threadId).toBe("session-2");
   });
 

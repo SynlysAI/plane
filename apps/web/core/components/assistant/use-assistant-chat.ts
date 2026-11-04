@@ -212,6 +212,14 @@ export const useAssistantChat = (
     });
   }, []);
 
+  const appendUserMessage = useCallback((content: string) => {
+    if (!content) return;
+    setMessages((previous) => {
+      if (previous.some((item) => item.role === "user" && item.content === content)) return previous;
+      return [...previous, { id: `user-${Date.now()}`, role: "user", content }];
+    });
+  }, []);
+
   const applyEvent = useCallback(
     (event: TAgentDockEvent, runId: string, generation: number) => {
       if (generationRef.current !== generation || activeRunIdRef.current !== runId || event.run_id !== runId) return;
@@ -479,19 +487,21 @@ export const useAssistantChat = (
           event.payload.context_access === true ||
           toolName.split(".").some((part) => ["list", "read", "context", "knowledge"].includes(part));
         const replayType =
-          remoteType === "turn/end" || remoteType === "run.completed"
-            ? "run.completed"
-            : remoteType === "error" || remoteType === "run.failed"
-              ? "run.failed"
-              : remoteType === "turn/aborted" || remoteType === "run.cancelled"
-                ? "run.cancelled"
-                : remoteType === "assistant/message" || remoteType === "assistant.snapshot"
-                  ? "output.delta"
-                  : remoteType === "tool/result" && event.event_type === "HUMAN_DECISION"
-                    ? "approval.resolved"
-                    : isContextAccess && (event.event_type === "TOOL_CALL" || event.payload.context_access === true)
-                      ? "context.accessed"
-                      : event.event_type;
+          remoteType === "user/message" || event.event_type === "user.message"
+            ? "user.message"
+            : remoteType === "turn/end" || remoteType === "run.completed"
+              ? "run.completed"
+              : remoteType === "error" || remoteType === "run.failed"
+                ? "run.failed"
+                : remoteType === "turn/aborted" || remoteType === "run.cancelled"
+                  ? "run.cancelled"
+                  : remoteType === "assistant/message" || remoteType === "assistant.snapshot"
+                    ? "output.delta"
+                    : remoteType === "tool/result" && event.event_type === "HUMAN_DECISION"
+                      ? "approval.resolved"
+                      : isContextAccess && (event.event_type === "TOOL_CALL" || event.payload.context_access === true)
+                        ? "context.accessed"
+                        : event.event_type;
         const normalized = normalizeEvent(
           {
             ...event,
@@ -517,6 +527,10 @@ export const useAssistantChat = (
           }
           if (remoteType === "assistant/message") {
             normalized.payload = { ...normalized.payload, final: true };
+          }
+          if (!isActive && normalized.event_type === "user.message") {
+            appendUserMessage(String(normalized.payload.content ?? normalized.payload.text ?? ""));
+            continue;
           }
           if (!isActive && normalized.event_type === "output.delta") {
             appendAssistantMessage(String(normalized.payload.content ?? ""));
@@ -558,7 +572,7 @@ export const useAssistantChat = (
       assistantStore.clearThreadId(workspaceSlug);
       setStreamState({ phase: "failed", error: "session_unavailable", canRetry: true });
     }
-  }, [appendAssistantMessage, applyEvent, assistantStore, contextEnvelope, workspaceSlug]);
+  }, [appendAssistantMessage, appendUserMessage, applyEvent, assistantStore, contextEnvelope, workspaceSlug]);
 
   useEffect(() => {
     if (assistantStore.isOpen && enabled && assistantStore.threadId && contextEnvelope) void loadHistory();

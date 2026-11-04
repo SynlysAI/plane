@@ -357,13 +357,21 @@ def test_agent_dock_session_is_target_bound_and_projects_durable_events(env, mon
                     {
                         "sequence": 2,
                         "event": {
+                            "type": "user/message",
+                            "remote_run_id": "synlora-run-1",
+                            "text": "总结当前节点",
+                        },
+                    },
+                    {
+                        "sequence": 3,
+                        "event": {
                             "type": "tool.started",
                             "remote_run_id": "synlora-run-1",
                             "name": "knowledge.search",
                         },
                     },
                     {
-                        "sequence": 3,
+                        "sequence": 4,
                         "event": {
                             "type": "assistant.snapshot",
                             "remote_run_id": "synlora-run-1",
@@ -371,11 +379,11 @@ def test_agent_dock_session_is_target_bound_and_projects_durable_events(env, mon
                         },
                     },
                     {
-                        "sequence": 4,
+                        "sequence": 5,
                         "event": {"type": "run.completed", "remote_run_id": "synlora-run-1"},
                     },
                 ],
-                4,
+                5,
                 "completed",
             )
 
@@ -430,6 +438,8 @@ def test_agent_dock_session_is_target_bound_and_projects_durable_events(env, mon
         item["event_type"] == "DATA_CHANGE" and item["payload"].get("context_access") is True
         for item in body["results"]
     )
+    user_event = next(item for item in body["results"] if item["event_type"] == "USER_MESSAGE")
+    assert user_event["payload"]["content"] == "总结当前节点"
     assert body["session"]["status"] == "READY"
 
 

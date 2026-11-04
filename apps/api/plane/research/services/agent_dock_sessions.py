@@ -607,6 +607,7 @@ def persist_synlora_stream_event(session, envelope: dict) -> ResearchAgentRunEve
                 or 0
             ) + 1
             event_type = {
+                "user.message": "USER_MESSAGE",
                 "output.delta": "OUTPUT",
                 "tool.started": "TOOL_CALL",
                 "tool.completed": "TOOL_CALL",
@@ -676,6 +677,8 @@ def _project_synlora_replay_event(remote_type: str, payload: dict) -> tuple[str,
     event_type_map = {
         "run.started": "run.started",
         "turn/start": "run.started",
+        "user/message": "user.message",
+        "user.message": "user.message",
         "assistant.snapshot": "output.delta",
         "assistant.delta": "output.delta",
         "assistant.thinking.delta": "run.progress",
@@ -696,6 +699,12 @@ def _project_synlora_replay_event(remote_type: str, payload: dict) -> tuple[str,
     remote_run_id = str(payload.get("remote_run_id") or synlora_event_run_id(payload))
     if remote_type in {"run.started", "turn/start"}:
         shaped_payload = {"remote_run_id": remote_run_id} if remote_run_id else {}
+    elif remote_type in {"user/message", "user.message"}:
+        shaped_payload = {
+            "role": "user",
+            "content": str(payload.get("content") or payload.get("text") or "")[:4000],
+            "kind": str(payload.get("kind") or ""),
+        }
     else:
         shaped_payload = dict(payload)
     if remote_type in {"assistant.thinking.delta", "assistant.thinking.snapshot"}:
