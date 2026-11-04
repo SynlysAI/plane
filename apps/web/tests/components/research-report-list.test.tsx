@@ -48,6 +48,7 @@ vi.mock("@plane/i18n", () => ({
           "research.home_workbench.by_week": "按周",
           "research.home_workbench.by_month": "按月",
           "research.common.open": "打开",
+          "research.approvals.columns.actions": "操作",
           "research.common.copy_share": "复制",
           "research.common.copy_share_aria": "复制分享链接：{title}",
           "research.report_types.weekly": "周报",
@@ -77,12 +78,20 @@ vi.mock("@plane/propel/button", () => ({
   ),
 }));
 vi.mock("@plane/propel/table", () => ({
-  Table: ({ children }: { children: React.ReactNode }) => <table>{children}</table>,
+  Table: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <table className={className}>{children}</table>
+  ),
   TableBody: ({ children }: { children: React.ReactNode }) => <tbody>{children}</tbody>,
-  TableCell: ({ children }: { children: React.ReactNode }) => <td>{children}</td>,
-  TableHead: ({ children }: { children: React.ReactNode }) => <th>{children}</th>,
+  TableCell: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <td className={className}>{children}</td>
+  ),
+  TableHead: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <th className={className}>{children}</th>
+  ),
   TableHeader: ({ children }: { children: React.ReactNode }) => <thead>{children}</thead>,
-  TableRow: ({ children }: { children: React.ReactNode }) => <tr>{children}</tr>,
+  TableRow: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <tr className={className}>{children}</tr>
+  ),
 }));
 vi.mock("@plane/propel/toast", () => ({
   TOAST_TYPE: { SUCCESS: "SUCCESS", ERROR: "ERROR" },
@@ -456,6 +465,39 @@ it("报告列表仅保留打开入口且不提供复制分享", async () => {
     [...container.querySelectorAll("button")].some((item) => item.getAttribute("aria-label")?.includes("复制分享链接"))
   ).toBe(false);
   expect(mocks.copyTextToClipboard).not.toHaveBeenCalled();
+});
+
+it("周报操作列固定在表格滚动容器右缘", async () => {
+  mocks.getReports.mockReturnValue([
+    {
+      id: "report-weekly",
+      period_key: "2026-W40",
+      report_type: "WEEKLY",
+      status: "DRAFT",
+      visibility: "PRIVATE",
+      owner_detail: { display_name: "学生一" },
+    },
+  ]);
+
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/lab/research/reports"]}>
+        <ReportScopeProbe />
+      </MemoryRouter>
+    )
+  );
+  await act(async () => undefined);
+
+  const actionHeader = [...container.querySelectorAll("th")].find((item) => item.textContent === "操作");
+  const openLink = container.querySelector('a[href="/lab/research/reports/report-weekly"]');
+  const row = openLink?.closest("tr");
+  const actionCell = [...(row?.querySelectorAll("td") ?? [])].at(-1);
+  expect(actionHeader?.className).toContain("sticky");
+  expect(actionHeader?.className).toContain("right-0");
+  expect(row?.className).toContain("group/report-row");
+  expect(actionCell?.className).toContain("sticky");
+  expect(actionCell?.className).toContain("right-0");
+  expect(actionCell?.className).toContain("group-hover/report-row:bg-surface-2");
 });
 
 it("已删除报告使用独立范围且不提供详情链接", async () => {

@@ -274,6 +274,11 @@ it("uploads, presents, and deletes persisted task attachments", async () => {
       'a[href="/api/research/workspaces/lab/instruction-attachments/asset-attachment-1/download/"]'
     )
   ).not.toBeNull();
+  expect(
+    container.querySelector(
+      'a[href="/api/research/workspaces/lab/instruction-attachments/asset-attachment-1/download/"]'
+    )?.className
+  ).toContain("break-words");
 
   const remove = [...container.querySelectorAll("button")].find((button) => button.textContent === "移除");
   await act(async () => remove?.click());

@@ -452,7 +452,7 @@ export function ResearchChainTaskPeek(props: Props) {
                 className="w-full bg-transparent p-0 text-20 font-medium text-primary outline-none placeholder:text-placeholder"
               />
             ) : (
-              <h2 className="text-20 font-medium text-primary">{task?.title}</h2>
+              <h2 className="text-20 font-medium break-words text-primary">{task?.title}</h2>
             )}
           </div>
 
@@ -699,8 +699,13 @@ function TaskPeekHeader({
   const CurrentIcon = current.icon;
 
   return (
-    <div className={cn("flex items-center justify-between gap-3 p-4", mode === "full" && "border-b border-subtle")}>
-      <div className="flex items-center gap-4">
+    <div
+      className={cn(
+        "flex flex-wrap items-center justify-between gap-3 p-4",
+        mode === "full" && "border-b border-subtle"
+      )}
+    >
+      <div className="flex min-w-0 flex-wrap items-center gap-4">
         <button
           type="button"
           aria-label={t("research.chain_tasks.close")}
@@ -750,7 +755,7 @@ function TaskPeekHeader({
           )}
         </div>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
         {formBusy && <span className="text-11 text-tertiary">{t("research.chain_tasks.saving")}</span>}
         {shareLink}
         {lifecycle.length > 0 && (
@@ -819,12 +824,17 @@ function PropertyRow({
   children: ReactNode;
 }) {
   return (
-    <div className="flex items-start gap-2">
-      <div className="flex h-7 w-28 shrink-0 items-center gap-1.5 text-12 text-tertiary">
+    <div data-research-task-property-row className="flex min-w-0 items-start gap-2 @max-md:flex-col @max-md:gap-1">
+      <div
+        data-research-task-property-label
+        className="flex min-h-7 w-28 shrink-0 items-center gap-1.5 text-12 text-tertiary @max-md:w-full"
+      >
         <Icon className="size-4 shrink-0" />
-        <span className="truncate">{label}</span>
+        <span className="min-w-0 break-words">{label}</span>
       </div>
-      <div className="flex min-w-0 grow items-center">{children}</div>
+      <div data-research-task-property-value className="flex min-w-0 grow flex-wrap items-center @max-md:w-full">
+        {children}
+      </div>
     </div>
   );
 }
@@ -833,7 +843,7 @@ function PropertyRow({
  * 只读属性值。空值用破折号，避免把表单输入框铺满详情。
  */
 function ReadOnlyValue({ value }: { value: string }) {
-  return <span className="px-2 text-12 text-primary">{value || "—"}</span>;
+  return <span className="px-2 text-12 break-words text-primary">{value || "—"}</span>;
 }
 
 /**

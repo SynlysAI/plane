@@ -5,13 +5,14 @@
  */
 
 import { observer } from "mobx-react";
-import { type ReactNode, useEffect, useMemo } from "react";
+import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 // components
 import { AIAssistantPanel } from "./ai-assistant-panel";
 // helpers
 import { AssistantService, type TAssistantStatus } from "@/services/assistant";
+import { clearLaunchHistoryScopes } from "@/components/assistant/lib/launch-history";
 import { RightDockProvider, RightDockShell, useRightDockState } from "@/components/right-dock";
 import { useAgentDockDesktop } from "@/hooks/use-agent-dock-desktop";
 // store
@@ -48,6 +49,7 @@ const AIAssistantRootContent = observer(function AIAssistantRootContent({ childr
   const assistantStore = useAIAssistant();
   const { data: currentUser } = useUser();
   const { hasDetail } = useRightDockState();
+  const ownerScopeRef = useRef<{ workspaceSlug: string; ownerKey: string | null } | null>(null);
   const isDesktop = useAgentDockDesktop();
 
   const {
@@ -83,7 +85,23 @@ const AIAssistantRootContent = observer(function AIAssistantRootContent({ childr
   }, [workspaceSlug, assistantStore, currentUser?.id]);
 
   useEffect(() => {
-    if (hasDetail && isDesktop && assistantStore.dockMode === "floating") assistantStore.setDockMode("docked");
+    if (!workspaceSlug) return;
+    const ownerKey = currentUser?.id ?? null;
+    const previousScope = ownerScopeRef.current;
+    if (
+      previousScope !== null &&
+      previousScope.ownerKey !== ownerKey &&
+      (previousScope.workspaceSlug !== workspaceSlug || previousScope.ownerKey !== ownerKey)
+    ) {
+      clearLaunchHistoryScopes(previousScope, { workspaceSlug, ownerKey });
+    }
+    ownerScopeRef.current = { workspaceSlug, ownerKey };
+  }, [currentUser?.id, workspaceSlug]);
+
+  useEffect(() => {
+    if (!hasDetail || !isDesktop) return;
+    if (assistantStore.dockMode === "floating") assistantStore.setDockMode("docked");
+    if (assistantStore.expanded) assistantStore.toggleExpanded(false);
   }, [assistantStore, hasDetail, isDesktop]);
 
   useEffect(() => {
@@ -111,14 +129,16 @@ const AIAssistantRootContent = observer(function AIAssistantRootContent({ childr
   return (
     <RightDockShell
       agentOpen={assistantStore.isOpen}
-      agentDocked={assistantStore.dockMode === "docked" && isDesktop}
+      agentDocked={assistantStore.dockMode === "docked" && isDesktop && !assistantStore.expanded}
       agentWidth={assistantStore.width}
+      agentFloatingFull={assistantStore.expanded}
       launcherVisible={resolvedStatus !== null}
       onOpenAgent={() => assistantStore.open()}
       agentPanel={
         <AIAssistantPanel
           workspaceSlug={workspaceSlug}
           statusState={resolvedStatus?.state ?? "loading"}
+          portalUrl={resolvedStatus?.portal_url ?? null}
           onRetryStatus={() => void mutate()}
         />
       }

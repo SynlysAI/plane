@@ -134,7 +134,7 @@ function Fixture() {
             </aside>
           }
         >
-          <div data-main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div data-main className="@container flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <div className="flex flex-wrap items-center gap-2 border-b border-subtle bg-surface-1 px-4 py-3">
               {(["administrative", "research", "none"] as TDetailKind[]).map((kind) => (
                 <button
@@ -149,7 +149,6 @@ function Fixture() {
               ))}
               <button
                 type="button"
-                data-peek-trigger=""
                 data-open-agent
                 className="rounded border border-subtle px-2 py-1 text-12 text-secondary"
                 onClick={() => setAgentOpen(true)}
@@ -158,7 +157,7 @@ function Fixture() {
               </button>
             </div>
             <div className="flex min-h-0 flex-1">
-              <aside className="hidden w-60 shrink-0 border-r border-subtle bg-surface-1 p-4 text-13 text-secondary lg:block">
+              <aside className="flex w-60 shrink-0 border-r border-subtle bg-surface-1 p-4 text-13 text-secondary @max-md:hidden">
                 项目导航
               </aside>
               <div
@@ -208,7 +207,11 @@ function Fixture() {
           </div>
 
           {detailKind === "administrative" && (
-            <RightDockPortal id="issue:fixture" title="行政任务详情" onClose={() => setDetailKind("none")}>
+            <RightDockPortal
+              id="issue:fixture"
+              title="科研采购审批-丙二醇甲醚醋酸酯等试剂耗材-80367.3元"
+              onClose={() => setDetailKind("none")}
+            >
               <section data-administrative-detail className="vertical-scrollbar h-full overflow-y-auto p-4">
                 <h2 className="text-20 font-medium break-words">科研采购审批-丙二醇甲醚醋酸酯等试剂耗材-80367.3元</h2>
                 <SidebarPropertyListItem icon={UserOutline} label="创建人">

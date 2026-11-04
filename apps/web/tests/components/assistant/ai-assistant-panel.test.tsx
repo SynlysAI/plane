@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   cancelRun: vi.fn(),
 }));
 
+const routerPush = vi.fn();
+
 vi.mock("@/services/agent-dock", () => ({
   AgentDockService: class {
     resolveContext = mocks.resolveContext;
@@ -37,8 +39,11 @@ vi.mock("@/services/agent-dock", () => ({
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ workspaceSlug: "lab" }),
-  usePathname: () => "/lab/projects",
+  usePathname: () => currentPath,
+  useRouter: () => ({ push: routerPush }),
 }));
+
+let currentPath = "/lab/projects";
 
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
@@ -152,12 +157,16 @@ let root: Root;
 let originalMatchMedia: typeof window.matchMedia | undefined;
 
 beforeEach(() => {
+  currentPath = "/lab/projects";
+  routerPush.mockClear();
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   originalMatchMedia = window.matchMedia;
   window.localStorage.clear();
+  window.sessionStorage.clear();
   mocks.resolveContext.mockReset().mockResolvedValue(envelope);
+  mocks.listSessions.mockReset().mockResolvedValue({ results: [], count: 0 });
   mocks.getSession.mockReset().mockResolvedValue(session);
   mocks.getContext.mockReset().mockResolvedValue(envelope);
   mocks.createSession.mockReset().mockResolvedValue(session);
@@ -190,6 +199,7 @@ afterEach(async () => {
   container.remove();
   document.querySelectorAll("[id^='plane-portal'], .fixed.inset-0").forEach((node) => node.remove());
   vi.clearAllMocks();
+  window.sessionStorage.clear();
   if (originalMatchMedia === undefined) delete (window as { matchMedia?: typeof window.matchMedia }).matchMedia;
   else window.matchMedia = originalMatchMedia;
 });
@@ -283,11 +293,198 @@ describe("AIAssistantPanel", () => {
     renderPanel(store);
     await waitForText("新材料研究");
 
-    const portal = document.querySelector('[role="dialog"]') as HTMLElement;
-    const panel = document.querySelector('[role="document"]') as HTMLElement;
-    expect(portal.classList.contains("pointer-events-none")).toBe(true);
-    expect(portal.querySelector(".bg-black\\/50")).toBeNull();
-    expect(panel.classList.contains("pointer-events-auto")).toBe(true);
+    const panel = document.querySelector('[data-testid="assistant-panel"]') as HTMLElement;
+    expect(document.querySelector(".bg-black\\/50")).toBeNull();
+    expect(panel.classList.contains("bg-surface-1")).toBe(true);
+  });
+
+  it("shows and restores sessions from this browser launch batch", async () => {
+    globalThis.sessionStorage.setItem(
+      "PLANE_AGENT_DOCK_LAUNCH_HISTORY_lab:anonymous",
+      JSON.stringify({ launchId: "launch-1", sessionIds: ["session-2"] })
+    );
+    const historySession = {
+      ...session,
+      session_id: "session-2",
+      status: "READY",
+      updated_at: "2026-11-04T12:00:00Z",
+      target_title: "新材料研究",
+      target_metadata: {
+        workspace: { id: "ws", slug: "lab", name: "Lab" },
+        target: { type: "PROJECT", id: "project-1", title: "新材料研究", hierarchy: [] },
+        page: {
+          route: "/lab/projects/project-1",
+          page_kind: "project",
+          focus_id: "project-1",
+          focus_title: "新材料研究",
+          hash: "hash",
+          generated_at: "2026-11-04T11:00:00Z",
+        },
+      },
+    };
+    mocks.listSessions.mockResolvedValue({ results: [historySession], count: 1 });
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+
+    await act(async () => {
+      document
+        .querySelector('[aria-label="aiAssistant.launch_history"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await waitForText("aiAssistant.launch_history_hint");
+    expect(document.body.textContent).toContain("/lab/projects/project-1");
+    expect(mocks.listSessions).toHaveBeenCalledWith("lab", { sessionIds: ["session-2"] });
+
+    await act(async () => {
+      [...document.querySelectorAll("button")]
+        .find((button) => button.textContent?.includes("新材料研究"))
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(store.threadId).toBe("session-2");
+  });
+
+  it("navigates before restoring a history session from another target", async () => {
+    globalThis.sessionStorage.setItem(
+      "PLANE_AGENT_DOCK_LAUNCH_HISTORY_lab:anonymous",
+      JSON.stringify({ launchId: "launch-1", sessionIds: ["session-cross"] })
+    );
+    const crossSession = {
+      ...session,
+      session_id: "session-cross",
+      target_key: "workspace:ws",
+      target_metadata: {
+        workspace: { id: "ws", slug: "lab", name: "Lab" },
+        target: { type: "WORKSPACE", id: "ws", title: "Lab", hierarchy: [] },
+        page: {
+          route: "/lab/research/chains/chain-1",
+          page_kind: "research_chain",
+          focus_id: "chain-1",
+          focus_title: "研究链",
+          hash: "hash",
+          generated_at: "2026-11-04T11:00:00Z",
+        },
+      },
+    };
+    mocks.listSessions.mockResolvedValue({ results: [crossSession], count: 1 });
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+
+    await act(async () => {
+      document
+        .querySelector('[aria-label="aiAssistant.launch_history"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await waitForText("研究链");
+    await act(async () => {
+      [...document.querySelectorAll("button")]
+        .find((button) => button.textContent?.includes("研究链"))
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(routerPush).toHaveBeenCalledWith("/lab/research/chains/chain-1");
+    expect(store.threadId).not.toBe("session-cross");
+  });
+
+  it("shows tool execution directly in the conversation timeline", async () => {
+    mocks.streamEvents.mockImplementation((_workspace: string, _run: string, _cursor: number, signal: AbortSignal) =>
+      Promise.resolve(
+        sseResponse(
+          [
+            { type: "run.started", seq: 3 },
+            { type: "context.bound", seq: 4, payload: { context_version: 1 } },
+            { type: "run.progress", seq: 5, payload: { phase: "thinking" } },
+            {
+              type: "tool.started",
+              seq: 6,
+              payload: { name: "plane_get_context", tool_call_id: "call-1" },
+            },
+            {
+              type: "tool.completed",
+              seq: 7,
+              payload: {
+                name: "plane_get_context",
+                tool_call_id: "call-1",
+                status: "completed",
+                arguments: { target: "project-1" },
+                result: "context read",
+              },
+            },
+            { type: "output.delta", seq: 8, payload: { content: "你好，世界" } },
+            { type: "run.completed", seq: 9 },
+          ],
+          signal
+        )
+      )
+    );
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+
+    typeAndSend();
+    await waitForText("你好，世界");
+    expect(document.body.textContent).toContain("plane_get_context");
+    expect(document.body.textContent).toContain("runtime_context_bound");
+    expect(document.body.textContent).toContain("runtime_thinking");
+    expect(document.body.textContent).toContain("runtime_status_completed");
+    expect(document.body.textContent).toContain("project-1");
+    expect(document.body.textContent).toContain("context read");
+  });
+
+  it("only listens to page selection while the cloud dock is open", async () => {
+    const addSpy = vi.spyOn(document, "addEventListener");
+    const removeSpy = vi.spyOn(document, "removeEventListener");
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+    expect(addSpy).toHaveBeenCalledWith("selectionchange", expect.any(Function));
+
+    await act(async () => store.close());
+
+    expect(removeSpy).toHaveBeenCalledWith("selectionchange", expect.any(Function));
+    addSpy.mockRestore();
+    removeSpy.mockRestore();
+  });
+
+  it("defers page context changes while a run is active", async () => {
+    mocks.streamEvents.mockImplementation((_workspace: string, _run: string, _cursor: number, signal: AbortSignal) =>
+      Promise.resolve(
+        sseResponse(
+          [
+            { type: "run.started", seq: 3 },
+            { type: "output.delta", seq: 4, payload: { content: "处理中" } },
+          ],
+          signal
+        )
+      )
+    );
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+    const resolveCountBeforeRouteChange = mocks.resolveContext.mock.calls.length;
+
+    typeAndSend();
+    await waitForText("处理中");
+    currentPath = "/lab/research/chains/chain-1";
+    renderPanel(store);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+
+    expect(mocks.resolveContext.mock.calls.length).toBe(resolveCountBeforeRouteChange);
+    expect(document.body.textContent).toContain("处理中");
+    expect(document.body.textContent).toContain("介绍这个项目");
   });
 
   it("fills the available height in docked mode and closes while pinned", async () => {
@@ -312,8 +509,39 @@ describe("AIAssistantPanel", () => {
         .querySelector('[aria-label="aiAssistant.close"]')
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
-    expect(document.querySelector('[data-agent-dock-mode="docked"]')).toBeNull();
+    const closedPanel = document.querySelector('[data-testid="assistant-panel"]') as HTMLElement;
+    expect(closedPanel.classList.contains("hidden")).toBe(true);
     expect(store.isOpen).toBe(false);
+  });
+
+  it("supports keyboard resizing for the docked agent separator", async () => {
+    const mediaQuery = {
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    window.matchMedia = vi.fn(() => mediaQuery as unknown as MediaQueryList);
+
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    store.setDockMode("docked");
+    store.setWidth(420);
+    renderPanel(store);
+    await act(async () => undefined);
+
+    const separator = document.querySelector('[aria-label="aiAssistant.resize"]') as HTMLElement;
+    expect(separator.getAttribute("aria-valuemin")).toBe("320");
+    expect(separator.getAttribute("aria-valuemax")).toBe("560");
+    expect(separator.getAttribute("aria-valuenow")).toBe("420");
+    await act(async () => {
+      separator.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+    });
+    expect(store.width).toBe(436);
+    await act(async () => {
+      separator.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    });
+    expect(store.width).toBe(420);
   });
 
   it("cancels a busy run before starting a new conversation", async () => {
@@ -604,7 +832,7 @@ describe("AIAssistantPanel", () => {
     store.open();
     renderPanel(store);
     await waitForText("新材料研究");
-    const panel = document.querySelector('[role="document"]');
+    const panel = document.querySelector('[data-testid="assistant-panel"]');
     expect(panel?.classList.contains("bg-surface-1")).toBe(true);
     expect(panel?.classList.contains("bg-canvas")).toBe(false);
   });

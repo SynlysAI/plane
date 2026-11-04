@@ -142,7 +142,7 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: IssueTit
 
   if (disabled) {
     return (
-      <div className="text-20 font-medium whitespace-pre-line">
+      <div className="text-20 font-medium break-words whitespace-pre-line">
         {title || <span className="text-placeholder">{t("issue.title.label")}</span>}
       </div>
     );

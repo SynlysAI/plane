@@ -9,7 +9,13 @@ from unittest.mock import patch
 import pytest
 from rest_framework.test import APIClient
 
-from plane.db.models import ExternalSystemConnection, IntegrationSystem
+from plane.db.models import (
+    ExternalSystemConnection,
+    IntegrationSystem,
+    ResearchAgentBackendConnection,
+    ResearchAgentIdentityBinding,
+)
+from plane.license.utils.encryption import encrypt_data
 from plane.tests.research_fixtures import make_user, make_workspace
 
 pytestmark = pytest.mark.django_db
@@ -29,6 +35,29 @@ def _configure(workspace, credential="yxkey-shared", credential_mode=ExternalSys
         connection.set_credential(credential)
         connection.save(update_fields=["credential"])
     return connection
+
+
+def _personal_binding(workspace, user, token="yxkey_personal"):
+    """创建已验证的 Synlora 个人身份绑定。"""
+    binding = ResearchAgentIdentityBinding.objects.create(
+        user=user,
+        system="SYNLORA",
+        base_url="http://synlora.internal:5050",
+        deployment_id="synlora-test",
+        external_user_id="synlora-user",
+        external_username="synlora",
+        credential_hash="hash-" + token,
+        credential_encrypted=encrypt_data(token),
+    )
+    ResearchAgentBackendConnection.objects.create(
+        workspace=workspace,
+        user=user,
+        system="SYNLORA",
+        identity_binding=binding,
+        credential_encrypted=encrypt_data(token),
+        is_enabled=True,
+    )
+    return binding
 
 
 @pytest.fixture
@@ -69,9 +98,7 @@ def test_anonymous_requests_are_rejected(env):
 def test_non_members_are_rejected(env):
     _configure(env["workspace"])
     stranger = make_user(first_name="Stranger")
-    response = _client_for(stranger).get(
-        f"/api/workspaces/{env['workspace'].slug}/assistant/status/"
-    )
+    response = _client_for(stranger).get(f"/api/workspaces/{env['workspace'].slug}/assistant/status/")
     assert response.status_code == 403
 
 
@@ -82,7 +109,8 @@ def test_status_reports_disabled_without_a_connection(env):
     assert response.json() == {
         "enabled": False,
         "ready": False,
-        "credential_mode": "SHARED",
+        "credential_mode": "PERSONAL",
+        "portal_url": None,
         "state": "not_configured",
     }
 
@@ -100,6 +128,7 @@ def test_unconfigured_connection_maps_to_503_on_chat(env):
 
 def test_status_reports_ready_when_synlora_answers(env):
     _configure(env["workspace"])
+    _personal_binding(env["workspace"], env["owner"])
 
     class FakeResponse:
         status_code = 200
@@ -109,7 +138,6 @@ def test_status_reports_ready_when_synlora_answers(env):
 
     client = _client_for(env["owner"])
     with (
-        patch("plane.app.views.assistant.client.httpx.post", return_value=FakeDelegatedResponse()),
         patch("plane.app.views.assistant.client.httpx.get", return_value=FakeResponse()) as fake_get,
     ):
         response = client.get(f"/api/workspaces/{env['workspace'].slug}/assistant/status/")
@@ -117,8 +145,11 @@ def test_status_reports_ready_when_synlora_answers(env):
     assert response.json()["enabled"] is True
     assert response.json()["ready"] is True
     assert response.json()["state"] == "ready"
-    assert fake_get.call_args.args[0] == "http://synlora.internal:5050/api/health"
-    assert "headers" not in fake_get.call_args.kwargs
+    requested_urls = [call.args[0] for call in fake_get.call_args_list]
+    assert requested_urls[0] == "http://synlora.internal:5050/api/health"
+    assert requested_urls[1] == "http://synlora.internal:5050/api/v1/auth/me"
+    assert "headers" not in fake_get.call_args_list[0].kwargs
+    assert fake_get.call_args_list[1].kwargs["headers"] == {"Authorization": "Bearer yxkey_personal"}
 
 
 def test_status_reports_personal_token_missing(env):
@@ -132,19 +163,20 @@ def test_status_reports_personal_token_missing(env):
         "enabled": False,
         "ready": False,
         "credential_mode": "PERSONAL",
+        "portal_url": None,
         "state": "personal_credential_required",
     }
 
 
 def test_status_reports_service_unavailable_when_synlora_health_fails(env):
     _configure(env["workspace"])
+    _personal_binding(env["workspace"], env["owner"])
 
     class FakeResponse:
         status_code = 503
 
     client = _client_for(env["owner"])
     with (
-        patch("plane.app.views.assistant.client.httpx.post", return_value=FakeDelegatedResponse()),
         patch("plane.app.views.assistant.client.httpx.get", return_value=FakeResponse()),
     ):
         response = client.get(f"/api/workspaces/{env['workspace'].slug}/assistant/status/")
@@ -152,9 +184,33 @@ def test_status_reports_service_unavailable_when_synlora_health_fails(env):
     assert response.json() == {
         "enabled": True,
         "ready": False,
-        "credential_mode": "SHARED",
+        "credential_mode": "PERSONAL",
+        "portal_url": "http://synlora.internal:5050",
         "state": "service_unavailable",
     }
+
+
+def test_status_reports_invalid_personal_credential(env):
+    _configure(env["workspace"])
+    _personal_binding(env["workspace"], env["owner"])
+
+    class HealthResponse:
+        status_code = 200
+
+    class InvalidTokenResponse:
+        status_code = 401
+
+    def fake_get(url, **_kwargs):
+        return HealthResponse() if url.endswith("/api/health") else InvalidTokenResponse()
+
+    client = _client_for(env["owner"])
+    with (
+        patch("plane.app.views.assistant.client.httpx.get", side_effect=fake_get),
+    ):
+        response = client.get(f"/api/workspaces/{env['workspace'].slug}/assistant/status/")
+    assert response.status_code == 200
+    assert response.json()["ready"] is False
+    assert response.json()["state"] == "invalid_personal_credential"
 
 
 def test_chat_uses_v1_session_and_returns_run_identity(env):
@@ -257,9 +313,7 @@ def test_events_stream_synthesizes_an_error_frame_when_upstream_fails(env):
         patch("plane.app.views.assistant.client.httpx.post", return_value=FakeDelegatedResponse()),
         patch("plane.app.views.assistant.client.httpx.stream", side_effect=failing_stream),
     ):
-        response = client.get(
-            f"/api/workspaces/{env['workspace'].slug}/assistant/sessions/thread-10/events/"
-        )
+        response = client.get(f"/api/workspaces/{env['workspace'].slug}/assistant/sessions/thread-10/events/")
     assert response.status_code == 200
     body = b"".join(response.streaming_content)
     assert b"event: error" in body
@@ -286,9 +340,7 @@ def test_cancel_and_history_proxy_upstream(env):
         cancelled = client.post(
             f"/api/workspaces/{env['workspace'].slug}/assistant/runs/00000000-0000-0000-0000-000000000003/cancel/"
         )
-        history = client.get(
-            f"/api/workspaces/{env['workspace'].slug}/assistant/history/?thread_id=thread-9"
-        )
+        history = client.get(f"/api/workspaces/{env['workspace'].slug}/assistant/history/?thread_id=thread-9")
     assert cancelled.status_code == 200
     assert cancelled.json() == {"cancelled": True}
     assert history.status_code == 200

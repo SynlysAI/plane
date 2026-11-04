@@ -4,22 +4,24 @@
 
 """Synlora v1 Sessions adapter for the research agent workbench.
 
-Plane keeps the browser, Synlora credentials, and Research Context token behind
-its BFF. The adapter exchanges a delegated service credential for a short-lived
-Synlora user token, starts background runs, and projects Synlora's stable event
-stream into the event vocabulary already consumed by Plane's append-only store.
+Plane keeps the browser, Synlora credentials, and Research Context token behind its
+BFF. User sessions authenticate with a verified personal Synlora API key and never
+fall back to the platform service credential.
 """
 
 from __future__ import annotations
 
 import json
 import time
+from types import SimpleNamespace
 from typing import Any, Iterator
 
 import httpx
 
 from plane.app.views.assistant.client import resolve_assistant_config
 from plane.db.models import Workspace
+from plane.license.utils.encryption import decrypt_data
+from plane.research.services.agent_identity import ensure_synlora_identity_binding
 
 DELEGATED_SUBJECT_PREFIX = "plane-ws"
 
@@ -41,6 +43,7 @@ class SynloraRuntimeClient:
         self.config = config
         self.workspace = workspace
         self.user = user
+        self.auth_mode = str(getattr(config, "auth_mode", "DELEGATED_SERVICE"))
         self._delegated_token: str | None = None
         self._delegated_expires_at = 0.0
 
@@ -96,22 +99,23 @@ class SynloraRuntimeClient:
                 "synlora_delegation_failed", "Synlora delegated authentication failed.", 502
             ) from exc
         if response.status_code >= 400:
-            raise SynloraRuntimeError(
-                "synlora_delegation_failed", "Synlora delegated authentication failed.", 502
-            )
+            raise SynloraRuntimeError("synlora_delegation_failed", "Synlora delegated authentication failed.", 502)
         payload = response.json()
         token = str(payload.get("token") or "")
         expires_in = int(payload.get("expires_in") or 3600)
         if not token:
-            raise SynloraRuntimeError(
-                "synlora_delegation_failed", "Synlora returned no delegated token.", 502
-            )
+            raise SynloraRuntimeError("synlora_delegation_failed", "Synlora returned no delegated token.", 502)
         self._delegated_token = token
         self._delegated_expires_at = time.time() + expires_in
         return token
 
     def _headers(self, context_token: str | None = None) -> dict[str, str]:
-        headers = {"Authorization": f"Bearer {self._ensure_delegated_token()}"}
+        access_token = (
+            self.config.token
+            if self.auth_mode == "PERSONAL_API_KEY" and self.config.token
+            else self._ensure_delegated_token()
+        )
+        headers = {"Authorization": f"Bearer {access_token}"}
         if context_token:
             headers["X-Research-Context-Token"] = context_token
         return headers
@@ -134,6 +138,7 @@ class SynloraRuntimeClient:
         context_token: str | None = None,
         plane_mcp: dict[str, Any] | None = None,
         mcp_token: str | None = None,
+        plane_meta: dict[str, Any] | None = None,
     ) -> str:
         """Create a Synlora v1 session and bind optional Plane research context."""
         body: dict[str, Any] = {"title": title}
@@ -141,6 +146,8 @@ class SynloraRuntimeClient:
             body["research_context"] = research_context
         if plane_mcp is not None:
             body["plane_mcp"] = plane_mcp
+        if plane_meta is not None:
+            body["plane_meta"] = plane_meta
         try:
             response = httpx.post(
                 f"{self.config.base_url}/api/v1/sessions",
@@ -149,18 +156,12 @@ class SynloraRuntimeClient:
                 timeout=self.config.timeout_seconds,
             )
         except httpx.HTTPError as exc:
-            raise SynloraRuntimeError(
-                "synlora_session_failed", "Synlora session creation failed.", 502
-            ) from exc
+            raise SynloraRuntimeError("synlora_session_failed", "Synlora session creation failed.", 502) from exc
         if response.status_code >= 400:
-            raise SynloraRuntimeError(
-                "synlora_session_failed", "Synlora session creation failed.", 502
-            )
+            raise SynloraRuntimeError("synlora_session_failed", "Synlora session creation failed.", 502)
         session_id = response.json().get("_id") or response.json().get("id")
         if not session_id:
-            raise SynloraRuntimeError(
-                "synlora_session_failed", "Synlora returned no session id.", 502
-            )
+            raise SynloraRuntimeError("synlora_session_failed", "Synlora returned no session id.", 502)
         return str(session_id)
 
     def start_run(
@@ -174,6 +175,7 @@ class SynloraRuntimeClient:
         plane_mcp: dict[str, Any] | None = None,
         mcp_token: str | None = None,
         page_context: dict[str, Any] | None = None,
+        plane_meta: dict[str, Any] | None = None,
         external_run_id: str = "",
     ) -> str:
         """Start a background Synlora run and return its stable run id."""
@@ -186,22 +188,17 @@ class SynloraRuntimeClient:
                     **({"research_context": research_context} if research_context else {}),
                     **({"plane_mcp": plane_mcp} if plane_mcp else {}),
                     **({"page_context": page_context} if page_context else {}),
+                    **({"plane_meta": plane_meta} if plane_meta else {}),
                     **({"external_run_id": external_run_id} if external_run_id else {}),
                 },
                 timeout=self.config.timeout_seconds,
             )
         except httpx.HTTPError as exc:
-            raise SynloraRuntimeError(
-                "synlora_run_failed", "Synlora run submission failed.", 502
-            ) from exc
+            raise SynloraRuntimeError("synlora_run_failed", "Synlora run submission failed.", 502) from exc
         if response.status_code == 404:
-            raise SynloraRuntimeError(
-                "synlora_session_not_found", "Synlora session no longer exists.", 404
-            )
+            raise SynloraRuntimeError("synlora_session_not_found", "Synlora session no longer exists.", 404)
         if response.status_code >= 400:
-            raise SynloraRuntimeError(
-                "synlora_run_failed", "Synlora run submission failed.", 502
-            )
+            raise SynloraRuntimeError("synlora_run_failed", "Synlora run submission failed.", 502)
         run_id = response.json().get("run_id")
         if not run_id:
             raise SynloraRuntimeError("synlora_run_failed", "Synlora returned no run id.", 502)
@@ -217,13 +214,9 @@ class SynloraRuntimeClient:
                 timeout=self.config.timeout_seconds,
             )
         except httpx.HTTPError as exc:
-            raise SynloraRuntimeError(
-                "synlora_events_failed", "Synlora event replay failed.", 502
-            ) from exc
+            raise SynloraRuntimeError("synlora_events_failed", "Synlora event replay failed.", 502) from exc
         if response.status_code >= 400:
-            raise SynloraRuntimeError(
-                "synlora_events_failed", "Synlora event replay failed.", 502
-            )
+            raise SynloraRuntimeError("synlora_events_failed", "Synlora event replay failed.", 502)
         body = response.json()
         events = body if isinstance(body, list) else []
         projected = project_synlora_events(events)
@@ -254,9 +247,7 @@ class SynloraRuntimeClient:
                 timeout=self._timeout(stream=True),
             ) as response:
                 if response.status_code >= 400:
-                    raise SynloraRuntimeError(
-                        "synlora_stream_failed", "Synlora event stream failed.", 502
-                    )
+                    raise SynloraRuntimeError("synlora_stream_failed", "Synlora event stream failed.", 502)
                 event_name = ""
                 data_lines: list[str] = []
                 frame_id: str | None = None
@@ -302,9 +293,7 @@ class SynloraRuntimeClient:
                             payload.setdefault("seq", int(frame_id))
                         yield payload
         except httpx.HTTPError as exc:
-            raise SynloraRuntimeError(
-                "synlora_stream_failed", "Synlora event stream disconnected.", 502
-            ) from exc
+            raise SynloraRuntimeError("synlora_stream_failed", "Synlora event stream disconnected.", 502) from exc
 
     def cancel(self, *, run_id: str):
         """Explicitly cancel one run; closing a Plane panel never calls this."""
@@ -315,13 +304,9 @@ class SynloraRuntimeClient:
                 timeout=self.config.timeout_seconds,
             )
         except httpx.HTTPError as exc:
-            raise SynloraRuntimeError(
-                "synlora_cancel_failed", "Synlora could not cancel the active run.", 502
-            ) from exc
+            raise SynloraRuntimeError("synlora_cancel_failed", "Synlora could not cancel the active run.", 502) from exc
         if response.status_code >= 400:
-            raise SynloraRuntimeError(
-                "synlora_cancel_failed", "Synlora could not cancel the active run.", 502
-            )
+            raise SynloraRuntimeError("synlora_cancel_failed", "Synlora could not cancel the active run.", 502)
         try:
             body = response.json()
         except ValueError:
@@ -349,9 +334,20 @@ class SynloraRuntimeClient:
 def resolve_synlora_runtime(workspace: Workspace, user=None) -> SynloraRuntimeClient | None:
     """Return a configured v1 runtime client, or ``None`` when unavailable."""
     config = resolve_assistant_config(workspace, user=user)
-    has_delegated_identity = workspace is not None and user is not None
-    has_credentials = bool(config.service_token) if has_delegated_identity else bool(config.token)
-    if not config.base_url or not has_credentials or not config.is_enabled:
+    if workspace is not None and user is not None:
+        binding = ensure_synlora_identity_binding(workspace, user)
+        if binding is None:
+            return None
+        config = SimpleNamespace(
+            **{
+                **vars(config),
+                "base_url": binding.base_url or config.base_url,
+                "token": decrypt_data(binding.credential_encrypted),
+                "service_token": "",
+                "auth_mode": "PERSONAL_API_KEY",
+            }
+        )
+    if not config.base_url or not config.token or not config.is_enabled:
         return None
     return SynloraRuntimeClient(config, workspace=workspace, user=user)
 
@@ -422,10 +418,7 @@ def _safe_json_preview(value: str) -> str:
 def _is_context_access_tool(name: str) -> bool:
     """识别直接读取上下文资源的工具名称。"""
     normalized = name.lower().replace("/", ".")
-    return any(
-        part in {"list", "read", "context", "knowledge"}
-        for part in normalized.split(".")
-    )
+    return any(part in {"list", "read", "context", "knowledge"} for part in normalized.split("."))
 
 
 def synlora_event_run_id(payload: dict[str, Any]) -> str:
@@ -536,9 +529,7 @@ def project_synlora_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]
     return projected
 
 
-def project_synlora_stream_event(
-    event: dict[str, Any], *, run_id: str, created_at: str
-) -> dict[str, Any] | None:
+def project_synlora_stream_event(event: dict[str, Any], *, run_id: str, created_at: str) -> dict[str, Any] | None:
     """将一个 Synlora SSE 事件封装为 Plane Agent Dock 事件。
 
     ``source_seq`` 始终沿用 Synlora 会话事件序号，瞬态 delta 也使用该序号，

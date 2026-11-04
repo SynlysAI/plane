@@ -33,6 +33,7 @@ class AssistantConfig:
     stream_read_timeout_seconds: float
     credential_mode: str
     is_enabled: bool
+    auth_mode: str = "DELEGATED_SERVICE"
 
 
 def resolve_assistant_config(workspace, user=None) -> AssistantConfig:
@@ -43,21 +44,21 @@ def resolve_assistant_config(workspace, user=None) -> AssistantConfig:
     store (``ResearchAgentBackendConnection`` with ``system=SYNLORA``); its
     base URL overrides the platform address when provided.
     """
-    connection = (
-        ExternalSystemConnection.objects.filter(
-            workspace=workspace,
-            system=IntegrationSystem.SYNLORA,
-            deleted_at__isnull=True,
-        ).first()
-    )
+    connection = ExternalSystemConnection.objects.filter(
+        workspace=workspace,
+        system=IntegrationSystem.SYNLORA,
+        deleted_at__isnull=True,
+    ).first()
     base_url = (getattr(connection, "base_url", "") or settings.SYNLORA_BASE_URL or "").rstrip("/")
     token = ""
     credential_mode = ExternalSystemConnection.CredentialMode.SHARED
+    auth_mode = "API_KEY" if connection is not None else "DELEGATED_SERVICE"
     is_enabled = connection is not None and connection.is_enabled
     if connection is not None:
         credential_mode = connection.credential_mode
         if credential_mode == ExternalSystemConnection.CredentialMode.SHARED:
             token = connection.get_credential()
+            auth_mode = "API_KEY" if user is None else "DELEGATED_SERVICE"
         elif credential_mode == ExternalSystemConnection.CredentialMode.PERSONAL and user is not None:
             from plane.db.models import ResearchAgentBackendConnection
             from plane.license.utils.encryption import decrypt_data
@@ -70,13 +71,20 @@ def resolve_assistant_config(workspace, user=None) -> AssistantConfig:
                     deleted_at__isnull=True,
                     is_enabled=True,
                 )
+                .select_related("identity_binding")
                 .order_by("-created_at")
                 .first()
             )
             if personal is not None:
-                token = decrypt_data(personal.credential_encrypted)
+                if personal.identity_binding_id is not None and personal.identity_binding.deleted_at is None:
+                    token = decrypt_data(personal.identity_binding.credential_encrypted)
+                else:
+                    token = decrypt_data(personal.credential_encrypted)
                 if personal.base_url:
                     base_url = personal.base_url.rstrip("/")
+                auth_mode = "PERSONAL_API_KEY"
+        else:
+            auth_mode = "DELEGATED_SERVICE" if user is not None else "API_KEY"
     return AssistantConfig(
         base_url=base_url,
         token=token,
@@ -86,6 +94,7 @@ def resolve_assistant_config(workspace, user=None) -> AssistantConfig:
         stream_read_timeout_seconds=float(settings.SYNLORA_STREAM_READ_TIMEOUT_SECONDS),
         credential_mode=credential_mode,
         is_enabled=is_enabled,
+        auth_mode=auth_mode,
     )
 
 
@@ -123,7 +132,9 @@ class SynloraAssistantClient:
         return f"plane-ws-{self.workspace.id}-user-{self.user.id}"
 
     def _ensure_delegated_token(self) -> str:
-        """Exchange the server-side service credential for a short user token."""
+        """Return a direct API key or exchange a short-lived delegated token."""
+        if self.config.auth_mode in {"PERSONAL_API_KEY", "API_KEY"} and self.config.token:
+            return self.config.token
         if self._delegated_token and time.time() < self._delegated_expires_at - 300:
             return self._delegated_token
         if not self.config.service_token:
@@ -232,11 +243,7 @@ def assistant_history_messages(events: list[dict[str, Any]]) -> list[dict[str, A
         event_type = str(event.get("type") or "")
         payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
         if event_type == "user/message" and payload.get("text"):
-            messages.append(
-                {"id": str(event.get("seq")), "role": "user", "content": str(payload["text"])}
-            )
+            messages.append({"id": str(event.get("seq")), "role": "user", "content": str(payload["text"])})
         elif event_type == "assistant/message" and payload.get("content"):
-            messages.append(
-                {"id": str(event.get("seq")), "role": "assistant", "content": str(payload["content"])}
-            )
+            messages.append({"id": str(event.get("seq")), "role": "assistant", "content": str(payload["content"])})
     return messages

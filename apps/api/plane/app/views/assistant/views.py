@@ -10,9 +10,11 @@ replayed before the live session SSE stream is forwarded.
 """
 
 import json
+from dataclasses import replace
 from uuid import uuid4
 
 import httpx
+from django.conf import settings
 from django.http import StreamingHttpResponse
 from rest_framework import status
 from rest_framework.negotiation import BaseContentNegotiation
@@ -21,14 +23,18 @@ from rest_framework.response import Response
 from plane.app.permissions import ROLE, allow_permission
 from plane.app.views.base import BaseAPIView
 from plane.db.models import Workspace
+from plane.license.utils.encryption import decrypt_data
+from plane.research.services.agent_identity import (
+    ensure_synlora_identity_binding,
+)
 from plane.utils.exception_logger import log_exception
 
 from .client import (
     AssistantNotConfigured,
     SynloraAssistantClient,
+    assistant_history_messages,
     resolve_assistant_client,
     resolve_assistant_config,
-    assistant_history_messages,
 )
 
 UPSTREAM_UNAVAILABLE = "synlora_unavailable"
@@ -81,25 +87,42 @@ class AssistantStatusEndpoint(BaseAPIView):
         if workspace is None:
             return Response({"error": "Workspace not found"}, status=status.HTTP_404_NOT_FOUND)
         config = resolve_assistant_config(workspace, user=request.user)
-        enabled = bool(config.base_url and config.token and config.is_enabled)
+        binding = ensure_synlora_identity_binding(workspace, request.user)
+        if binding is not None:
+            config = replace(
+                config,
+                base_url=binding.base_url or config.base_url,
+                token=decrypt_data(binding.credential_encrypted),
+                service_token="",
+                auth_mode="PERSONAL_API_KEY",
+            )
+        enabled = bool(config.base_url and config.is_enabled and (binding is not None or config.token))
         ready = False
         state = "not_configured"
         if not config.is_enabled or not config.base_url:
             state = "not_configured"
-        elif not config.token:
-            state = (
-                "personal_credential_required"
-                if config.credential_mode == "PERSONAL"
-                else "not_configured"
-            )
-        elif not config.service_token:
-            state = "service_unavailable"
+        elif binding is None:
+            state = "personal_credential_required"
         elif enabled:
             try:
-                client = SynloraAssistantClient(config, workspace=workspace, user=request.user)
                 state = "service_unavailable"
-                if client.health().status_code == 200:
-                    client.verify_delegated_auth()
+                health_response = SynloraAssistantClient(
+                    config,
+                    workspace=workspace,
+                    user=request.user,
+                ).health()
+                token_response = SynloraAssistantClient(
+                    config,
+                    workspace=workspace,
+                    user=request.user,
+                ).verify_personal_token()
+                if token_response.status_code in (401, 403):
+                    state = "invalid_personal_credential"
+                elif token_response.status_code >= 400:
+                    state = "service_unavailable"
+                if health_response.status_code != 200:
+                    state = "service_unavailable"
+                elif token_response.status_code == 200:
                     ready = True
                     state = "ready"
             except Exception as e:
@@ -108,7 +131,12 @@ class AssistantStatusEndpoint(BaseAPIView):
             {
                 "enabled": enabled,
                 "ready": ready,
-                "credential_mode": config.credential_mode,
+                "credential_mode": "PERSONAL",
+                "portal_url": (
+                    getattr(settings, "SYNLORA_PORTAL_URL", "")
+                    or (binding.base_url if binding is not None else "")
+                    or None
+                ),
                 "state": state,
             }
         )
@@ -202,18 +230,17 @@ def _stream_session_events(client: SynloraAssistantClient, thread_id: str, last_
             events = history.json() if isinstance(history.json(), list) else []
             for event in events:
                 yield (
-                    f'event: {event.get("type", "message")}\n'.encode()
-                    + b'data: ' + json.dumps(event, ensure_ascii=False).encode() + b'\n'
-                    + f'id: {event.get("seq", 0)}\n\n'.encode()
+                    f"event: {event.get('type', 'message')}\n".encode()
+                    + b"data: "
+                    + json.dumps(event, ensure_ascii=False).encode()
+                    + b"\n"
+                    + f"id: {event.get('seq', 0)}\n\n".encode()
                 )
         for chunk in upstream.iter_bytes():
             yield chunk
     except Exception as e:
         log_exception(e)
-        yield (
-            b'event: error\n'
-            + b'data: {"error": "' + UPSTREAM_UNAVAILABLE.encode() + b'", "retryable": true}\n\n'
-        )
+        yield (b"event: error\n" + b'data: {"error": "' + UPSTREAM_UNAVAILABLE.encode() + b'", "retryable": true}\n\n')
     finally:
         if upstream is not None:
             upstream.__exit__(None, None, None)

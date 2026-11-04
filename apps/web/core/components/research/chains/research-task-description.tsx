@@ -348,12 +348,12 @@ export function ResearchTaskDescription({
                         href={getFileURL(entry.attachment.download_url)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block truncate text-primary hover:underline"
+                        className="block break-words text-primary hover:underline"
                       >
                         {entry.name}
                       </a>
                     ) : (
-                      <span className="block truncate text-primary" title={entry.name}>
+                      <span className="block break-words text-primary" title={entry.name}>
                         {entry.name}
                       </span>
                     )}

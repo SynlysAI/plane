@@ -4,6 +4,7 @@
 
 import logging
 import os
+from datetime import timedelta
 
 # Third party imports
 from celery import Celery
@@ -32,6 +33,10 @@ app.conf.task_routes = {
 }
 
 app.conf.beat_schedule = {
+    "reconcile-agent-dock-runs": {
+        "task": "plane.bgtasks.agent_dock_task.reconcile_agent_dock_runs",
+        "schedule": timedelta(seconds=15),
+    },
     "cleanup-attachment-previews": {
         "task": "plane.bgtasks.asset_preview_task.cleanup_asset_previews",
         "schedule": crontab(hour=4, minute=15),

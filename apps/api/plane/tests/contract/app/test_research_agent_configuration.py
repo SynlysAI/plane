@@ -2,6 +2,7 @@
 
 import pytest
 import httpx
+from types import SimpleNamespace
 from rest_framework.test import APIClient
 
 from plane.db.models import (
@@ -12,6 +13,7 @@ from plane.db.models import (
 )
 from plane.license.utils.encryption import decrypt_data, encrypt_data
 from plane.research.services.backend_connections import resolve_science_discovery_connection
+from plane.research.services import agent_identity
 from plane.tests.research_fixtures import (
     add_workspace_member,
     enable_research,
@@ -144,22 +146,54 @@ def test_seated_research_admin_without_org_can_configure_backend(settings):
     assert response.status_code == 201
 
 
-def test_cloud_and_local_configs_are_saved_and_removed_independently(sd_session):
+def _allow_synlora_key(monkeypatch):
+    """跳过外部 /auth/me，保留真实一对一绑定落库逻辑。"""
+    monkeypatch.setattr(
+        agent_identity,
+        "verify_synlora_api_key",
+        lambda **_kwargs: SimpleNamespace(user_id="synlora-user", username="synlora", deployment_id="synlora-test"),
+    )
+
+
+def test_synlora_key_must_be_verified_before_save(sd_session, settings, monkeypatch):
+    settings.SYNLORA_BASE_URL = "http://synlora.internal:5050"
+    client = client_for(sd_session.user)
+    url = f"/api/research/workspaces/{sd_session.workspace.slug}/agent/backend-connections/"
+
+    def invalid_key(**_kwargs):
+        raise agent_identity.SynloraIdentityError("invalid_synlora_key")
+
+    monkeypatch.setattr(agent_identity, "verify_synlora_api_key", invalid_key)
+    response = client.post(url, {"system": "SYNLORA", "token": "yxkey_invalid"}, format="json")
+
+    assert response.status_code == 400
+    assert not ResearchAgentBackendConnection.objects.filter(
+        workspace=sd_session.workspace,
+        user=sd_session.user,
+        system="SYNLORA",
+    ).exists()
+
+
+def test_cloud_and_local_configs_are_saved_and_removed_independently(sd_session, settings, monkeypatch):
+    settings.SYNLORA_BASE_URL = "http://synlora.internal:5050"
+    _allow_synlora_key(monkeypatch)
     client = client_for(sd_session.user)
     url = f"/api/research/workspaces/{sd_session.workspace.slug}/agent/backend-connections/"
     local = sd_session.backend_connection
     local_credential = local.credential_encrypted
-    response = client.post(url, {"system": "SYNLORA", "token": "cloud-personal-token"}, format="json")
+    response = client.post(url, {"system": "SYNLORA", "token": "yxkey_cloud"}, format="json")
     assert response.status_code == 201
     cloud = ResearchAgentBackendConnection.objects.get(
         workspace=sd_session.workspace, user=sd_session.user, system="SYNLORA"
     )
     assert cloud.is_enabled
-    assert decrypt_data(cloud.credential_encrypted) == "cloud-personal-token"
+    assert cloud.credential_encrypted == ""
+    assert decrypt_data(cloud.identity_binding.credential_encrypted) == "yxkey_cloud"
     response = client.post(url, {"system": "SYNLORA", "base_url": ""}, format="json")
     assert response.status_code == 201
     cloud.refresh_from_db()
-    assert decrypt_data(cloud.credential_encrypted) == "cloud-personal-token"
+    assert cloud.credential_encrypted == ""
+    assert decrypt_data(cloud.identity_binding.credential_encrypted) == "yxkey_cloud"
     assert client.get(url, {"system": "SYNLORA"}).json()["connection"]["id"] == str(cloud.id)
     assert client.get(url).json()["connection"]["id"] == str(local.id)
     assert client.delete(f"{url}?system=SYNLORA").status_code == 204
@@ -172,9 +206,10 @@ def test_cloud_probe_uses_cloud_token_and_does_not_probe_local(sd_session, setti
     from plane.research.services.sciencediscovery import ScienceDiscoveryClient
 
     settings.SYNLORA_BASE_URL = "http://synlora.internal:5050"
+    _allow_synlora_key(monkeypatch)
     client = client_for(sd_session.user)
     url = f"/api/research/workspaces/{sd_session.workspace.slug}/agent/backend-connections/"
-    client.post(url, {"system": "SYNLORA", "token": "cloud-probe-token"}, format="json")
+    client.post(url, {"system": "SYNLORA", "token": "yxkey_probe"}, format="json")
     local_probe = []
     monkeypatch.setattr(ScienceDiscoveryClient, "list_models", lambda self: local_probe.append(True))
     requests = []
@@ -192,7 +227,7 @@ def test_cloud_probe_uses_cloud_token_and_does_not_probe_local(sd_session, setti
         f"{settings.SYNLORA_BASE_URL}/api/v1/auth/me",
     ]
     assert "headers" not in requests[0]
-    assert requests[1]["headers"] == {"Authorization": "Bearer cloud-probe-token"}
+    assert requests[1]["headers"] == {"Authorization": "Bearer yxkey_probe"}
     assert local_probe == []
     cloud = ResearchAgentBackendConnection.objects.get(
         workspace=sd_session.workspace, user=sd_session.user, system="SYNLORA"

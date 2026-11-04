@@ -65,6 +65,21 @@ export type TAgentDockSession = {
   latest_seq: number;
   source_cursor?: number;
   run_start_cursor?: number;
+  updated_at?: string;
+  created_at?: string;
+  target_title?: string | null;
+  target_metadata?: {
+    workspace: { id: string; slug: string; name: string };
+    target: { type: string; id: string; title: string; hierarchy: Array<{ type: string; id: string; title: string }> };
+    page?: {
+      route: string;
+      page_kind: string;
+      focus_id: string;
+      focus_title: string;
+      hash: string;
+      generated_at: string;
+    };
+  };
 };
 
 export type TAgentDockEvent = {
@@ -107,8 +122,17 @@ export class AgentDockService extends APIService {
       });
   }
 
-  async listSessions(workspaceSlug: string) {
-    return this.get(`/api/workspaces/${workspaceSlug}/agent-dock/sessions/`)
+  async listSessions(
+    workspaceSlug: string,
+    options: { sessionIds?: string[]; target_type?: string; route?: string } = {}
+  ) {
+    return this.get(`/api/workspaces/${workspaceSlug}/agent-dock/sessions/`, {
+      params: {
+        ...(options.sessionIds?.length ? { session_ids: options.sessionIds.join(",") } : {}),
+        ...(options.target_type ? { target_type: options.target_type } : {}),
+        ...(options.route ? { route: options.route } : {}),
+      },
+    })
       .then((response) => response?.data as { results: TAgentDockSession[]; count: number })
       .catch((error) => {
         throw error?.response?.data ?? error;

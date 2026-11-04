@@ -51,7 +51,7 @@ it("renders detail and agent as sibling flow columns without a fixed overlay", a
           <main data-testid="main">workspace page</main>
           <RightDockPortal
             id="task-1"
-            title="科研任务"
+            title="科研采购审批-丙二醇甲醚醋酸酯等试剂耗材-80367.3元"
             focusRef={{ type: "RESEARCH_TASK", id: "task-1" }}
             onClose={() => undefined}
           >
@@ -74,6 +74,7 @@ it("renders detail and agent as sibling flow columns without a fixed overlay", a
   expect(document.querySelector("[data-right-dock-rail]")).toBeNull();
   expect(detail?.classList.contains("fixed")).toBe(false);
   expect(detail?.classList.contains("hidden")).toBe(false);
+  expect(detail?.classList.contains("flex")).toBe(true);
   expect(workspace.style.flexBasis).toBe("min(320px, 100%)");
   expect(workspace.style.flexGrow).toBe("1");
   expect(workspace.style.flexShrink).toBe("0");
@@ -85,6 +86,9 @@ it("renders detail and agent as sibling flow columns without a fixed overlay", a
   expect(Boolean(main?.compareDocumentPosition(detail) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   expect(document.querySelector('[data-testid="detail-body"]')?.textContent).toBe("任务详情");
   expect(document.querySelector('[data-testid="focus"]')?.textContent).toBe("RESEARCH_TASK:task-1");
+  const detailHeading = detail?.querySelector("p");
+  expect(detailHeading?.className).toContain("break-words");
+  expect(detailHeading?.className).not.toContain("truncate");
 });
 
 it("uses a wide detail column and keeps the agent rail available when the agent is not docked", async () => {
@@ -151,7 +155,9 @@ it("shows the floating launcher instead of a persistent rail when no dock is act
 
   expect(document.querySelector("[data-right-dock-agent-launcher]")).not.toBeNull();
   expect(document.querySelector("[data-right-dock-rail]")).toBeNull();
-  expect(document.querySelector('[data-testid="agent"]')).toBeNull();
+  const hiddenAgentSlot = document.querySelector("[data-right-dock-agent]") as HTMLElement;
+  expect(hiddenAgentSlot.classList.contains("hidden")).toBe(true);
+  expect(hiddenAgentSlot.getAttribute("aria-hidden")).toBe("true");
 });
 
 it("does not show a rail for a floating agent", async () => {
@@ -168,4 +174,58 @@ it("does not show a rail for a floating agent", async () => {
 
   expect(document.querySelector('[data-testid="agent"]')).not.toBeNull();
   expect(document.querySelector("[data-right-dock-rail]")).toBeNull();
+});
+
+it("does not show a rail behind an open floating agent when a detail is active", async () => {
+  const { RightDockPortal, RightDockProvider, RightDockShell } = await import("@/components/right-dock");
+  await act(async () =>
+    root.render(
+      <RightDockProvider>
+        <RightDockShell agentOpen agentDocked={false} onOpenAgent={() => undefined} agentPanel={<aside />}>
+          <main>page</main>
+          <RightDockPortal id="issue-floating" title="任务详情" onClose={() => undefined}>
+            <div>任务详情</div>
+          </RightDockPortal>
+        </RightDockShell>
+      </RightDockProvider>
+    )
+  );
+
+  expect(document.querySelector('[data-right-dock-detail="issue-floating"]')).not.toBeNull();
+  expect(document.querySelector("[data-right-dock-agent]")?.classList.contains("fixed")).toBe(true);
+  expect(document.querySelector("[data-right-dock-rail]")).toBeNull();
+});
+
+it("keeps the agent component mounted while switching between docked and floating modes", async () => {
+  const { RightDockProvider, RightDockShell } = await import("@/components/right-dock");
+  let mounts = 0;
+  function AgentProbe() {
+    React.useEffect(() => {
+      mounts += 1;
+    }, []);
+    return <aside data-testid="persistent-agent">streaming state</aside>;
+  }
+  const agentPanel = <AgentProbe />;
+
+  await act(async () =>
+    root.render(
+      <RightDockProvider>
+        <RightDockShell agentOpen agentDocked onOpenAgent={() => undefined} agentPanel={agentPanel}>
+          <main>workspace</main>
+        </RightDockShell>
+      </RightDockProvider>
+    )
+  );
+  await act(async () =>
+    root.render(
+      <RightDockProvider>
+        <RightDockShell agentOpen agentDocked={false} onOpenAgent={() => undefined} agentPanel={agentPanel}>
+          <main>workspace</main>
+        </RightDockShell>
+      </RightDockProvider>
+    )
+  );
+
+  expect(mounts).toBe(1);
+  expect(document.querySelector('[data-testid="persistent-agent"]')?.textContent).toBe("streaming state");
 });

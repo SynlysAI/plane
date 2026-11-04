@@ -146,6 +146,7 @@ from .research import (
     ResearchAgentRunEvent,
     ResearchAgentSession,
     ResearchAgentBackendConnection,
+    ResearchAgentIdentityBinding,
     CodeArtifact,
     ProjectCodeRepository,
     LiteratureEntry,

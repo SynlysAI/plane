@@ -54,9 +54,7 @@ def env(db, settings, monkeypatch):
         network=0,
         created_by=owner,
     )
-    profile = ResearchProjectProfile.objects.create(
-        project=project, workspace=workspace, owner=owner, created_by=owner
-    )
+    profile = ResearchProjectProfile.objects.create(project=project, workspace=workspace, owner=owner, created_by=owner)
     chain = ResearchChain.objects.create(
         project=project,
         workspace=workspace,
@@ -340,6 +338,9 @@ def test_agent_dock_session_is_target_bound_and_projects_durable_events(env, mon
             assert kwargs["mcp_token"]
             assert kwargs["external_run_id"]
             assert kwargs["page_context"]["focus"]["type"] == "RESEARCH_NODE"
+            assert kwargs["plane_meta"]["workspace"]["slug"] == env["workspace"].slug
+            assert kwargs["plane_meta"]["target"]["type"] == "WORKSPACE"
+            assert kwargs["plane_meta"]["page"]["route"]
             assert thread_id == "synlora-session-1"
             assert content == "总结当前节点"
             assert research_context["schema_version"] == "agent-context.v3"
@@ -352,29 +353,29 @@ def test_agent_dock_session_is_target_bound_and_projects_durable_events(env, mon
             self.pulled = True
             return (
                 [
-                        {"sequence": 1, "event": {"type": "run.started", "remote_run_id": "synlora-run-1"}},
-                        {
-                            "sequence": 2,
-                            "event": {
-                                "type": "tool.started",
-                                "remote_run_id": "synlora-run-1",
-                                "name": "knowledge.search",
-                            },
+                    {"sequence": 1, "event": {"type": "run.started", "remote_run_id": "synlora-run-1"}},
+                    {
+                        "sequence": 2,
+                        "event": {
+                            "type": "tool.started",
+                            "remote_run_id": "synlora-run-1",
+                            "name": "knowledge.search",
                         },
-                        {
-                            "sequence": 3,
-                            "event": {
-                                "type": "assistant.snapshot",
-                                "remote_run_id": "synlora-run-1",
-                                "content": "节点摘要",
-                            },
+                    },
+                    {
+                        "sequence": 3,
+                        "event": {
+                            "type": "assistant.snapshot",
+                            "remote_run_id": "synlora-run-1",
+                            "content": "节点摘要",
                         },
-                        {
-                            "sequence": 4,
-                            "event": {"type": "run.completed", "remote_run_id": "synlora-run-1"},
-                        },
+                    },
+                    {
+                        "sequence": 4,
+                        "event": {"type": "run.completed", "remote_run_id": "synlora-run-1"},
+                    },
                 ],
-                    4,
+                4,
                 "completed",
             )
 
@@ -393,6 +394,18 @@ def test_agent_dock_session_is_target_bound_and_projects_durable_events(env, mon
     assert session["target_type"] == "WORKSPACE"
     assert session["target_key"] == f"workspace:{env['workspace'].id}"
     assert "token" not in str(session).lower()
+
+    history = env["client"].get(
+        f"/api/workspaces/{env['workspace'].slug}/agent-dock/sessions/",
+        {"session_ids": session["session_id"]},
+    )
+    assert history.status_code == 200, history.text
+    assert history.json()["count"] == 1
+    history_session = history.json()["results"][0]
+    assert history_session["session_id"] == session["session_id"]
+    assert history_session["target_metadata"]["workspace"]["slug"] == env["workspace"].slug
+    assert history_session["target_metadata"]["page"]["route"]
+    assert "token" not in str(history.json()).lower()
 
     message = env["client"].post(
         f"/api/workspaces/{env['workspace'].slug}/agent-dock/sessions/{session['session_id']}/messages/",
@@ -452,7 +465,7 @@ def test_agent_dock_sse_replays_and_deduplicates_synlora_events(env, monkeypatch
                     "tool_call_id": "call-risk",
                     "tool": "file.write",
                     "query": "请求审批",
-                    "args_preview": "{\"file_id\":\"file-2\"}",
+                    "args_preview": '{"file_id":"file-2"}',
                 },
             },
             {
@@ -546,16 +559,12 @@ def test_agent_dock_sse_replays_and_deduplicates_synlora_events(env, monkeypatch
     assert "event: approval.resolved\nid: 7\n" in approval_resume_wire
 
     session_record = ResearchAgentSession.objects.get(session_id=session["session_id"])
-    stored = ResearchAgentRunEvent.objects.filter(
-        session=session_record, payload__source_system="SYNLORA"
-    )
+    stored = ResearchAgentRunEvent.objects.filter(session=session_record, payload__source_system="SYNLORA")
     assert {item.payload["remote_seq"] for item in stored} == {1, 3, 4, 5, 6, 7, 8, 9}
     assert stored.get(payload__remote_seq=6).payload["tool"] == "file.write"
     assert "file-2" in str(stored.get(payload__remote_seq=6).payload["args_preview"])
     assert stored.filter(payload__remote_seq=4).count() == 1
-    assert ResearchChainEvent.objects.filter(
-        node=env["node"], source_system="SYNLORA"
-    ).count() == 8
+    assert ResearchChainEvent.objects.filter(node=env["node"], source_system="SYNLORA").count() == 8
     refreshed = session_record
     refreshed.refresh_from_db()
     assert refreshed.status == "READY"
@@ -573,10 +582,7 @@ def test_agent_dock_sse_replays_and_deduplicates_synlora_events(env, monkeypatch
         f"/api/workspaces/{env['workspace'].slug}/agent-dock/runs/{next_started.json()['run_id']}/events/"
     )
     assert current_events.status_code == 200, current_events.text
-    assert all(
-        item["run_id"] == next_started.json()["run_id"]
-        for item in current_events.json()["results"]
-    )
+    assert all(item["run_id"] == next_started.json()["run_id"] for item in current_events.json()["results"])
     historical_events = env["client"].get(
         f"/api/workspaces/{env['workspace'].slug}/agent-dock/runs/{started.json()['run_id']}/events/"
     )
@@ -670,9 +676,7 @@ def test_agent_dock_run_boundary_filters_old_events_and_prompt(env, monkeypatch)
     session = ResearchAgentSession.objects.get(session_id=created.json()["session_id"])
     session.assembly = {**session.assembly, "source_cursor": 10, "run_start_cursor": 10}
     session.save(update_fields=["assembly", "updated_at"])
-    agent_dock_sessions.sync_agent_dock_events(
-        workspace=env["workspace"], session=session, runtime=runtime
-    )
+    agent_dock_sessions.sync_agent_dock_events(workspace=env["workspace"], session=session, runtime=runtime)
 
     stored = ResearchAgentRunEvent.objects.filter(
         session=session, run_id=started.json()["run_id"], payload__source_system="SYNLORA"
@@ -862,9 +866,7 @@ def test_agent_dock_rotates_admin_only_connection_when_research_mcp_enabled(env,
         scope={
             "version": 1,
             "include_future_objects": True,
-            "workspaces": [
-                {"workspace_id": str(env["workspace"].id), "domains": {"administrative": "read_write"}}
-            ],
+            "workspaces": [{"workspace_id": str(env["workspace"].id), "domains": {"administrative": "read_write"}}],
         },
         expires_at=timezone.now() + timedelta(hours=1),
     )
@@ -927,9 +929,7 @@ def test_agent_dock_upgrades_read_connection_when_workspace_enables_writes(env, 
         scope={
             "version": 1,
             "include_future_objects": True,
-            "workspaces": [
-                {"workspace_id": str(env["workspace"].id), "domains": {"research": "read"}}
-            ],
+            "workspaces": [{"workspace_id": str(env["workspace"].id), "domains": {"research": "read"}}],
         },
         expires_at=timezone.now() + timedelta(hours=1),
     )
@@ -941,9 +941,7 @@ def test_agent_dock_upgrades_read_connection_when_workspace_enables_writes(env, 
         scope={
             "version": 1,
             "include_future_objects": True,
-            "workspaces": [
-                {"workspace_id": str(env["workspace"].id), "domains": {"research": "read_write"}}
-            ],
+            "workspaces": [{"workspace_id": str(env["workspace"].id), "domains": {"research": "read_write"}}],
         },
         expires_at=timezone.now() + timedelta(hours=1),
     )

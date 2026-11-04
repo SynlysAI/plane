@@ -93,9 +93,7 @@ class AgentDockContextDetailEndpoint(BaseAPIView):
         except (TypeError, ValueError):
             return Response({"error": "agent_context_invalid"}, status=status.HTTP_400_BAD_REQUEST)
         grant = (
-            ResearchContextGrant.objects.select_related(
-                "workspace", "user", "project", "research_chain", "chain_node"
-            )
+            ResearchContextGrant.objects.select_related("workspace", "user", "project", "research_chain", "chain_node")
             .filter(context_id=context_uuid, workspace=workspace, user=request.user, deleted_at__isnull=True)
             .first()
         )
@@ -203,19 +201,29 @@ class AgentDockSessionCollectionEndpoint(BaseAPIView):
         if workspace is None:
             return Response({"error": "Workspace not found"}, status=status.HTTP_404_NOT_FOUND)
         target_type = str(request.query_params.get("target_type") or "")
-        sessions = (
-            ResearchAgentSession.objects.select_related(
-                "workspace", "project", "research_chain", "chain_node", "context_grant"
-            )
-            .filter(workspace=workspace, user=request.user, deleted_at__isnull=True)
-        )
+        raw_session_ids = str(request.query_params.get("session_ids") or "")
+        route = str(request.query_params.get("route") or "").strip()
+        sessions = ResearchAgentSession.objects.select_related(
+            "workspace", "project", "research_chain", "chain_node", "context_grant"
+        ).filter(workspace=workspace, user=request.user, deleted_at__isnull=True)
         if target_type:
             sessions = sessions.filter(target_type=target_type)
+        if route:
+            sessions = sessions.filter(context_grant__context_manifest__page_context__route__icontains=route)
+        if raw_session_ids:
+            session_ids = []
+            for value in raw_session_ids.split(",")[:100]:
+                try:
+                    session_ids.append(UUID(value.strip()))
+                except (TypeError, ValueError):
+                    continue
+            if session_ids:
+                sessions = sessions.filter(session_id__in=session_ids)
+            else:
+                return Response({"results": [], "count": 0})
         sessions = sessions.order_by("-updated_at")[:100]
         results = [serialize_agent_dock_session(session) for session in sessions]
         return Response({"results": results, "count": len(results)})
-
-
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
     def post(self, request, slug):
@@ -478,10 +486,7 @@ class AgentDockRunEventStreamEndpoint(BaseAPIView):
                             yield f"event: heartbeat\nid: {raw_seq}\ndata: {json.dumps(cursor_event)}\n\n"
                             continue
                         run_started = True
-                    elif (
-                        not run_started
-                        or (remote_run_id and remote_run_id != str(session.synlora_run_id or ""))
-                    ):
+                    elif not run_started or (remote_run_id and remote_run_id != str(session.synlora_run_id or "")):
                         cursor_event = {
                             "schema_version": "agent-dock-event.v1",
                             "run_id": str(session.run_id),
@@ -536,9 +541,7 @@ class AgentDockRunEventStreamEndpoint(BaseAPIView):
                     persist_synlora_stream_event(session, envelope)
                     event_name = str(envelope["event_type"])
                     yield (
-                        f"event: {event_name}\n"
-                        f"id: {source_seq}\n"
-                        f"data: {json.dumps(envelope, ensure_ascii=False)}\n\n"
+                        f"event: {event_name}\nid: {source_seq}\ndata: {json.dumps(envelope, ensure_ascii=False)}\n\n"
                     )
                     if event_name in {"run.completed", "run.failed", "run.cancelled"}:
                         break
