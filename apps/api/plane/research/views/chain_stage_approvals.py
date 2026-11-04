@@ -19,6 +19,8 @@ from plane.research.serializers.chain_stage import (
 from plane.research.services.chain_stage_approvals import (
     CHAIN_STAGE_CODES,
     ChainStageRuleError,
+    MAX_STAGE_MATERIAL_TEXT_LENGTH,
+    MAX_STAGE_MATERIAL_TITLE_LENGTH,
     add_stage_material,
     create_stage_precheck,
     initialize_chain_stages,
@@ -97,6 +99,7 @@ class ResearchChainStageApprovalListEndpoint(ResearchAPIView):
             chain.stage_approvals.filter(deleted_at__isnull=True)
             .prefetch_related(
                 "material_requirements__items__upload__workspace",
+                "material_requirements__items__upload__node",
                 "review_actions__reviewer",
                 "prechecks",
             )
@@ -172,7 +175,7 @@ class ResearchChainStageApprovalBaseEndpoint(ResearchAPIView):
 
 
 class ResearchChainStageMaterialEndpoint(ResearchChainStageApprovalBaseEndpoint):
-    """Link one research upload to a stage material requirement."""
+    """Link one research upload or bounded text record to a stage requirement."""
 
     def post(self, request, slug, chain_id, stage_code):
         workspace, chain, error = self._chain(request, slug, chain_id)
@@ -195,31 +198,63 @@ class ResearchChainStageMaterialEndpoint(ResearchChainStageApprovalBaseEndpoint)
                 "requirement_code is required.",
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
-        if not request.data.get("upload_id"):
+        upload_id_value = str(request.data.get("upload_id") or "").strip()
+        content = str(request.data.get("content") or "").strip()
+        title = str(request.data.get("title") or "").strip()
+        if upload_id_value and content:
             return research_error(
                 ResearchErrorCode.CHAIN_INVALID,
-                "upload_id is required.",
+                "upload_id and content cannot be submitted together.",
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
-        upload_id, uuid_error = _uuid_value(request.data["upload_id"], "upload_id")
-        if uuid_error:
-            return uuid_error
-        upload = (
-            ResearchChainUpload.objects.select_related("workspace", "node").filter(pk=upload_id, chain=chain).first()
-        )
-        if upload is None:
+        if not upload_id_value and not content:
             return research_error(
                 ResearchErrorCode.CHAIN_INVALID,
-                "upload_id must reference an upload in this chain.",
+                "Either upload_id or content is required.",
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
+        if len(content) > MAX_STAGE_MATERIAL_TEXT_LENGTH:
+            return research_error(
+                ResearchErrorCode.CHAIN_INVALID,
+                f"Stage material text cannot exceed {MAX_STAGE_MATERIAL_TEXT_LENGTH} characters.",
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        if len(title) > MAX_STAGE_MATERIAL_TITLE_LENGTH:
+            return research_error(
+                ResearchErrorCode.CHAIN_INVALID,
+                f"Stage material title cannot exceed {MAX_STAGE_MATERIAL_TITLE_LENGTH} characters.",
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        upload = None
+        if upload_id_value:
+            upload_id, uuid_error = _uuid_value(upload_id_value, "upload_id")
+            if uuid_error:
+                return uuid_error
+            upload = (
+                ResearchChainUpload.objects.select_related("workspace", "node").filter(pk=upload_id, chain=chain).first()
+            )
+            if upload is None:
+                return research_error(
+                    ResearchErrorCode.CHAIN_INVALID,
+                    "upload_id must reference an upload in this chain.",
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                )
         existing = ResearchChainStageMaterialItem.objects.filter(request_id=request_id).first()
         if existing is not None:
-            same_payload = (
-                existing.stage_id == stage.id
-                and existing.requirement.code == requirement_code
-                and existing.upload_id == upload.id
-            )
+            if upload is not None:
+                same_payload = (
+                    existing.stage_id == stage.id
+                    and existing.requirement.code == requirement_code
+                    and existing.upload_id == upload.id
+                )
+            else:
+                same_payload = (
+                    existing.stage_id == stage.id
+                    and existing.requirement.code == requirement_code
+                    and existing.upload_id is None
+                    and existing.description == content
+                    and (not title or existing.title == title)
+                )
             if not same_payload:
                 return conflict_response()
             return Response(
@@ -235,6 +270,8 @@ class ResearchChainStageMaterialEndpoint(ResearchChainStageApprovalBaseEndpoint)
                 request.user,
                 requirement_code=requirement_code,
                 upload=upload,
+                title=title,
+                content=content,
                 request_id=request_id,
             )
         except ChainStageRuleError as rule_error:

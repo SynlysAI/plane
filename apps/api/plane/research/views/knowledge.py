@@ -17,6 +17,7 @@ from plane.db.models import (
     ResearchChainEvent,
     ResearchChainUpload,
     ResearchExternalReference,
+    ResearchChainStageMaterialItem,
 )
 from plane.research.services.group_knowledge import (
     SCOPE_GROUP,
@@ -48,8 +49,23 @@ UPLOAD_HASH_CHUNK_SIZE = 1024 * 1024
 UPLOAD_STATUS_MAP = {
     "pending": ResearchChainUpload.Status.PROCESSING,
     "processing": ResearchChainUpload.Status.PROCESSING,
+    "finalizing": ResearchChainUpload.Status.SUCCESS,
     "success": ResearchChainUpload.Status.SUCCESS,
     "failed": ResearchChainUpload.Status.FAILED,
+    "deleted": ResearchChainUpload.Status.FAILED,
+}
+UPLOAD_STATUS_ERROR_CODES = {
+    "failed": "parse_failed",
+    "deleted": "upstream_deleted",
+}
+UPLOAD_LIST_SCAN_LIMIT = 200
+UPLOAD_LIST_LIMIT = 50
+UPLOAD_ROW_RANK = {
+    ResearchChainUpload.Status.SUCCESS: 4,
+    ResearchChainUpload.Status.PROCESSING: 3,
+    ResearchChainUpload.Status.PENDING: 3,
+    ResearchChainUpload.Status.DEGRADED: 1,
+    ResearchChainUpload.Status.FAILED: 1,
 }
 
 
@@ -194,6 +210,25 @@ def _event_id(request_id, kind):
     return payload_hash({"request_id": request_id, "kind": kind})
 
 
+def _deduplicate_chain_uploads(uploads):
+    """Keep one stable projection per file across legacy node-scoped rows.
+
+    Args:
+        uploads: Recently created upload projections in descending order.
+
+    Returns:
+        At most the public list limit, ordered by creation time and preferring
+        a reference-ready row over failed/degraded retries.
+    """
+    best_by_file = {}
+    for upload in uploads:
+        key = upload.file_hash or f"upload:{upload.id}"
+        current = best_by_file.get(key)
+        if current is None or UPLOAD_ROW_RANK.get(upload.status, 0) > UPLOAD_ROW_RANK.get(current.status, 0):
+            best_by_file[key] = upload
+    return sorted(best_by_file.values(), key=lambda item: item.created_at, reverse=True)[:UPLOAD_LIST_LIMIT]
+
+
 def _append_event(*, chain, node, request, event_type, summary, refs, metadata, request_id, digest):
     """Append one idempotent Chain fact for a knowledge operation."""
     event_id = _event_id(request_id, event_type)
@@ -250,12 +285,13 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
         chain = _visible_chain(workspace, request.user, chain_id)
         if chain is None:
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research chain not found.")
-        uploads = chain.uploads.select_related("workspace").order_by("-created_at")
+        uploads = chain.uploads.select_related("workspace", "node").order_by("-created_at")
         node_id = str(request.query_params.get("node_id") or "").strip()
         if node_id:
             uploads = uploads.filter(node_id=node_id)
+        uploads = _deduplicate_chain_uploads(uploads[:UPLOAD_LIST_SCAN_LIMIT])
         return Response(
-            {"data": ResearchChainUploadSerializer(uploads[:50], many=True).data},
+            {"data": ResearchChainUploadSerializer(uploads, many=True).data},
             status=status.HTTP_200_OK,
         )
 
@@ -355,7 +391,6 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
             )
         duplicate = ResearchChainUpload.objects.filter(
             chain=chain,
-            node=node,
             file_hash=file_hash,
             status__in=(
                 ResearchChainUpload.Status.PENDING,
@@ -364,14 +399,23 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
             ),
         ).first()
         if duplicate is not None:
-            if duplicate.payload_hash != digest:
-                return conflict_response()
             return Response(
                 {"data": ResearchChainUploadSerializer(duplicate).data, "idempotent": True},
                 status=status.HTTP_200_OK,
             )
 
-        upload = ResearchChainUpload.objects.filter(chain=chain, node=node, file_hash=file_hash).first()
+        upload = (
+            chain.uploads.filter(file_hash=file_hash)
+            .exclude(
+                status__in=(
+                    ResearchChainUpload.Status.PENDING,
+                    ResearchChainUpload.Status.PROCESSING,
+                    ResearchChainUpload.Status.SUCCESS,
+                )
+            )
+            .order_by("-created_at")
+            .first()
+        )
         created = upload is None
         if created:
             upload = ResearchChainUpload(
@@ -381,6 +425,9 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
                 request_id=request_id,
                 created_by=request.user,
             )
+        else:
+            upload.node = node
+            upload.request_id = request_id
         upload.payload_hash = digest
         upload.file_name = file_name
         upload.file_type = extension
@@ -534,7 +581,7 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
 
 
 class ResearchChainUploadDetailEndpoint(ResearchAPIView):
-    """``GET /chains/<chain_id>/uploads/<upload_id>/`` and refresh status."""
+    """``GET/DELETE /chains/<chain_id>/uploads/<upload_id>/``."""
 
     nav_capability = None
     research_membership_required = False
@@ -547,7 +594,7 @@ class ResearchChainUploadDetailEndpoint(ResearchAPIView):
         if chain is None:
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research chain not found.")
         try:
-            upload = chain.uploads.select_related("workspace").get(pk=UUID(str(upload_id)))
+            upload = chain.uploads.select_related("workspace", "node").get(pk=UUID(str(upload_id)))
         except (ResearchChainUpload.DoesNotExist, TypeError, ValueError):
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research upload not found.")
         if _chain_readonly_error(chain) is not None or not _chain_writer(workspace, request.user, chain):
@@ -558,31 +605,31 @@ class ResearchChainUploadDetailEndpoint(ResearchAPIView):
         client, _connection = _rag_client(workspace)
         result = client.upload_detail(upload.external_upload_id, request=request)
         degraded = bool(result.degraded)
+        previous_status = upload.status
         if not degraded and result.items:
             item = result.items[0]
             raw_status = str(item.get("metadata", {}).get("parse_status") or "").lower()
-            previous = upload.status
             upload.status = UPLOAD_STATUS_MAP.get(raw_status, upload.status)
-            upload.error_code = "" if raw_status != "failed" else "parse_failed"
+            upload.error_code = UPLOAD_STATUS_ERROR_CODES.get(raw_status, "")
             upload.save(update_fields=["status", "error_code", "updated_at"])
-            if upload.status != previous:
-                request_id = f"upload-status-{upload.id}-{upload.status.lower()}"
-                digest = payload_hash({"upload": str(upload.id), "status": upload.status})
-                _append_event(
-                    chain=chain,
-                    node=upload.node,
-                    request=request,
-                    event_type="DATA_CHANGE",
-                    summary=f"Upload status: {upload.status}",
-                    refs=[{"kind": "upload", "id": str(upload.id)}],
-                    metadata={"status": upload.status},
-                    request_id=request_id,
-                    digest=digest,
-                )
-        elif degraded:
-            upload.status = ResearchChainUpload.Status.DEGRADED
-            upload.error_code = result.degraded_reason
+        elif degraded and result.degraded_reason == "not_found" and upload.external_upload_id:
+            upload.status = ResearchChainUpload.Status.FAILED
+            upload.error_code = "upstream_not_found"
             upload.save(update_fields=["status", "error_code", "updated_at"])
+        if upload.status != previous_status:
+            request_id = f"upload-status-{upload.id}-{upload.status.lower()}"
+            digest = payload_hash({"upload": str(upload.id), "status": upload.status})
+            _append_event(
+                chain=chain,
+                node=upload.node,
+                request=request,
+                event_type="DATA_CHANGE",
+                summary=f"Upload status: {upload.status}",
+                refs=[{"kind": "upload", "id": str(upload.id)}],
+                metadata={"status": upload.status, "error_code": upload.error_code},
+                request_id=request_id,
+                digest=digest,
+            )
         payload = ResearchChainUploadSerializer(upload).data
         return Response(
             {
@@ -592,6 +639,51 @@ class ResearchChainUploadDetailEndpoint(ResearchAPIView):
             },
             status=status.HTTP_200_OK,
         )
+
+    def delete(self, request, slug, chain_id, upload_id):
+        """Soft-delete one Plane upload projection without touching upstream storage."""
+        workspace, error = self.get_workspace(section="research_chain")
+        if error:
+            return error
+        chain = _visible_chain(workspace, request.user, chain_id)
+        if chain is None:
+            return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research chain not found.")
+        if not _chain_writer(workspace, request.user, chain):
+            return research_error(
+                ResearchErrorCode.PERMISSION_DENIED,
+                "Only chain members can delete research files.",
+                status.HTTP_403_FORBIDDEN,
+            )
+        readonly_error = _chain_readonly_error(chain)
+        if readonly_error:
+            return readonly_error
+        try:
+            upload = chain.uploads.select_related("workspace", "node").get(pk=UUID(str(upload_id)))
+        except (ResearchChainUpload.DoesNotExist, TypeError, ValueError):
+            return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research upload not found.")
+        if ResearchChainStageMaterialItem.objects.filter(upload=upload, deleted_at__isnull=True).exists():
+            return research_error(
+                ResearchErrorCode.CHAIN_INVALID,
+                "该资料仍关联阶段材料，请先解除关联。",
+                status.HTTP_409_CONFLICT,
+            )
+        upload.deleted_at = timezone.now()
+        upload.updated_by = request.user
+        upload.save(update_fields=["deleted_at", "updated_by", "updated_at"])
+        request_id = f"upload-delete-{upload.id}"
+        digest = payload_hash({"upload": str(upload.id), "action": "delete"})
+        _append_event(
+            chain=chain,
+            node=upload.node,
+            request=request,
+            event_type="DATA_CHANGE",
+            summary=f"Deleted research file: {upload.file_name}",
+            refs=[{"kind": "upload", "id": str(upload.id)}],
+            metadata={"action": "deleted", "upstream_deleted": False},
+            request_id=request_id,
+            digest=digest,
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ResearchChainUploadDownloadEndpoint(ResearchAPIView):

@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.http import HttpResponse
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import (
@@ -19,6 +20,7 @@ from plane.db.models import (
     ResearchChain,
     ResearchChainEvent,
     ResearchChainNode,
+    ResearchChainStageMaterialItem,
     ResearchChainUpload,
     ResearchExternalReference,
     ResearchGroupKnowledgeBinding,
@@ -28,6 +30,7 @@ from plane.db.models import (
     WorkspaceResearchSetting,
 )
 from plane.research.services.group_knowledge import migrate_pending_chain_requests
+from plane.research.services.chain_stage_approvals import initialize_chain_stages
 from plane.research.services.integrations.base import IntegrationResult
 from plane.tests.research_fixtures import add_workspace_member, enable_research, make_user, make_workspace
 
@@ -386,6 +389,120 @@ def test_upload_list_returns_secure_plane_download_and_preview_urls(env):
     assert item["preview_url"] == _upload_action_url(env, upload, "preview")
 
 
+def test_upload_list_is_chain_scoped_and_deduplicates_legacy_rows(env):
+    """课题资料默认全链共用，仅保留同一文件中最可用的投影。"""
+    first = _stored_upload(env, knowledge_id="knowledge-chain-first", file_name="shared.pdf")
+    second_node = ResearchChainNode.objects.create(
+        chain=env["chain"],
+        node_type="TOPIC_SELECTION",
+        title="选题",
+        request_id=f"node-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+    ResearchChainUpload.objects.create(
+        workspace=env["workspace"],
+        chain=env["chain"],
+        node=second_node,
+        request_id=f"upload-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        file_name="shared-retry.pdf",
+        file_type="pdf",
+        file_size=first.file_size,
+        file_hash=first.file_hash,
+        status=ResearchChainUpload.Status.FAILED,
+        error_code="upstream_not_found",
+        created_by=env["owner"],
+    )
+
+    chain_wide = env["owner_client"].get(
+        f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/"
+    )
+    node_scoped = env["owner_client"].get(
+        f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/",
+        {"node_id": str(second_node.id)},
+    )
+
+    assert chain_wide.status_code == 200, chain_wide.json()
+    assert [(row["id"], row["source_node_title"]) for row in chain_wide.json()["data"]] == [
+        (str(first.id), "文献调研")
+    ]
+    assert node_scoped.status_code == 200
+    assert [row["file_name"] for row in node_scoped.json()["data"]] == ["shared-retry.pdf"]
+
+
+def test_upload_idempotence_is_scoped_to_the_whole_chain(env):
+    """同一文件在任意节点重传时复用全链已有有效资料。"""
+    _mark_ready(env)
+    existing = _stored_upload(env, knowledge_id="knowledge-chain-existing", file_name="shared.pdf")
+    second_node = ResearchChainNode.objects.create(
+        chain=env["chain"],
+        node_type="TOPIC_SELECTION",
+        title="选题",
+        request_id=f"node-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+    content = b"%PDF-1.4 pdf"
+
+    with patch("plane.research.services.integrations.adapters.RagPortalClient.upload") as upload_mock:
+        response = env["owner_client"].post(
+            f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/",
+            {
+                "node_id": str(second_node.id),
+                "kb_id": "kb-1",
+                "file": SimpleUploadedFile("shared.pdf", content, content_type="application/pdf"),
+            },
+            format="multipart",
+            HTTP_X_REQUEST_ID=f"req-{uuid4().hex}",
+        )
+
+    assert response.status_code == 200, response.json()
+    assert response.json()["idempotent"] is True
+    assert response.json()["data"]["id"] == str(existing.id)
+    upload_mock.assert_not_called()
+
+
+def test_upload_delete_is_soft_and_blocked_while_linked(env):
+    """删除仅移除 Plane 投影，且被阶段引用时必须先解除关联。"""
+    linked = _stored_upload(env, knowledge_id="knowledge-delete-linked", file_name="linked.pdf")
+    initialize_chain_stages(env["chain"], env["owner"])
+    stage = env["chain"].stage_approvals.get(stage_code="LITERATURE_REVIEW")
+    requirement = stage.material_requirements.get(code="DIRECT_ORIGINAL_STUDIES")
+    ResearchChainStageMaterialItem.objects.create(
+        stage=stage,
+        requirement=requirement,
+        title=linked.file_name,
+        source_node=linked.node,
+        upload=linked,
+        request_id=f"material-{uuid4().hex}",
+        created_by=env["owner"],
+    )
+    blocked = env["owner_client"].delete(
+        f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/{linked.id}/"
+    )
+    assert blocked.status_code == 409
+    assert "先解除" in blocked.json()["message"]
+
+    ResearchChainStageMaterialItem.objects.update(deleted_at=timezone.now())
+    removable = _stored_upload(env, knowledge_id="knowledge-delete-free", file_name="free.pdf")
+    outsider = make_user(first_name="Knowledge delete outsider")
+    denied = _client(outsider).delete(
+        f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/{removable.id}/"
+    )
+    deleted = env["owner_client"].delete(
+        f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/{removable.id}/"
+    )
+
+    assert denied.status_code in {403, 404}
+    assert deleted.status_code == 204
+    assert not ResearchChainUpload.objects.filter(pk=removable.pk).exists()
+    assert ResearchChainUpload.all_objects.filter(pk=removable.pk, deleted_at__isnull=False).exists()
+    assert ResearchChainEvent.objects.filter(
+        event_type="DATA_CHANGE", summary=f"Deleted research file: {removable.file_name}"
+    ).exists()
+
+
 def test_download_proxies_original_file_only_to_visible_chain(env):
     """下载通过 Plane 后端代理原文件，外部用户不能获取链路资料。"""
     upload = _stored_upload(env)
@@ -530,6 +647,91 @@ def test_upload_status_refresh_updates_projection_and_appends_fact(env):
     assert listed.status_code == 200, listed.json()
     assert [item["id"] for item in listed.json()["data"]] == [str(upload.id)]
     assert denied.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "raw_status,expected_status,expected_error",
+    [
+        ("finalizing", "SUCCESS", ""),
+        ("deleted", "FAILED", "upstream_deleted"),
+    ],
+)
+def test_upload_status_maps_reference_ready_and_deleted_states(env, raw_status, expected_status, expected_error):
+    """基础解析完成可引用，上游删除则进入可重试失败态。"""
+    upload = ResearchChainUpload.objects.create(
+        workspace=env["workspace"],
+        chain=env["chain"],
+        node=env["node"],
+        request_id=f"upload-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        external_upload_id="17",
+        knowledge_id="knowledge-status",
+        knowledge_base_id="kb-1",
+        file_name="status.pdf",
+        file_type="pdf",
+        file_size=7,
+        file_hash=uuid4().hex,
+        status=ResearchChainUpload.Status.PROCESSING,
+        created_by=env["owner"],
+    )
+    with patch(
+        "plane.research.services.integrations.adapters.RagPortalClient.upload_detail",
+        return_value=_result(
+            items=[
+                {
+                    "external_id": "knowledge-status",
+                    "title": "status.pdf",
+                    "metadata": {"upload_id": "17", "parse_status": raw_status},
+                }
+            ],
+            request_id="req-status-map",
+        ),
+    ):
+        response = env["owner_client"].get(
+            f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/{upload.id}/"
+        )
+
+    assert response.status_code == 200, response.json()
+    assert response.json()["data"]["status"] == expected_status
+    assert response.json()["data"]["error_code"] == expected_error
+
+
+@pytest.mark.parametrize("degraded_reason,expected_status,expected_error", [
+    ("timeout", "PROCESSING", ""),
+    ("not_found", "FAILED", "upstream_not_found"),
+])
+def test_upload_degraded_refresh_distinguishes_temporary_and_missing_source(
+    env, degraded_reason, expected_status, expected_error
+):
+    """临时上游故障不误伤处理中状态，明确缺失则标记失败。"""
+    upload = ResearchChainUpload.objects.create(
+        workspace=env["workspace"],
+        chain=env["chain"],
+        node=env["node"],
+        request_id=f"upload-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        external_upload_id="18",
+        knowledge_id="knowledge-degraded-refresh",
+        knowledge_base_id="kb-1",
+        file_name="degraded.pdf",
+        file_type="pdf",
+        file_size=7,
+        file_hash=uuid4().hex,
+        status=ResearchChainUpload.Status.PROCESSING,
+        created_by=env["owner"],
+    )
+    with patch(
+        "plane.research.services.integrations.adapters.RagPortalClient.upload_detail",
+        return_value=_result(degraded=True, degraded_reason=degraded_reason, request_id="req-degraded-refresh"),
+    ):
+        response = env["owner_client"].get(
+            f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/{upload.id}/"
+        )
+
+    assert response.status_code == 200, response.json()
+    assert response.json()["degraded"] is True
+    assert response.json()["data"]["status"] == expected_status
+    assert response.json()["data"]["error_code"] == expected_error
 
 
 def test_archived_chain_upload_status_refresh_is_readonly(env):

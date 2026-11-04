@@ -364,6 +364,7 @@ class ResearchChainUploadSerializer(serializers.ModelSerializer):
     schema_version = serializers.SerializerMethodField()
     download_url = serializers.SerializerMethodField()
     preview_url = serializers.SerializerMethodField()
+    source_node_title = serializers.SerializerMethodField()
 
     class Meta:
         model = ResearchChainUpload
@@ -386,6 +387,7 @@ class ResearchChainUploadSerializer(serializers.ModelSerializer):
             "error_code",
             "download_url",
             "preview_url",
+            "source_node_title",
             "metadata",
             "created_at",
             "updated_at",
@@ -406,6 +408,10 @@ class ResearchChainUploadSerializer(serializers.ModelSerializer):
         if not obj.knowledge_id or not settings.ATTACHMENT_PREVIEW_ENABLED or file_kind(obj.file_name) == "unsupported":
             return ""
         return f"/api/research/workspaces/{obj.workspace.slug}/chains/{obj.chain_id}/uploads/{obj.id}/preview/"
+
+    def get_source_node_title(self, obj):
+        """Return the human-readable origin node without exposing node IDs twice."""
+        return obj.node.title if obj.node_id else ""
 
 
 class ResearchAnalysisResultSerializer(serializers.ModelSerializer):

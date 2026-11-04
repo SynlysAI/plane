@@ -1,5 +1,6 @@
 """Rules and initialization for the thirteen-stage Research Chain approvals."""
 
+import hashlib
 from dataclasses import dataclass
 
 from django.conf import settings
@@ -43,6 +44,9 @@ ASSOCIABLE_UPLOAD_STATUSES = {"PENDING", "PROCESSING", "SUCCESS"}
 SATISFYING_UPLOAD_STATUSES = {"SUCCESS"}
 PROCESSING_UPLOAD_STATUSES = {"PENDING", "PROCESSING"}
 FAILED_UPLOAD_STATUSES = {"FAILED", "DEGRADED"}
+MAX_STAGE_MATERIAL_TEXT_LENGTH = 50_000
+MAX_STAGE_MATERIAL_TITLE_LENGTH = 500
+DEFAULT_STAGE_MATERIAL_TITLE_LENGTH = 80
 
 
 @dataclass(frozen=True)
@@ -496,13 +500,18 @@ def material_state(stage):
     else:
         requirements = list(
             stage.material_requirements.filter(deleted_at__isnull=True)
-            .prefetch_related("items__upload__workspace")
+            .prefetch_related("items__upload__workspace", "items__upload__node")
             .order_by("sort_order")
         )
     result = []
     for requirement in requirements:
         items = [item for item in requirement.items.all() if item.deleted_at is None]
-        success_count = sum(1 for item in items if item.upload_id and item.upload.status in SATISFYING_UPLOAD_STATUSES)
+        success_count = sum(
+            1
+            for item in items
+            if (item.upload_id and item.upload.status in SATISFYING_UPLOAD_STATUSES)
+            or (not item.upload_id and bool(item.description.strip()))
+        )
         processing_count = sum(
             1 for item in items if item.upload_id and item.upload.status in PROCESSING_UPLOAD_STATUSES
         )
@@ -642,21 +651,45 @@ def _audit_stage(action, stage, actor, metadata, request=None):
     )
 
 
+def _stage_source_node(stage):
+    """Resolve the active node representing a fixed stage for text evidence.
+
+    Args:
+        stage: Research Chain stage that receives a text-only material.
+
+    Returns:
+        The stage's active node, or ``None`` when the chain has not created it yet.
+    """
+    node_type = NODE_TYPE_BY_STAGE.get(stage.stage_code)
+    if not node_type:
+        return stage.submitted_node
+    return (
+        stage.chain.nodes.filter(node_type=node_type, deleted_at__isnull=True)
+        .order_by("created_at")
+        .first()
+        or stage.submitted_node
+    )
+
+
 def add_stage_material(
     stage,
     actor,
     *,
     requirement_code,
-    upload,
+    upload=None,
+    title="",
+    content="",
     request_id="",
 ):
-    """Link one scoped upload to a stage material requirement.
+    """Link one upload or bounded text record to a stage material requirement.
 
     Args:
         stage: The Research Chain stage receiving the material.
         actor: User creating the material link.
         requirement_code: Fixed requirement code for this stage.
         upload: Research chain upload supplying the material file.
+        title: Optional human-readable title for a text material.
+        content: Required non-empty text for a text-only material.
         request_id: Idempotency key supplied by the API caller.
 
     Returns:
@@ -682,31 +715,57 @@ def add_stage_material(
                 "requirement_code is not defined for this stage.",
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
-        if upload is None or upload.chain_id != locked_stage.chain_id:
+        if upload is not None and upload.chain_id != locked_stage.chain_id:
             raise ChainStageRuleError(
                 ResearchErrorCode.CHAIN_INVALID,
                 "upload_id must reference an upload in this chain.",
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
-        if upload.status not in ASSOCIABLE_UPLOAD_STATUSES:
+        if upload is not None and upload.status not in ASSOCIABLE_UPLOAD_STATUSES:
             raise ChainStageRuleError(
                 ResearchErrorCode.CHAIN_INVALID,
                 "Only pending, processing or successful research uploads can be linked.",
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
-        duplicate = requirement.items.filter(upload=upload, deleted_at__isnull=True).exists()
-        if duplicate:
-            raise ChainStageRuleError(
-                ResearchErrorCode.CHAIN_INVALID,
-                "This research upload is already linked to this material requirement.",
-                status.HTTP_409_CONFLICT,
-            )
+        source_node = upload.node if upload is not None else _stage_source_node(locked_stage)
+        if upload is not None:
+            duplicate = requirement.items.filter(upload=upload, deleted_at__isnull=True).exists()
+            if duplicate:
+                raise ChainStageRuleError(
+                    ResearchErrorCode.CHAIN_INVALID,
+                    "This research upload is already linked to this material requirement.",
+                    status.HTTP_409_CONFLICT,
+                )
+            item_title = upload.file_name[:500]
+            item_description = ""
+            event_metadata = {"requirement": requirement.code, "upload_id": str(upload.id), "upload_status": upload.status}
+        else:
+            normalized_content = content.strip()
+            normalized_title = (title or normalized_content[:DEFAULT_STAGE_MATERIAL_TITLE_LENGTH]).strip()
+            duplicate = requirement.items.filter(
+                upload__isnull=True,
+                description=normalized_content,
+                deleted_at__isnull=True,
+            ).exists()
+            if duplicate:
+                raise ChainStageRuleError(
+                    ResearchErrorCode.CHAIN_INVALID,
+                    "重复的文字材料已提交，请修改内容后再保存。",
+                    status.HTTP_409_CONFLICT,
+                )
+            item_title = normalized_title[:500]
+            item_description = normalized_content
+            event_metadata = {
+                "requirement": requirement.code,
+                "material_kind": "text",
+                "content_sha256": hashlib.sha256(normalized_content.encode("utf-8")).hexdigest(),
+            }
         item = ResearchChainStageMaterialItem.objects.create(
             stage=locked_stage,
             requirement=requirement,
-            title=upload.file_name[:500],
-            description="",
-            source_node=upload.node,
+            title=item_title,
+            description=item_description,
+            source_node=source_node,
             upload=upload,
             external_reference="",
             request_id=request_id,
@@ -721,8 +780,8 @@ def add_stage_material(
             actor,
             request_id or str(item.id),
             f"Added material: {item.title}",
-            {"requirement": requirement.code, "upload_id": str(upload.id), "upload_status": upload.status},
-            node=upload.node,
+            event_metadata,
+            node=source_node,
         )
         _audit_stage(
             ResearchAuditAction.CHAIN_STAGE_MATERIAL_ADD, locked_stage, actor, {"requirement": requirement.code}

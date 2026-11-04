@@ -216,6 +216,91 @@ def test_material_body_requires_an_explicit_upload(env):
     assert response.json()["error_code"] == "research_chain_invalid"
 
 
+def test_material_body_rejects_both_upload_and_text(env):
+    response = env["owner_client"].post(
+        url(env, "PRE_EXPERIMENT/materials/"),
+        {
+            "request_id": f"material-{uuid4().hex}",
+            "requirement_code": "PRE_EXPERIMENT_PLAN",
+            "upload_id": str(uuid4()),
+            "content": "预实验方案",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "research_chain_invalid"
+
+
+def test_stage_material_accepts_text_and_counts_it_towards_submission(env):
+    node = ResearchChainNode.objects.create(
+        chain=env["chain"],
+        node_type="TOPIC_SELECTION",
+        title="API topic text",
+        request_id=f"node-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+    content = "题目：面向金属化的单分子电导研究\n研究课题：光致变色分子的电输运调控\n研究问题：分子结环境如何影响反应动力学。"
+    payload = {
+        "requirement_code": "RESEARCH_GOAL",
+        "content": content,
+        "title": "研究课题说明",
+    }
+    created = env["owner_client"].post(
+        url(env, "TOPIC_SELECTION/materials/"),
+        {**payload, "request_id": f"material-{uuid4().hex}"},
+        format="json",
+    )
+    duplicate = env["owner_client"].post(
+        url(env, "TOPIC_SELECTION/materials/"),
+        {**payload, "request_id": f"material-{uuid4().hex}"},
+        format="json",
+    )
+
+    assert created.status_code == 201, created.json()
+    item = created.json()["data"]
+    assert item["title"] == "研究课题说明"
+    assert item["description"] == content
+    assert item["upload"] is None
+    assert item["source_node"] == str(node.id)
+    assert duplicate.status_code == 409
+    assert "重复" in duplicate.json()["message"]
+
+    summary = env["owner_client"].get(url(env)).json()["data"]
+    stage = next(row for row in summary["stages"] if row["stage_code"] == "TOPIC_SELECTION")
+    material = next(row for row in stage["materials"] if row["code"] == "RESEARCH_GOAL")
+    assert material["submitted_count"] == 1
+    assert material["complete"] is True
+    assert material["submission_state"] == "READY"
+
+
+def test_stage_material_text_uses_bounded_default_title_and_content(env):
+    long_content = "面" * 81
+    invalid = env["owner_client"].post(
+        url(env, "TOPIC_SELECTION/materials/"),
+        {
+            "request_id": f"material-{uuid4().hex}",
+            "requirement_code": "RESEARCH_GOAL",
+            "content": "x" * 50_001,
+        },
+        format="json",
+    )
+    created = env["owner_client"].post(
+        url(env, "TOPIC_SELECTION/materials/"),
+        {
+            "request_id": f"material-{uuid4().hex}",
+            "requirement_code": "RESEARCH_GOAL",
+            "content": long_content,
+        },
+        format="json",
+    )
+
+    assert invalid.status_code == 422
+    assert created.status_code == 201, created.json()
+    assert created.json()["data"]["title"] == "面" * 80
+
+
 def test_material_submit_and_review_flow(env):
     node = ResearchChainNode.objects.create(
         chain=env["chain"],
