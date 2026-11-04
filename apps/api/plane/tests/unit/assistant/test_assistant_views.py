@@ -97,9 +97,7 @@ def test_anonymous_requests_are_rejected(env):
 def test_non_members_are_rejected(env):
     _configure(env["workspace"])
     stranger = make_user(first_name="Stranger")
-    response = _client_for(stranger).get(
-        f"/api/workspaces/{env['workspace'].slug}/assistant/status/"
-    )
+    response = _client_for(stranger).get(f"/api/workspaces/{env['workspace'].slug}/assistant/status/")
     assert response.status_code == 403
 
 
@@ -285,9 +283,7 @@ def test_events_stream_synthesizes_an_error_frame_when_upstream_fails(env):
         patch("plane.app.views.assistant.client.httpx.post", return_value=FakeDelegatedResponse()),
         patch("plane.app.views.assistant.client.httpx.stream", side_effect=failing_stream),
     ):
-        response = client.get(
-            f"/api/workspaces/{env['workspace'].slug}/assistant/sessions/thread-10/events/"
-        )
+        response = client.get(f"/api/workspaces/{env['workspace'].slug}/assistant/sessions/thread-10/events/")
     assert response.status_code == 200
     body = b"".join(response.streaming_content)
     assert b"event: error" in body
@@ -314,9 +310,7 @@ def test_cancel_and_history_proxy_upstream(env):
         cancelled = client.post(
             f"/api/workspaces/{env['workspace'].slug}/assistant/runs/00000000-0000-0000-0000-000000000003/cancel/"
         )
-        history = client.get(
-            f"/api/workspaces/{env['workspace'].slug}/assistant/history/?thread_id=thread-9"
-        )
+        history = client.get(f"/api/workspaces/{env['workspace'].slug}/assistant/history/?thread_id=thread-9")
     assert cancelled.status_code == 200
     assert cancelled.json() == {"cancelled": True}
     assert history.status_code == 200

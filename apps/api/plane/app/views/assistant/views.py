@@ -207,18 +207,17 @@ def _stream_session_events(client: SynloraAssistantClient, thread_id: str, last_
             events = history.json() if isinstance(history.json(), list) else []
             for event in events:
                 yield (
-                    f'event: {event.get("type", "message")}\n'.encode()
-                    + b'data: ' + json.dumps(event, ensure_ascii=False).encode() + b'\n'
-                    + f'id: {event.get("seq", 0)}\n\n'.encode()
+                    f"event: {event.get('type', 'message')}\n".encode()
+                    + b"data: "
+                    + json.dumps(event, ensure_ascii=False).encode()
+                    + b"\n"
+                    + f"id: {event.get('seq', 0)}\n\n".encode()
                 )
         for chunk in upstream.iter_bytes():
             yield chunk
     except Exception as e:
         log_exception(e)
-        yield (
-            b'event: error\n'
-            + b'data: {"error": "' + UPSTREAM_UNAVAILABLE.encode() + b'", "retryable": true}\n\n'
-        )
+        yield (b"event: error\n" + b'data: {"error": "' + UPSTREAM_UNAVAILABLE.encode() + b'", "retryable": true}\n\n')
     finally:
         if upstream is not None:
             upstream.__exit__(None, None, None)

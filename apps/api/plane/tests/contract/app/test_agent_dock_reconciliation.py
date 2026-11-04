@@ -27,7 +27,7 @@ def test_reconcile_active_synlora_runs_after_sse_disconnect(sd_session, monkeypa
                     {
                         "sequence": 2,
                         "event": {"type": "run.completed", "remote_run_id": "synlora-run-1"},
-                    }
+                    },
                 ],
                 2,
                 "completed",
@@ -35,9 +35,7 @@ def test_reconcile_active_synlora_runs_after_sse_disconnect(sd_session, monkeypa
 
     from plane.bgtasks import agent_dock_task
 
-    monkeypatch.setattr(
-        agent_dock_task, "resolve_synlora_runtime", lambda *_args, **_kwargs: FakeRuntime()
-    )
+    monkeypatch.setattr(agent_dock_task, "resolve_synlora_runtime", lambda *_args, **_kwargs: FakeRuntime())
 
     result = reconcile_agent_dock_runs()
 

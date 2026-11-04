@@ -78,9 +78,7 @@ def verify_synlora_api_key(
 
 def _active_binding(**filters) -> ResearchAgentIdentityBinding | None:
     return (
-        ResearchAgentIdentityBinding.objects.filter(deleted_at__isnull=True, **filters)
-        .order_by("-created_at")
-        .first()
+        ResearchAgentIdentityBinding.objects.filter(deleted_at__isnull=True, **filters).order_by("-created_at").first()
     )
 
 
@@ -118,9 +116,7 @@ def bind_synlora_api_key(
         transport=transport,
     )
     credential_hash = hashlib.sha256(token.encode()).hexdigest()
-    if connection is not None and (
-        connection.workspace_id != workspace.id or connection.user_id != user.id
-    ):
+    if connection is not None and (connection.workspace_id != workspace.id or connection.user_id != user.id):
         raise SynloraIdentityConflict("connection_owner_mismatch")
 
     with transaction.atomic():
@@ -165,14 +161,16 @@ def bind_synlora_api_key(
             binding.credential_hash = credential_hash
             binding.credential_encrypted = encrypt_data(token)
             binding.updated_by = user
-            binding.save(update_fields=[
-                "external_user_id",
-                "external_username",
-                "credential_hash",
-                "credential_encrypted",
-                "updated_by",
-                "updated_at",
-            ])
+            binding.save(
+                update_fields=[
+                    "external_user_id",
+                    "external_username",
+                    "credential_hash",
+                    "credential_encrypted",
+                    "updated_by",
+                    "updated_at",
+                ]
+            )
 
         if connection is not None:
             connection.identity_binding = binding
@@ -226,3 +224,78 @@ def ensure_synlora_identity_binding(workspace, user) -> ResearchAgentIdentityBin
     except (SynloraIdentityError, SynloraIdentityConflict):
         _LOGGER.warning("Synlora identity binding failed user=%s workspace=%s", user.id, workspace.id)
         return None
+
+
+def repair_synlora_account_links(*, dry_run: bool = False, transport: httpx.BaseTransport | None = None) -> dict:
+    """Idempotently send verified bindings to Synlora's historical alias endpoint.
+
+    Args:
+        dry_run: Only report work items without calling Synlora.
+        transport: Optional test transport.
+
+    Returns:
+        Repair counts for operational reporting.
+    """
+    service_token = str(getattr(settings, "SYNLORA_SERVICE_TOKEN", "") or "")
+    if not service_token:
+        return {"submitted": 0, "conflicts": 0, "failed": 0, "reason": "service_token_missing"}
+
+    if not dry_run:
+        legacy_connections = (
+            ResearchAgentBackendConnection.objects.filter(
+                system="SYNLORA",
+                deleted_at__isnull=True,
+                is_enabled=True,
+            )
+            .select_related("workspace", "user")
+            .order_by("workspace_id", "user_id")
+        )
+        for connection in legacy_connections:
+            ensure_synlora_identity_binding(connection.workspace, connection.user)
+
+    submitted = conflicts = failed = 0
+    connections = (
+        ResearchAgentBackendConnection.objects.filter(
+            system="SYNLORA",
+            deleted_at__isnull=True,
+            identity_binding__deleted_at__isnull=True,
+        )
+        .select_related("workspace", "user", "identity_binding")
+        .order_by("workspace_id", "user_id")
+    )
+    seen = set()
+    for connection in connections:
+        key = (connection.workspace_id, connection.user_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        binding = connection.identity_binding
+        payload = {
+            "schema_version": "plane-account-link-repair.v1",
+            "account_link_id": f"plane-{connection.workspace_id}-{connection.user_id}",
+            "workspace_id": str(connection.workspace_id),
+            "plane_user_id": str(connection.user_id),
+            "external_subject": f"plane-ws-{connection.workspace_id}-user-{connection.user_id}",
+            "synlora_user_id": binding.external_user_id,
+            "synlora_username": binding.external_username,
+        }
+        if dry_run:
+            submitted += 1
+            continue
+        try:
+            with httpx.Client(transport=transport) as client:
+                response = client.post(
+                    f"{binding.base_url.rstrip('/')}/api/v1/research/account-links",
+                    headers={"Authorization": f"Bearer {service_token}"},
+                    json=payload,
+                    timeout=float(getattr(settings, "SYNLORA_TIMEOUT_SECONDS", 5)),
+                )
+            if response.status_code == 409:
+                conflicts += 1
+            elif response.status_code >= 400:
+                failed += 1
+            else:
+                submitted += 1
+        except httpx.HTTPError:
+            failed += 1
+    return {"submitted": submitted, "conflicts": conflicts, "failed": failed}

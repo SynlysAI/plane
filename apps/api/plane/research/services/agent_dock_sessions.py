@@ -12,12 +12,12 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from plane.db.models import (
-    ResearchChain,
-    ResearchChainNode,
     ResearchAgentBackendConnection,
     ResearchAgentRunEvent,
     ResearchAgentSession,
+    ResearchChain,
     ResearchChainEvent,
+    ResearchChainNode,
     ResearchContextGrant,
     Workspace,
 )
@@ -37,8 +37,8 @@ from plane.research.services.agent_runtime import (
     synlora_event_run_id,
 )
 from plane.research.services.chain_projection import (
-    SCIENCE_DISCOVERY_CHAIN_EVENT_TYPE_MAP,
     SCIENCE_DISCOVERY_AGENT_EVENT_TYPE_MAP,
+    SCIENCE_DISCOVERY_CHAIN_EVENT_TYPE_MAP,
     SCIENCE_DISCOVERY_TERMINAL_SESSION_STATUS,
     _science_discovery_payload,
     project_science_discovery_events,
@@ -138,6 +138,12 @@ def _plane_metadata(grant: ResearchContextGrant, page_context: dict | None = Non
     }
 
 
+def _serialized_target(grant: ResearchContextGrant) -> dict:
+    """Return a browser-safe target projection for history lists."""
+
+    return _plane_metadata(grant)
+
+
 def _sync_page_focus_on_session(session: ResearchAgentSession, page_context: dict) -> None:
     """Keep audit targeting current while preserving workspace-stable history."""
     focus = page_context.get("focus") or {}
@@ -146,14 +152,19 @@ def _sync_page_focus_on_session(session: ResearchAgentSession, page_context: dic
     node = None
     chain = None
     if focus_type in {"RESEARCH_NODE", "RESEARCH_TASK"}:
-        node = ResearchChainNode.objects.select_related("chain", "chain__project").filter(
-            pk=focus_id, chain__workspace_id=session.workspace_id, deleted_at__isnull=True
-        ).first()
+        node = (
+            ResearchChainNode.objects.select_related("chain", "chain__project")
+            .filter(pk=focus_id, chain__workspace_id=session.workspace_id, deleted_at__isnull=True)
+            .first()
+        )
         chain = node.chain if node else None
     elif focus_type == "RESEARCH_CHAIN":
-        chain = ResearchChain.objects.select_related("project").filter(
-            pk=focus_id, workspace_id=session.workspace_id, deleted_at__isnull=True
-        ).exclude(status="DELETED").first()
+        chain = (
+            ResearchChain.objects.select_related("project")
+            .filter(pk=focus_id, workspace_id=session.workspace_id, deleted_at__isnull=True)
+            .exclude(status="DELETED")
+            .first()
+        )
     session.research_chain = chain
     session.chain_node = node
     session.project = chain.project if chain is not None else None
@@ -180,6 +191,8 @@ def serialize_agent_dock_session(session: ResearchAgentSession) -> dict:
             if session.project_id
             else f"workspace:{session.workspace_id}"
         ),
+        "target_title": _target_title(grant),
+        "target_metadata": _serialized_target(grant),
         "context": {
             "context_id": str(grant.context_id),
             "context_version": grant.context_version,
@@ -226,9 +239,7 @@ def create_agent_dock_session(
 ):
     """Create a Synlora v1 session and bind it to one authorized target."""
     grant = (
-        ResearchContextGrant.objects.select_related(
-            "workspace", "user", "project", "research_chain", "chain_node"
-        )
+        ResearchContextGrant.objects.select_related("workspace", "user", "project", "research_chain", "chain_node")
         .filter(context_id=context_id, workspace=workspace, user=user, deleted_at__isnull=True)
         .first()
     )
@@ -265,9 +276,7 @@ def create_agent_dock_session(
     try:
         credential = issue_agent_dock_mcp_connection(workspace=workspace, user=user)
     except Exception as exc:
-        raise AgentDockSessionError(
-            "Plane unified MCP is unavailable", 503, "agent_mcp_unavailable"
-        ) from exc
+        raise AgentDockSessionError("Plane unified MCP is unavailable", 503, "agent_mcp_unavailable") from exc
     plane_mcp = _plane_mcp_metadata(grant, credential)
     plane_metadata = _plane_metadata(grant)
     try:
@@ -407,9 +416,7 @@ def refresh_agent_dock_session_context(
         locked.context_token_encrypted = grant.context_token_encrypted
         locked.assembly = _assembly(grant)
         locked.updated_by = user
-        locked.save(update_fields=[
-            "context_grant", "context_token_encrypted", "assembly", "updated_by", "updated_at"
-        ])
+        locked.save(update_fields=["context_grant", "context_token_encrypted", "assembly", "updated_by", "updated_at"])
         _append_event(
             locked,
             "CONTEXT_ASSEMBLED",
@@ -490,13 +497,13 @@ def start_agent_dock_message(
             connection=session.unified_mcp_connection,
         )
     except Exception as exc:
-        raise AgentDockSessionError(
-            "Plane unified MCP is unavailable", 503, "agent_mcp_unavailable"
-        ) from exc
+        raise AgentDockSessionError("Plane unified MCP is unavailable", 503, "agent_mcp_unavailable") from exc
     session.unified_mcp_connection = credential.connection
     previous_page = (grant.context_manifest or {}).get("page_context") or {}
     effective_route = route or str(previous_page.get("route") or "")
-    effective_focus = focus_ref or (previous_page.get("focus") if isinstance(previous_page.get("focus"), dict) else None)
+    effective_focus = focus_ref or (
+        previous_page.get("focus") if isinstance(previous_page.get("focus"), dict) else None
+    )
     page_context = build_page_context(
         workspace=workspace,
         user=user,
@@ -529,10 +536,19 @@ def start_agent_dock_message(
     session.status = ResearchAgentSession.Status.STREAMING
     session.last_error = ""
     session.updated_by = user
-    session.save(update_fields=[
-        "unified_mcp_connection", "synlora_run_id", "status", "last_error",
-        "updated_by", "updated_at", "research_chain", "chain_node", "project",
-    ])
+    session.save(
+        update_fields=[
+            "unified_mcp_connection",
+            "synlora_run_id",
+            "status",
+            "last_error",
+            "updated_by",
+            "updated_at",
+            "research_chain",
+            "chain_node",
+            "project",
+        ]
+    )
     content_hash = payload_hash({"content": content})
     _append_event(
         session,
@@ -633,9 +649,7 @@ def persist_synlora_stream_event(session, envelope: dict) -> ResearchAgentRunEve
         locked.assembly = assembly
         locked.save(update_fields=["latest_seq", "status", "last_error", "assembly", "updated_at"])
         if locked.chain_node is not None:
-            chain_type = SCIENCE_DISCOVERY_CHAIN_EVENT_TYPE_MAP.get(
-                str(envelope.get("event_type")), "AI_ACTION"
-            )
+            chain_type = SCIENCE_DISCOVERY_CHAIN_EVENT_TYPE_MAP.get(str(envelope.get("event_type")), "AI_ACTION")
             chain_request_id = f"chain:{request_id}"
             remote_payload = envelope.get("payload") if isinstance(envelope.get("payload"), dict) else {}
             ResearchChainEvent.objects.get_or_create(
@@ -764,8 +778,7 @@ def sync_agent_dock_events(
         == str(session.synlora_run_id or "")
         and str((event.payload if isinstance(event.payload, dict) else {}).get("remote_type") or "")
         in {"turn/start", "run.started"}
-        and int((event.payload if isinstance(event.payload, dict) else {}).get("remote_seq") or 0)
-        > run_start_cursor
+        and int((event.payload if isinstance(event.payload, dict) else {}).get("remote_seq") or 0) > run_start_cursor
         for event in session.run_events.filter(run_id=session.run_id)
     )
     current_run_terminal = False
@@ -830,9 +843,7 @@ def sync_agent_dock_events(
         with transaction.atomic():
             locked = ResearchAgentSession.objects.select_for_update().get(pk=session.pk)
             assembly = dict(locked.assembly or {})
-            assembly["source_cursor"] = max(
-                int(assembly.get("source_cursor", -1)), int(_cursor or remote_after)
-            )
+            assembly["source_cursor"] = max(int(assembly.get("source_cursor", -1)), int(_cursor or remote_after))
             locked.assembly = assembly
             locked.save(update_fields=["assembly", "updated_at"])
         return ResearchAgentSession.objects.get(pk=session.pk)

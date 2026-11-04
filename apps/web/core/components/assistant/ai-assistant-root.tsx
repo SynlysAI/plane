@@ -5,13 +5,14 @@
  */
 
 import { observer } from "mobx-react";
-import { type ReactNode, useEffect, useMemo } from "react";
+import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 // components
 import { AIAssistantPanel } from "./ai-assistant-panel";
 // helpers
 import { AssistantService, type TAssistantStatus } from "@/services/assistant";
+import { clearLaunchHistory } from "@/components/assistant/lib/launch-history";
 import { RightDockProvider, RightDockShell, useRightDockState } from "@/components/right-dock";
 import { useAgentDockDesktop } from "@/hooks/use-agent-dock-desktop";
 // store
@@ -48,6 +49,7 @@ const AIAssistantRootContent = observer(function AIAssistantRootContent({ childr
   const assistantStore = useAIAssistant();
   const { data: currentUser } = useUser();
   const { hasDetail } = useRightDockState();
+  const ownerScopeRef = useRef<string | null>(null);
   const isDesktop = useAgentDockDesktop();
 
   const {
@@ -83,7 +85,19 @@ const AIAssistantRootContent = observer(function AIAssistantRootContent({ childr
   }, [workspaceSlug, assistantStore, currentUser?.id]);
 
   useEffect(() => {
-    if (hasDetail && isDesktop && assistantStore.dockMode === "floating") assistantStore.setDockMode("docked");
+    if (!workspaceSlug) return;
+    const ownerKey = currentUser?.id ?? null;
+    const scope = `${workspaceSlug}:${ownerKey ?? "anonymous"}`;
+    if (ownerScopeRef.current !== null && ownerScopeRef.current !== scope) {
+      clearLaunchHistory(workspaceSlug, ownerKey);
+    }
+    ownerScopeRef.current = scope;
+  }, [currentUser?.id, workspaceSlug]);
+
+  useEffect(() => {
+    if (!hasDetail || !isDesktop) return;
+    if (assistantStore.dockMode === "floating") assistantStore.setDockMode("docked");
+    if (assistantStore.expanded) assistantStore.toggleExpanded(false);
   }, [assistantStore, hasDetail, isDesktop]);
 
   useEffect(() => {
@@ -111,8 +125,9 @@ const AIAssistantRootContent = observer(function AIAssistantRootContent({ childr
   return (
     <RightDockShell
       agentOpen={assistantStore.isOpen}
-      agentDocked={assistantStore.dockMode === "docked" && isDesktop}
+      agentDocked={assistantStore.dockMode === "docked" && isDesktop && !assistantStore.expanded}
       agentWidth={assistantStore.width}
+      agentFloatingFull={assistantStore.expanded}
       launcherVisible={resolvedStatus !== null}
       onOpenAgent={() => assistantStore.open()}
       agentPanel={

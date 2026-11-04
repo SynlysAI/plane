@@ -32,9 +32,7 @@ def test_runtime_uses_verified_personal_api_key_for_plane_user(monkeypatch):
     )
     monkeypatch.setattr(agent_runtime, "resolve_assistant_config", lambda *_args, **_kwargs: config)
     monkeypatch.setattr(agent_runtime, "decrypt_data", lambda _value: "yxkey_private")
-    monkeypatch.setattr(
-        agent_runtime, "ensure_synlora_identity_binding", lambda *_args, **_kwargs: binding
-    )
+    monkeypatch.setattr(agent_runtime, "ensure_synlora_identity_binding", lambda *_args, **_kwargs: binding)
 
     runtime = resolve_synlora_runtime(workspace, user=user)
 
@@ -56,9 +54,7 @@ def test_runtime_rejects_plane_user_without_personal_binding(monkeypatch):
         is_enabled=True,
     )
     monkeypatch.setattr(agent_runtime, "resolve_assistant_config", lambda *_args, **_kwargs: config)
-    monkeypatch.setattr(
-        agent_runtime, "ensure_synlora_identity_binding", lambda *_args, **_kwargs: None
-    )
+    monkeypatch.setattr(agent_runtime, "ensure_synlora_identity_binding", lambda *_args, **_kwargs: None)
 
     assert resolve_synlora_runtime(workspace, user=user) is None
 

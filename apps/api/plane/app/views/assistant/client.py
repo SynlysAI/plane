@@ -44,13 +44,11 @@ def resolve_assistant_config(workspace, user=None) -> AssistantConfig:
     store (``ResearchAgentBackendConnection`` with ``system=SYNLORA``); its
     base URL overrides the platform address when provided.
     """
-    connection = (
-        ExternalSystemConnection.objects.filter(
-            workspace=workspace,
-            system=IntegrationSystem.SYNLORA,
-            deleted_at__isnull=True,
-        ).first()
-    )
+    connection = ExternalSystemConnection.objects.filter(
+        workspace=workspace,
+        system=IntegrationSystem.SYNLORA,
+        deleted_at__isnull=True,
+    ).first()
     base_url = (getattr(connection, "base_url", "") or settings.SYNLORA_BASE_URL or "").rstrip("/")
     token = ""
     credential_mode = ExternalSystemConnection.CredentialMode.SHARED
@@ -78,10 +76,7 @@ def resolve_assistant_config(workspace, user=None) -> AssistantConfig:
                 .first()
             )
             if personal is not None:
-                if (
-                    personal.identity_binding_id is not None
-                    and personal.identity_binding.deleted_at is None
-                ):
+                if personal.identity_binding_id is not None and personal.identity_binding.deleted_at is None:
                     token = decrypt_data(personal.identity_binding.credential_encrypted)
                 else:
                     token = decrypt_data(personal.credential_encrypted)
@@ -248,11 +243,7 @@ def assistant_history_messages(events: list[dict[str, Any]]) -> list[dict[str, A
         event_type = str(event.get("type") or "")
         payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
         if event_type == "user/message" and payload.get("text"):
-            messages.append(
-                {"id": str(event.get("seq")), "role": "user", "content": str(payload["text"])}
-            )
+            messages.append({"id": str(event.get("seq")), "role": "user", "content": str(payload["text"])})
         elif event_type == "assistant/message" and payload.get("content"):
-            messages.append(
-                {"id": str(event.get("seq")), "role": "assistant", "content": str(payload["content"])}
-            )
+            messages.append({"id": str(event.get("seq")), "role": "assistant", "content": str(payload["content"])})
     return messages

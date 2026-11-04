@@ -750,11 +750,7 @@ class ResearchAgentMessageEndpoint(AgentPluginMixin):
             research_context = synlora_research_context(
                 workspace, session.user, session.chain_node, session.context_grant
             )
-            context_token = (
-                decrypt_data(session.context_token_encrypted)
-                if session.context_token_encrypted
-                else ""
-            )
+            context_token = decrypt_data(session.context_token_encrypted) if session.context_token_encrypted else ""
             if not context_token:
                 raise SynloraRuntimeError(
                     "synlora_context_token_missing",
@@ -1429,9 +1425,7 @@ class ResearchAgentBackendConnectionEndpoint(AgentPluginMixin):
             config = resolve_assistant_config(workspace, user=request.user)
             synlora_base_url = base_url or config.base_url
             if not synlora_base_url:
-                return research_error(
-                    ResearchErrorCode.AGENT_SCOPE_INVALID, "Synlora base URL is required."
-                )
+                return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "Synlora base URL is required.")
             try:
                 identity_binding = bind_synlora_api_key(
                     workspace,

@@ -1,5 +1,8 @@
 """Synlora personal API key identity-binding tests."""
 
+import json
+from types import SimpleNamespace
+
 import pytest
 from plane.db.models import (
     ExternalSystemConnection,
@@ -11,6 +14,8 @@ from plane.research.services.agent_identity import (
     SynloraIdentityConflict,
     SynloraIdentityError,
     bind_synlora_api_key,
+    ensure_synlora_identity_binding,
+    repair_synlora_account_links,
 )
 from plane.tests.research_fixtures import make_user, make_workspace
 
@@ -34,9 +39,7 @@ def _transport(status_code=200, sub="synlora-user", username="fangyikai"):
         assert request.headers["Authorization"] == "Bearer yxkey_test"
         if status_code != 200:
             return __import__("httpx").Response(status_code)
-        return __import__("httpx").Response(
-            200, json={"sub": sub, "username": username, "role": "user"}
-        )
+        return __import__("httpx").Response(200, json={"sub": sub, "username": username, "role": "user"})
 
     return __import__("httpx").MockTransport(handler)
 
@@ -131,3 +134,65 @@ def test_invalid_synlora_key_fails_closed():
             token="yxkey_test",
             transport=_transport(status_code=401),
         )
+
+
+def test_repair_submits_one_idempotent_alias_per_plane_user(settings):
+    owner = make_user()
+    workspace = make_workspace(owner)
+    _synlora_connection(workspace)
+    binding = bind_synlora_api_key(
+        workspace,
+        user=owner,
+        base_url="http://synlora.internal:5050",
+        token="yxkey_test",
+        transport=_transport(),
+    )
+    ResearchAgentBackendConnection.objects.create(
+        workspace=workspace,
+        user=owner,
+        system="SYNLORA",
+        identity_binding=binding,
+        credential_encrypted=encrypt_data("yxkey_test"),
+        is_enabled=True,
+    )
+    settings.SYNLORA_SERVICE_TOKEN = "service-token"
+    requests = []
+
+    def handler(request):
+        import httpx
+
+        requests.append({"url": str(request.url), "json": json.loads(request.content)})
+        return httpx.Response(201, json={"account_link_id": "plane-link"})
+
+    result = repair_synlora_account_links(transport=__import__("httpx").MockTransport(handler))
+
+    assert result == {"submitted": 1, "conflicts": 0, "failed": 0}
+    assert len(requests) == 1
+    assert requests[0]["json"]["synlora_user_id"] == "synlora-user"
+    assert requests[0]["json"]["external_subject"].startswith("plane-ws-")
+
+
+def test_ensure_migrates_one_legacy_stored_synlora_key(settings, monkeypatch):
+    settings.SYNLORA_BASE_URL = "http://synlora.internal:5050"
+    owner = make_user()
+    workspace = make_workspace(owner)
+    _synlora_connection(workspace)
+    ResearchAgentBackendConnection.objects.create(
+        workspace=workspace,
+        user=owner,
+        system="SYNLORA",
+        credential_encrypted=encrypt_data("yxkey_test"),
+        is_enabled=True,
+    )
+    monkeypatch.setattr(
+        "plane.research.services.agent_identity.verify_synlora_api_key",
+        lambda **_kwargs: SimpleNamespace(user_id="synlora-user", username="synlora"),
+    )
+
+    binding = ensure_synlora_identity_binding(workspace, owner)
+
+    assert binding is not None
+    connection = ResearchAgentBackendConnection.objects.get(
+        workspace=workspace, user=owner, system="SYNLORA"
+    )
+    assert connection.identity_binding == binding

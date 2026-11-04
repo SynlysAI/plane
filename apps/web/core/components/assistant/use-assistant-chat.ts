@@ -15,6 +15,7 @@ import {
   type TAgentFocusRef,
 } from "@/services/agent-dock";
 import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
+import { addLaunchSession, getLaunchHistory } from "./lib/launch-history";
 import { createSSEParser } from "./lib/parse-sse";
 
 export type TAssistantMessage = {
@@ -127,6 +128,8 @@ export const useAssistantChat = (
   const [contextEnvelope, setContextEnvelope] = useState<TAgentContextEnvelope | null>(null);
   const [selectedText, setSelectedText] = useState("");
   const [runtimeEvents, setRuntimeEvents] = useState<TAgentDockEvent[]>([]);
+  const [historySessions, setHistorySessions] = useState<TAgentDockSession[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const activeRunIdRef = useRef<string | null>(null);
   const streamingAnswerRef = useRef("");
   const sessionTargetKeyRef = useRef<string | null>(null);
@@ -141,6 +144,8 @@ export const useAssistantChat = (
   const reconnectAttemptRef = useRef(0);
   const connectRunRef = useRef<(runId: string, generation: number) => void>(() => undefined);
   const translateRef = useRef(t);
+  const pendingContextKeyRef = useRef<string | null>(null);
+  const resolvedContextKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     translateRef.current = t;
@@ -160,6 +165,33 @@ export const useAssistantChat = (
       if (timer) clearTimeout(timer);
     };
   }, []);
+
+  const contextKey = `${pathname ?? `/${workspaceSlug}`}|${JSON.stringify(pageFocusRef ?? null)}|${selectedText}`;
+
+  const refreshHistorySessions = useCallback(async () => {
+    if (!assistantStore.isOpen || !enabled) return;
+    const ownerKey = assistantStore.threadOwnerKey;
+    const history = getLaunchHistory(workspaceSlug, ownerKey);
+    setHistoryLoading(true);
+    try {
+      if (!history.sessionIds.length) {
+        setHistorySessions([]);
+        return;
+      }
+      const response = await agentDockService.listSessions(workspaceSlug, {
+        sessionIds: history.sessionIds,
+      });
+      setHistorySessions(response.results);
+    } catch {
+      setHistorySessions([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [assistantStore.isOpen, assistantStore.threadOwnerKey, enabled, workspaceSlug]);
+
+  useEffect(() => {
+    void refreshHistorySessions();
+  }, [refreshHistorySessions]);
 
   const disconnectStream = useCallback(() => {
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
@@ -376,8 +408,34 @@ export const useAssistantChat = (
   );
 
   useEffect(() => {
-    if (assistantStore.isOpen && enabled) void resolveContext(pageFocusRef ?? undefined);
-  }, [assistantStore.isOpen, enabled, pageFocusRef, resolveContext]);
+    if (!assistantStore.isOpen || !enabled) return;
+    if (ACTIVE_PHASES.has(streamState.phase) || pendingSendRef.current) {
+      if (contextKey !== resolvedContextKeyRef.current) pendingContextKeyRef.current = contextKey;
+      return;
+    }
+    if (
+      !contextEnvelope ||
+      pendingContextKeyRef.current === contextKey ||
+      contextKey !== resolvedContextKeyRef.current
+    ) {
+      void resolveContext(pageFocusRef ?? undefined).then((envelope) => {
+        if (envelope) {
+          resolvedContextKeyRef.current = contextKey;
+          pendingContextKeyRef.current = null;
+        }
+        return null;
+      });
+    }
+  }, [
+    assistantStore.isOpen,
+    contextEnvelope,
+    contextKey,
+    enabled,
+    pageFocusRef,
+    pendingSendRef,
+    resolveContext,
+    streamState.phase,
+  ]);
 
   const loadHistory = useCallback(async () => {
     const sessionId = assistantStore.threadId;
@@ -530,10 +588,12 @@ export const useAssistantChat = (
       activeRunIdRef.current = null;
       const created = await agentDockService.createSession(workspaceSlug, context.context_id);
       assistantStore.setThreadId(workspaceSlug, created.session_id);
+      addLaunchSession(workspaceSlug, assistantStore.threadOwnerKey, created.session_id);
+      void refreshHistorySessions();
       sessionTargetKeyRef.current = created.target_key;
       return created;
     },
-    [assistantStore, disconnectStream, workspaceSlug]
+    [assistantStore, disconnectStream, refreshHistorySessions, workspaceSlug]
   );
 
   const send = useCallback(
@@ -669,6 +729,26 @@ export const useAssistantChat = (
     assistantStore.clearThreadId(workspaceSlug);
   }, [assistantStore, disconnectStream, workspaceSlug]);
 
+  /** Switch to one session from this browser launch batch. */
+  const selectHistorySession = useCallback(
+    (sessionId: string) => {
+      if (ACTIVE_PHASES.has(streamState.phase) || pendingSendRef.current) return;
+      generationRef.current += 1;
+      disconnectStream();
+      approvalPendingRef.current = false;
+      activeRunIdRef.current = null;
+      latestSeqRef.current = -1;
+      processedSeqRef.current = new Set();
+      setRuntimeEvents([]);
+      setMessages([]);
+      setStreamingAnswer("");
+      streamingAnswerRef.current = "";
+      setStreamState({ phase: "idle" });
+      assistantStore.setThreadId(workspaceSlug, sessionId);
+    },
+    [assistantStore, disconnectStream, streamState.phase, workspaceSlug]
+  );
+
   useEffect(() => {
     if (!assistantStore.isOpen || !enabled || !activeRunIdRef.current || !ACTIVE_PHASES.has(streamState.phase)) return;
     connectRunRef.current(activeRunIdRef.current, generationRef.current);
@@ -697,11 +777,15 @@ export const useAssistantChat = (
     contextEnvelope,
     contextStatus,
     runtimeEvents,
+    historySessions,
+    historyLoading,
     latestEventAt: runtimeEvents.at(-1)?.created_at ?? null,
     send,
     stop,
     answerApproval,
     disconnect,
     reset,
+    refreshHistorySessions,
+    selectHistorySession,
   };
 };

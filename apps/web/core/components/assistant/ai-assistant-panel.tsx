@@ -5,7 +5,14 @@
  */
 
 import { observer } from "mobx-react";
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import Link from "next/link";
 import { useTranslation } from "@plane/i18n";
 import {
@@ -15,6 +22,7 @@ import {
   Cloud,
   FileSearch,
   HardDrive,
+  History,
   Link2,
   Loader2,
   Maximize2,
@@ -30,7 +38,6 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@plane/propel/button";
-import { EPortalPosition, EPortalWidth, ModalPortal } from "@plane/propel/portal";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 // components
@@ -42,6 +49,7 @@ import type { TAssistantStatus } from "@/services/assistant";
 import type { TAgentFocusRef } from "@/services/agent-dock";
 // store
 import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
+import { AGENT_DOCK_MAX_WIDTH, AGENT_DOCK_MIN_WIDTH } from "@/store/ai-assistant";
 
 type Props = {
   workspaceSlug: string;
@@ -49,6 +57,8 @@ type Props = {
   onRetryStatus?: () => void;
   focusRef?: TAgentFocusRef | null;
 };
+
+const ACTIVE_CLOUD_PHASES = new Set(["connecting", "running", "waiting_approval", "cancelling", "disconnected"]);
 
 /** Render assistant markdown with restrained Plane surface and typography tokens. */
 const AnswerMarkdown = observer(function AnswerMarkdown({ content }: { content: string }) {
@@ -110,6 +120,49 @@ function ToolLine({ name, status }: { name: string; status?: string }) {
   );
 }
 
+/** Show a compact, conversation-inline execution timeline without chain-of-thought content. */
+function InlineRunTimeline({
+  active,
+  phaseLabel,
+  latestEventLabel,
+  tools,
+}: {
+  active: boolean;
+  phaseLabel: string;
+  latestEventLabel: string;
+  tools: ReturnType<typeof mergeRuntimeToolCalls>;
+}) {
+  const { t } = useTranslation();
+  const visibleTools = tools.slice(-4);
+  return (
+    <section
+      aria-label={t("aiAssistant.runtime_inline")}
+      className="ml-auto w-full max-w-[85%] border-l border-subtle pl-3"
+    >
+      <div className="flex items-center gap-2 text-11 text-secondary">
+        {active && <Loader2 className="size-3 animate-spin text-accent-primary" />}
+        <span className="font-medium text-primary">{phaseLabel}</span>
+        <span className="text-tertiary">{t("aiAssistant.runtime_latest_event", { label: latestEventLabel })}</span>
+      </div>
+      {visibleTools.length ? (
+        <ol className="mt-2 space-y-1" role="list">
+          {visibleTools.map((tool) => (
+            <li key={tool.id} className="flex min-w-0 items-center justify-between gap-3 text-11">
+              <span className="min-w-0 truncate text-secondary">{tool.name}</span>
+              <span className="shrink-0 text-tertiary">
+                {tool.status}
+                {tool.duration_ms !== null ? ` · ${tool.duration_ms}ms` : ""}
+              </span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="mt-1 text-10 text-tertiary">{t("aiAssistant.runtime_waiting_events")}</p>
+      )}
+    </section>
+  );
+}
+
 export const AIAssistantPanel = observer(function AIAssistantPanel({
   workspaceSlug,
   statusState,
@@ -122,6 +175,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
   const cloud = useAssistantChat(workspaceSlug, { enabled: cloudReady, focusRef });
   const local = useWorkbenchChat(workspaceSlug, assistantStore.contextNodeId);
   const [input, setInput] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
   const provider = assistantStore.activeProvider;
@@ -168,12 +222,14 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
     }
     if (provider === "local") local.reset();
     else cloud.reset();
+    setHistoryOpen(false);
     assistantStore.setActiveView("conversation");
   };
 
   /** Drag a docked panel without overlaying or blocking the main workspace. */
   const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!effectiveDockMode) return;
+    if (event.button !== 0) return;
     event.preventDefault();
     const startX = event.clientX;
     const startWidth = assistantStore.width;
@@ -183,9 +239,28 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
     const stop = () => {
       document.removeEventListener("pointermove", move);
       document.removeEventListener("pointerup", stop);
+      document.removeEventListener("pointercancel", stop);
     };
     document.addEventListener("pointermove", move);
     document.addEventListener("pointerup", stop);
+    document.addEventListener("pointercancel", stop);
+  };
+
+  /** Provide an accessible keyboard equivalent for the dock resize handle. */
+  const resizeWithKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!effectiveDockMode) return;
+    const step = event.key === "ArrowLeft" ? 16 : event.key === "ArrowRight" ? -16 : 0;
+    if (!step && event.key !== "Home" && event.key !== "End") return;
+    event.preventDefault();
+    if (event.key === "Home") {
+      assistantStore.setWidth(AGENT_DOCK_MIN_WIDTH);
+      return;
+    }
+    if (event.key === "End") {
+      assistantStore.setWidth(AGENT_DOCK_MAX_WIDTH);
+      return;
+    }
+    assistantStore.setWidth(assistantStore.width + step);
   };
 
   const providerSelect = (
@@ -608,6 +683,16 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
             <Button
               variant="ghost"
               size="sm"
+              onClick={() => setHistoryOpen((open) => !open)}
+              aria-label={t("aiAssistant.launch_history")}
+              title={t("aiAssistant.launch_history")}
+              aria-pressed={historyOpen}
+            >
+              <History className="size-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => void startNewConversation()}
               aria-label={t("aiAssistant.new_conversation")}
               title={t("aiAssistant.new_conversation")}
@@ -681,6 +766,53 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
         contextView
       ) : assistantStore.activeView === "runtime" ? (
         runtimeView
+      ) : provider === "cloud" && historyOpen ? (
+        <section className="min-h-0 flex-1 overflow-y-auto px-4 py-4" aria-label={t("aiAssistant.launch_history")}>
+          <header className="pb-3">
+            <h3 className="text-12 font-semibold text-primary">{t("aiAssistant.launch_history")}</h3>
+            <p className="mt-1 text-11 text-tertiary">{t("aiAssistant.launch_history_hint")}</p>
+          </header>
+          {cloud.historyLoading ? (
+            <p className="py-3 text-11 text-tertiary">{t("common.loading")}</p>
+          ) : cloud.historySessions.length ? (
+            <ol className="divide-y divide-subtle border-t border-subtle" role="list">
+              {cloud.historySessions.map((item) => (
+                <li key={item.session_id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      cloud.selectHistorySession(item.session_id);
+                      setHistoryOpen(false);
+                    }}
+                    className={`flex w-full flex-col gap-1 px-1 py-3 text-left transition hover:bg-surface-2 ${
+                      assistantStore.threadId === item.session_id ? "bg-surface-2" : ""
+                    }`}
+                  >
+                    <span className="flex min-w-0 items-center justify-between gap-3">
+                      <span className="truncate text-12 font-medium text-primary">
+                        {item.target_title ?? item.target_metadata?.target.title ?? item.target_type}
+                      </span>
+                      <time className="shrink-0 text-10 text-tertiary">
+                        {new Date(item.updated_at ?? item.created_at ?? 0).toLocaleString()}
+                      </time>
+                    </span>
+                    <span className="truncate text-11 text-secondary">
+                      {item.target_metadata?.page?.focus_title ||
+                        item.target_metadata?.page?.page_kind ||
+                        t("aiAssistant.launch_history_page")}
+                    </span>
+                    <span className="flex min-w-0 items-center gap-2 text-10 text-tertiary">
+                      <span className="truncate">{item.target_metadata?.page?.route || item.target_key}</span>
+                      <span className="shrink-0">{item.status}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="py-3 text-11 text-tertiary">{t("aiAssistant.launch_history_empty")}</p>
+          )}
+        </section>
       ) : (
         <>
           <div ref={listRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
@@ -714,6 +846,18 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
                     </div>
                   </div>
                 )
+              )}
+
+            {provider === "cloud" &&
+              (runtimeTools.length > 0 ||
+                ACTIVE_CLOUD_PHASES.has(cloud.streamState.phase) ||
+                cloud.streamState.phase === "completed") && (
+                <InlineRunTimeline
+                  active={ACTIVE_CLOUD_PHASES.has(cloud.streamState.phase)}
+                  phaseLabel={phaseLabel}
+                  latestEventLabel={latestEventLabel}
+                  tools={runtimeTools}
+                />
               )}
 
             {provider === "cloud" &&
@@ -872,38 +1016,32 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
     </div>
   );
 
-  if (assistantStore.isOpen && effectiveDockMode && !assistantStore.expanded) {
-    return (
-      <aside
-        aria-label={t("aiAssistant.title")}
-        data-agent-dock-mode="docked"
-        className="relative flex h-full w-full min-w-0 flex-col border-l border-subtle bg-surface-1"
-      >
+  return (
+    <aside
+      aria-label={t("aiAssistant.title")}
+      data-testid="assistant-panel"
+      data-agent-dock-mode={
+        assistantStore.isOpen && effectiveDockMode && !assistantStore.expanded ? "docked" : "floating"
+      }
+      className={`relative h-full w-full min-w-0 flex-col border-l border-subtle bg-surface-1 ${
+        assistantStore.isOpen ? "flex" : "hidden"
+      }`}
+    >
+      {assistantStore.isOpen && effectiveDockMode && !assistantStore.expanded && (
         <div
           onPointerDown={startResize}
+          onKeyDown={resizeWithKeyboard}
           role="separator"
           aria-orientation="vertical"
           aria-label={t("aiAssistant.resize")}
           tabIndex={0}
+          aria-valuemin={AGENT_DOCK_MIN_WIDTH}
+          aria-valuemax={AGENT_DOCK_MAX_WIDTH}
+          aria-valuenow={assistantStore.width}
           className="absolute top-0 left-0 h-full w-1 cursor-col-resize bg-transparent transition hover:bg-accent-primary/30 focus-visible:bg-accent-primary/40"
         />
-        {panelBody}
-      </aside>
-    );
-  }
-
-  return (
-    <ModalPortal
-      isOpen={assistantStore.isOpen}
-      onClose={() => assistantStore.close()}
-      showOverlay={false}
-      closeOnOverlayClick={false}
-      className="pointer-events-none"
-      position={EPortalPosition.RIGHT}
-      width={assistantStore.expanded ? EPortalWidth.FULL : EPortalWidth.QUARTER}
-      contentClassName="pointer-events-auto flex h-full min-w-[min(26.25rem,100vw)] flex-col border-l border-subtle bg-surface-1"
-    >
+      )}
       {panelBody}
-    </ModalPortal>
+    </aside>
   );
 });
