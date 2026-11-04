@@ -488,7 +488,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
                 <TableHead>{t("research.reports.columns.read_state")}</TableHead>
                 <TableHead>{t("research.reports.columns.visibility")}</TableHead>
                 <TableHead className="text-right">{t("research.chains.updated_at")}</TableHead>
-                <TableHead className="sticky right-0 z-10 bg-layer-1 text-right">
+                <TableHead className="sticky right-0 z-10 border-l border-subtle bg-layer-1 text-right">
                   {t("research.approvals.columns.actions")}
                 </TableHead>
               </TableRow>

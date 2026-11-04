@@ -162,7 +162,7 @@ export const IssuePeekOverviewHeader = observer(function IssuePeekOverviewHeader
 
   return (
     <div
-      className={`relative flex flex-wrap items-center justify-between gap-3 p-4 ${
+      className={`relative flex shrink-0 flex-wrap items-center justify-between gap-3 p-4 ${
         currentMode?.key === "full-screen" ? "border-b border-subtle" : ""
       }`}
     >

@@ -135,7 +135,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
   const peekOverviewIssueClassName = cn(
     !embedIssue
       ? "absolute z-[25] flex flex-col overflow-hidden rounded-sm border border-subtle bg-surface-1 transition-all duration-300"
-      : `h-full w-full`,
+      : "flex h-full w-full flex-col",
     !embedIssue && {
       "h-full w-full border-0": peekMode === "side-peek",
       "top-[8.33%] left-[8.33%] size-5/6": peekMode === "modal",
@@ -186,7 +186,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                 embedIssue={embedIssue}
               />
               {/* content */}
-              <div className="vertical-scrollbar relative scrollbar-md h-full w-full overflow-hidden overflow-y-auto">
+              <div className="vertical-scrollbar relative scrollbar-md min-h-0 w-full flex-1 overflow-hidden overflow-y-auto">
                 {["side-peek", "modal"].includes(peekMode) ? (
                   <div className="relative flex flex-col gap-3 space-y-3 px-8 py-5">
                     <PeekOverviewIssueDetails
