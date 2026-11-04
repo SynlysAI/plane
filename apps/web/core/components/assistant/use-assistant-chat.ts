@@ -563,7 +563,7 @@ export const useAssistantChat = (
         ]);
         const updated = await agentDockService.sendMessage(workspaceSlug, session.session_id, query, {
           route: pathname ?? `/${workspaceSlug}`,
-          messageFocusRef,
+          focusRef: messageFocusRef,
           selectedText,
         });
         if (generationRef.current !== generation) {

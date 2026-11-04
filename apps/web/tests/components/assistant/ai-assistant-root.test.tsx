@@ -54,6 +54,16 @@ let root: Root;
 
 beforeEach(() => {
   mocks.getStatus.mockReturnValue({ enabled: true, ready: true, state: "ready" });
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: query === "(min-width: 1440px)",
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -77,7 +87,7 @@ it("keeps a full-height shell and shows setup entry when Synlora is not configur
       // eslint-disable-next-line react/jsx-no-constructed-context-values -- test-only provider value
       <StoreContext.Provider value={{ aiAssistant: store } as never}>
         <AIAssistantRoot>
-          <main>project page</main>
+          <main data-testid="unique-route-page">project page</main>
         </AIAssistantRoot>
       </StoreContext.Provider>
     );
@@ -87,9 +97,12 @@ it("keeps a full-height shell and shows setup entry when Synlora is not configur
   const shell = container.firstElementChild;
   expect(shell?.classList.contains("size-full")).toBe(true);
   expect(shell?.classList.contains("min-h-0")).toBe(true);
-  expect(shell?.firstElementChild?.classList.contains("size-full")).toBe(true);
-  expect(shell?.firstElementChild?.classList.contains("min-h-0")).toBe(true);
+  const workspace = shell?.querySelector("[data-right-dock-workspace]");
+  expect(workspace?.classList.contains("min-h-0")).toBe(true);
+  expect(workspace?.children).toHaveLength(1);
+  expect(container.querySelectorAll('[data-testid="unique-route-page"]')).toHaveLength(1);
   expect(container.querySelector('[aria-label="aiAssistant.open"]')).not.toBeNull();
+  expect(container.querySelector("[data-right-dock-rail]")).toBeNull();
   expect(container.textContent).toContain("project page");
 });
 
@@ -115,7 +128,7 @@ it("keeps the dock shell and page outlet alive across route content changes", { 
         // eslint-disable-next-line react/jsx-no-constructed-context-values -- test-only provider value
         <StoreContext.Provider value={{ aiAssistant: store } as never}>
           <AIAssistantRoot>
-            <main>{label}</main>
+            <main data-testid="route-page">{label}</main>
           </AIAssistantRoot>
         </StoreContext.Provider>
       );
@@ -131,7 +144,34 @@ it("keeps the dock shell and page outlet alive across route content changes", { 
 
   expect(container.firstElementChild).toBe(shell);
   expect(container.querySelector('[data-testid="assistant-panel"]')).not.toBeNull();
+  expect(container.querySelectorAll('[data-testid="route-page"]')).toHaveLength(1);
   expect(container.textContent).toContain("research-chain");
+});
+
+it("keeps a floating agent above the page without a persistent rail", async () => {
+  mocks.getStatus.mockReturnValue({ enabled: true, ready: true, state: "ready" });
+  const { AIAssistantRoot } = await import("@/components/assistant/ai-assistant-root");
+  const { AIAssistantStore } = await import("@/store/ai-assistant");
+  const { StoreContext } = await import("@/lib/store-context");
+  const store = new AIAssistantStore();
+  store.hydrate("lab");
+  store.setDockMode("floating");
+  store.open();
+
+  await act(async () =>
+    root.render(
+      // eslint-disable-next-line react/jsx-no-constructed-context-values -- test-only provider value
+      <StoreContext.Provider value={{ aiAssistant: store } as never}>
+        <AIAssistantRoot>
+          <main data-testid="floating-route-page">floating page</main>
+        </AIAssistantRoot>
+      </StoreContext.Provider>
+    )
+  );
+
+  expect(container.querySelectorAll('[data-testid="floating-route-page"]')).toHaveLength(1);
+  expect(container.querySelector('[data-testid="assistant-panel"]')).not.toBeNull();
+  expect(container.querySelector("[data-right-dock-rail]")).toBeNull();
 });
 
 it("hydrates the assistant thread with the current user scope", { timeout: 20000 }, async () => {

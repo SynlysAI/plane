@@ -40,7 +40,13 @@ it("renders detail and agent as sibling flow columns without a fixed overlay", a
   await act(async () =>
     root.render(
       <RightDockProvider>
-        <RightDockShell agentOpen onOpenAgent={() => undefined} agentPanel={<aside data-testid="agent" />}>
+        <RightDockShell
+          agentOpen
+          agentDocked
+          launcherVisible={false}
+          onOpenAgent={() => undefined}
+          agentPanel={<aside data-testid="agent" />}
+        >
           <main data-testid="main">workspace page</main>
           <RightDockPortal
             id="task-1"
@@ -62,6 +68,8 @@ it("renders detail and agent as sibling flow columns without a fixed overlay", a
   expect(main).not.toBeNull();
   expect(detail).not.toBeNull();
   expect(agent).not.toBeNull();
+  expect(document.querySelectorAll("[data-right-dock-workspace]")).toHaveLength(1);
+  expect(document.querySelector("[data-right-dock-rail]")).not.toBeNull();
   expect(detail?.classList.contains("fixed")).toBe(false);
   expect(Boolean(main?.compareDocumentPosition(detail) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   expect(document.querySelector('[data-testid="detail-body"]')?.textContent).toBe("任务详情");
@@ -74,7 +82,7 @@ it("escape closes the active detail before the persistent agent slot", async () 
   await act(async () =>
     root.render(
       <RightDockProvider>
-        <RightDockShell agentOpen onOpenAgent={() => undefined} agentPanel={<aside data-testid="agent" />}>
+        <RightDockShell agentOpen agentDocked onOpenAgent={() => undefined} agentPanel={<aside data-testid="agent" />}>
           <main>page</main>
           <RightDockPortal id="issue-1" title="任务详情" onClose={closeDetail}>
             <div>任务详情</div>
@@ -91,4 +99,37 @@ it("escape closes the active detail before the persistent agent slot", async () 
   expect(closeDetail).toHaveBeenCalledOnce();
   expect(document.querySelector('[data-testid="agent"]')).not.toBeNull();
   expect(document.querySelector('[data-right-dock-detail="issue-1"]')).toBeNull();
+});
+
+it("shows the floating launcher instead of a persistent rail when no dock is active", async () => {
+  const { RightDockProvider, RightDockShell } = await import("@/components/right-dock");
+  await act(async () =>
+    root.render(
+      <RightDockProvider>
+        <RightDockShell onOpenAgent={() => undefined} agentPanel={<aside data-testid="agent" />}>
+          <div>workspace page</div>
+        </RightDockShell>
+      </RightDockProvider>
+    )
+  );
+
+  expect(document.querySelector("[data-right-dock-agent-launcher]")).not.toBeNull();
+  expect(document.querySelector("[data-right-dock-rail]")).toBeNull();
+  expect(document.querySelector('[data-testid="agent"]')).toBeNull();
+});
+
+it("does not show a rail for a floating agent", async () => {
+  const { RightDockProvider, RightDockShell } = await import("@/components/right-dock");
+  await act(async () =>
+    root.render(
+      <RightDockProvider>
+        <RightDockShell agentOpen onOpenAgent={() => undefined} agentPanel={<aside data-testid="agent" />}>
+          <div>workspace page</div>
+        </RightDockShell>
+      </RightDockProvider>
+    )
+  );
+
+  expect(document.querySelector('[data-testid="agent"]')).not.toBeNull();
+  expect(document.querySelector("[data-right-dock-rail]")).toBeNull();
 });
