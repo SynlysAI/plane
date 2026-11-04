@@ -21,8 +21,10 @@ from plane.db.models import (
     ResearchFeedback,
     SystemAnnouncement,
     User,
+    WorkspaceMember,
 )
 from plane.app.services.inbox import generate_inbox_todo_reminders, todo_payload_hash
+from plane.app.views.notification.base import renderable_inbox_notifications
 from plane.research.utils.notifications import notify_report_comment
 
 
@@ -222,6 +224,46 @@ class TestUnifiedWorkspaceInbox:
             "work_item_unread_count": 0,
             "system_unread_count": 1,
         }
+
+    def test_feedback_notification_is_hidden_when_receiver_cannot_reply(
+        self, workspace, create_user
+    ):
+        """Feedback inbox visibility follows the recipient's current feedback access."""
+        WorkspaceMember.objects.filter(workspace=workspace, member=create_user).update(role=15)
+        author = User.objects.create(
+            username=f"feedback-author-{uuid4().hex}",
+            email=f"feedback-author-{uuid4()}@example.com",
+            first_name="Author",
+        )
+        feedback = ResearchFeedback.objects.create(
+            workspace=workspace,
+            username="Feedback author",
+            feedback_type="bug",
+            content="Private report",
+            created_by=author,
+            idempotency_key=uuid4().hex,
+            payload_hash=uuid4().hex,
+        )
+        notification = Notification.objects.create(
+            workspace=workspace,
+            receiver=create_user,
+            entity_identifier=feedback.id,
+            entity_name="research_feedback",
+            title="反馈有新回复",
+            message={"action": "replied"},
+            sender="research:feedback",
+            triggered_by=author,
+            data={"action": "replied", "feedback_id": str(feedback.id)},
+        )
+
+        assert not renderable_inbox_notifications(workspace.slug, create_user.id).filter(
+            pk=notification.pk
+        ).exists()
+
+        WorkspaceMember.objects.filter(workspace=workspace, member=create_user).update(is_active=False)
+        assert not renderable_inbox_notifications(workspace.slug, create_user.id).filter(
+            pk=notification.pk
+        ).exists()
 
     def test_system_announcements_include_body_for_inbox_detail(
         self, session_client, workspace, create_user, monkeypatch

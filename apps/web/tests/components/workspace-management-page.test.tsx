@@ -58,6 +58,11 @@ vi.mock("@/components/research/feedback/feedback-dialog", () => ({
     <div data-testid="feedback-management" data-management-only={String(managementOnly)} />
   ),
 }));
+vi.mock("@/components/workspace/workspace-notification-settings", () => ({
+  WorkspaceNotificationSettings: ({ workspaceSlug }: { workspaceSlug: string }) => (
+    <div data-testid="workspace-notification-settings" data-workspace-slug={workspaceSlug} />
+  ),
+}));
 vi.mock("@/services/project-domains.service", () => ({
   ProjectDomainsService: class {
     setResearchEnabled = vi.fn();
@@ -201,10 +206,20 @@ it("将反馈管理置于科研管理之后，并在打开时渲染独立管理�
 
   expect(
     Array.from(container.querySelectorAll('nav[aria-label="管理分类"] button')).map((button) => button.textContent)
-  ).toEqual(["工作区设置", "行政组织", "科研管理", "反馈管理"]);
+  ).toEqual(["工作区设置", "通知管理", "行政组织", "科研管理", "反馈管理"]);
   expect(container.querySelector('[data-testid="feedback-management"]')?.getAttribute("data-management-only")).toBe(
     "true"
   );
+});
+
+it("为工作区管理员显示通知管理并在直达页签时渲染策略设置", async () => {
+  mocks.query = "tab=notifications";
+
+  await render();
+
+  expect(
+    container.querySelector('[data-testid="workspace-notification-settings"]')?.getAttribute("data-workspace-slug")
+  ).toBe("public");
 });
 
 it("点击反馈管理时写入反馈页签查询参数", async () => {

@@ -66,7 +66,7 @@ from plane.db.models import (
     FileAsset,
     CycleIssue,
 )
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.utils.issue_mutations import notification_atomic_mutation, queue_issue_activity
 from plane.utils.issue_filters import issue_filters
 
 
@@ -282,6 +282,7 @@ class IssueCommentPublicViewSet(BaseViewSet):
         except DeployBoard.DoesNotExist:
             return IssueComment.objects.none()
 
+    @notification_atomic_mutation
     def create(self, request, anchor, issue_id):
         project_deploy_board = DeployBoard.objects.get(anchor=anchor, entity_name="project")
 
@@ -303,7 +304,7 @@ class IssueCommentPublicViewSet(BaseViewSet):
                 actor=request.user,
                 access="EXTERNAL",
             )
-            issue_activity.delay(
+            queue_issue_activity(
                 type="comment.activity.created",
                 requested_data=json.dumps(serializer.data, cls=DjangoJSONEncoder),
                 actor_id=str(request.user.id),
@@ -325,6 +326,7 @@ class IssueCommentPublicViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @notification_atomic_mutation
     def partial_update(self, request, anchor, issue_id, pk):
         project_deploy_board = DeployBoard.objects.get(anchor=anchor, entity_name="project")
 
@@ -345,7 +347,7 @@ class IssueCommentPublicViewSet(BaseViewSet):
         serializer = IssueCommentSerializer(comment, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
-            issue_activity.delay(
+            queue_issue_activity(
                 type="comment.activity.updated",
                 requested_data=json.dumps(request.data, cls=DjangoJSONEncoder),
                 actor_id=str(request.user.id),
@@ -357,6 +359,7 @@ class IssueCommentPublicViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @notification_atomic_mutation
     def destroy(self, request, anchor, issue_id, pk):
         project_deploy_board = DeployBoard.objects.get(anchor=anchor, entity_name="project")
 
@@ -374,7 +377,7 @@ class IssueCommentPublicViewSet(BaseViewSet):
             access="EXTERNAL",
             actor=request.user,
         )
-        issue_activity.delay(
+        queue_issue_activity(
             type="comment.activity.deleted",
             requested_data=json.dumps({"comment_id": str(pk)}),
             actor_id=str(request.user.id),
@@ -411,6 +414,7 @@ class IssueReactionPublicViewSet(BaseViewSet):
         except DeployBoard.DoesNotExist:
             return IssueReaction.objects.none()
 
+    @notification_atomic_mutation
     def create(self, request, anchor, issue_id):
         project_deploy_board = DeployBoard.objects.get(anchor=anchor, entity_name="project")
 
@@ -440,7 +444,7 @@ class IssueReactionPublicViewSet(BaseViewSet):
                 _ = ProjectPublicMember.objects.get_or_create(
                     project_id=project_deploy_board.project_id, member=request.user
                 )
-            issue_activity.delay(
+            queue_issue_activity(
                 type="issue_reaction.activity.created",
                 requested_data=json.dumps(self.request.data, cls=DjangoJSONEncoder),
                 actor_id=str(self.request.user.id),
@@ -452,6 +456,7 @@ class IssueReactionPublicViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @notification_atomic_mutation
     def destroy(self, request, anchor, issue_id, reaction_code):
         project_deploy_board = DeployBoard.objects.get(anchor=anchor, entity_name="project")
 
@@ -470,7 +475,7 @@ class IssueReactionPublicViewSet(BaseViewSet):
             reaction=reaction_code,
             actor=request.user,
         )
-        issue_activity.delay(
+        queue_issue_activity(
             type="issue_reaction.activity.deleted",
             requested_data=None,
             actor_id=str(self.request.user.id),
@@ -508,6 +513,7 @@ class CommentReactionPublicViewSet(BaseViewSet):
         except DeployBoard.DoesNotExist:
             return CommentReaction.objects.none()
 
+    @notification_atomic_mutation
     def create(self, request, anchor, comment_id):
         project_deploy_board = DeployBoard.objects.get(anchor=anchor, entity_name="project")
 
@@ -537,7 +543,7 @@ class CommentReactionPublicViewSet(BaseViewSet):
                 _ = ProjectPublicMember.objects.get_or_create(
                     project_id=project_deploy_board.project_id, member=request.user
                 )
-            issue_activity.delay(
+            queue_issue_activity(
                 type="comment_reaction.activity.created",
                 requested_data=json.dumps(self.request.data, cls=DjangoJSONEncoder),
                 actor_id=str(self.request.user.id),
@@ -555,6 +561,7 @@ class CommentReactionPublicViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @notification_atomic_mutation
     def destroy(self, request, anchor, comment_id, reaction_code):
         project_deploy_board = DeployBoard.objects.get(anchor=anchor, entity_name="project")
         if not project_deploy_board.is_reactions_enabled:
@@ -573,7 +580,7 @@ class CommentReactionPublicViewSet(BaseViewSet):
             reaction=reaction_code,
             actor=request.user,
         )
-        issue_activity.delay(
+        queue_issue_activity(
             type="comment_reaction.activity.deleted",
             requested_data=None,
             actor_id=str(self.request.user.id),
@@ -613,6 +620,7 @@ class IssueVotePublicViewSet(BaseViewSet):
         except DeployBoard.DoesNotExist:
             return IssueVote.objects.none()
 
+    @notification_atomic_mutation
     def create(self, request, anchor, issue_id):
         project_deploy_board = DeployBoard.objects.get(anchor=anchor, entity_name="project")
 
@@ -642,7 +650,7 @@ class IssueVotePublicViewSet(BaseViewSet):
             )
         issue_vote.vote = request.data.get("vote", 1)
         issue_vote.save()
-        issue_activity.delay(
+        queue_issue_activity(
             type="issue_vote.activity.created",
             requested_data=json.dumps(self.request.data, cls=DjangoJSONEncoder),
             actor_id=str(self.request.user.id),
@@ -654,6 +662,7 @@ class IssueVotePublicViewSet(BaseViewSet):
         serializer = IssueVoteSerializer(issue_vote)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    @notification_atomic_mutation
     def destroy(self, request, anchor, issue_id):
         project_deploy_board = DeployBoard.objects.get(anchor=anchor, entity_name="project")
         issue_vote = IssueVote.objects.get(
@@ -662,7 +671,7 @@ class IssueVotePublicViewSet(BaseViewSet):
             project_id=project_deploy_board.project_id,
             workspace_id=project_deploy_board.workspace_id,
         )
-        issue_activity.delay(
+        queue_issue_activity(
             type="issue_vote.activity.deleted",
             requested_data=None,
             actor_id=str(self.request.user.id),

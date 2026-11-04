@@ -120,8 +120,8 @@ def replace_issue_cc(*, project, issue, actor, user_ids):
     with transaction.atomic():
         type(issue).objects.select_for_update().get(pk=issue.pk)
         rows = _rows(issue)
-        existing_ids = {row.subscriber_id for row in rows}
-        current_cc_ids = {row.subscriber_id for row in rows if row.source == IssueSubscriber.Source.CC}
+        existing_ids = {str(row.subscriber_id) for row in rows}
+        current_cc_ids = {str(row.subscriber_id) for row in rows if row.source == IssueSubscriber.Source.CC}
         added_ids = desired_ids - existing_ids
         removed_ids = current_cc_ids - desired_ids
 

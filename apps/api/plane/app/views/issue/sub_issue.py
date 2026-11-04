@@ -23,7 +23,7 @@ from .. import BaseAPIView
 from plane.app.serializers import IssueSerializer
 from plane.app.permissions import ProjectEntityPermission
 from plane.db.models import Issue, IssueLink, FileAsset, CycleIssue, IssueLabel, ModuleIssue
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.utils.issue_mutations import notification_atomic_mutation, queue_issue_activity
 from plane.utils.timezone_converter import user_timezone_converter
 from collections import defaultdict
 from plane.utils.host import base_host
@@ -207,6 +207,7 @@ class SubIssuesEndpoint(BaseAPIView):
         )
 
     # Assign multiple sub issues
+    @notification_atomic_mutation
     def post(self, request, slug, project_id, issue_id):
         # SECURITY: bind the parent issue to the URL workspace + project. A bare
         # pk lookup let any project member re-parent issues under a parent in a
@@ -249,7 +250,7 @@ class SubIssuesEndpoint(BaseAPIView):
 
         # Track the issue
         _ = [
-            issue_activity.delay(
+            queue_issue_activity(
                 type="issue.activity.updated",
                 requested_data=json.dumps({"parent": str(issue_id)}),
                 actor_id=str(request.user.id),

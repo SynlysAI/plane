@@ -19,7 +19,7 @@ from rest_framework.response import Response
 
 from plane.app.permissions import allow_permission, ROLE
 from plane.app.serializers import ModuleIssueSerializer
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.utils.issue_mutations import notification_atomic_mutation, queue_issue_activity
 from plane.db.models import (
     Issue,
     FileAsset,
@@ -213,6 +213,7 @@ class ModuleIssueViewSet(BaseViewSet):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     # create multiple issues inside a module
+    @notification_atomic_mutation
     def create_module_issues(self, request, slug, project_id, module_id):
         issues = request.data.get("issues", [])
         if not issues:
@@ -243,7 +244,7 @@ class ModuleIssueViewSet(BaseViewSet):
         )
         # Bulk Update the activity
         _ = [
-            issue_activity.delay(
+            queue_issue_activity(
                 type="module.activity.created",
                 requested_data=json.dumps({"module_id": str(module_id)}),
                 actor_id=str(request.user.id),
@@ -260,6 +261,7 @@ class ModuleIssueViewSet(BaseViewSet):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     # add multiple module inside an issue and remove multiple modules from an issue
+    @notification_atomic_mutation
     def create_issue_modules(self, request, slug, project_id, issue_id):
         modules = request.data.get("modules", [])
         removed_modules = request.data.get("removed_modules", [])
@@ -292,7 +294,7 @@ class ModuleIssueViewSet(BaseViewSet):
             )
             # Bulk Update the activity
             _ = [
-                issue_activity.delay(
+                queue_issue_activity(
                     type="module.activity.created",
                     requested_data=json.dumps({"module_id": module}),
                     actor_id=str(request.user.id),
@@ -313,7 +315,7 @@ class ModuleIssueViewSet(BaseViewSet):
                 module_id=module_id,
                 issue_id=issue_id,
             )
-            issue_activity.delay(
+            queue_issue_activity(
                 type="module.activity.deleted",
                 requested_data=json.dumps({"module_id": str(module_id)}),
                 actor_id=str(request.user.id),
@@ -337,6 +339,7 @@ class ModuleIssueViewSet(BaseViewSet):
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @notification_atomic_mutation
     def destroy(self, request, slug, project_id, module_id, issue_id):
         project = Project.objects.get(pk=project_id)
         issue = Issue.objects.filter(workspace__slug=slug, project_id=project_id, pk=issue_id).first()
@@ -354,7 +357,7 @@ class ModuleIssueViewSet(BaseViewSet):
             module_id=module_id,
             issue_id=issue_id,
         )
-        issue_activity.delay(
+        queue_issue_activity(
             type="module.activity.deleted",
             requested_data=json.dumps({"module_id": str(module_id)}),
             actor_id=str(request.user.id),

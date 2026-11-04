@@ -142,9 +142,9 @@ def replace_research_task_cc(*, workspace, chain, task, actor, user_ids, request
     with transaction.atomic():
         locked_task = type(task).objects.select_for_update().get(pk=task.pk)
         rows = _subscriptions(locked_task)
-        existing_ids = {row.subscriber_id for row in rows}
+        existing_ids = {str(row.subscriber_id) for row in rows}
         current_cc_ids = {
-            row.subscriber_id for row in rows if row.source == ResearchTaskSubscriber.Source.CC
+            str(row.subscriber_id) for row in rows if row.source == ResearchTaskSubscriber.Source.CC
         }
         added_ids = desired_ids - existing_ids
         removed_ids = current_cc_ids - desired_ids

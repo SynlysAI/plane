@@ -23,7 +23,7 @@ from plane.app.serializers import (
     IssueSerializer,
     IssueDetailSerializer,
 )
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.utils.issue_mutations import notification_atomic_mutation, queue_issue_activity
 from plane.db.models import (
     Issue,
     FileAsset,
@@ -254,6 +254,7 @@ class IssueArchiveViewSet(BaseViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @notification_atomic_mutation
     def archive(self, request, slug, project_id, pk=None):
         issue = Issue.issue_objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
         if issue.state.group not in ["completed", "cancelled"]:
@@ -261,7 +262,7 @@ class IssueArchiveViewSet(BaseViewSet):
                 {"error": "Can only archive completed or cancelled state group issue"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        issue_activity.delay(
+        queue_issue_activity(
             type="issue.activity.updated",
             requested_data=json.dumps({"archived_at": str(timezone.now().date()), "automation": False}),
             actor_id=str(request.user.id),
@@ -278,6 +279,7 @@ class IssueArchiveViewSet(BaseViewSet):
         return Response({"archived_at": str(issue.archived_at)}, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @notification_atomic_mutation
     def unarchive(self, request, slug, project_id, pk=None):
         issue = Issue.objects.get(
             workspace__slug=slug,
@@ -285,7 +287,7 @@ class IssueArchiveViewSet(BaseViewSet):
             archived_at__isnull=False,
             pk=pk,
         )
-        issue_activity.delay(
+        queue_issue_activity(
             type="issue.activity.updated",
             requested_data=json.dumps({"archived_at": None}),
             actor_id=str(request.user.id),
@@ -306,6 +308,7 @@ class BulkArchiveIssuesEndpoint(BaseAPIView):
     permission_classes = [ProjectEntityPermission]
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @notification_atomic_mutation
     def post(self, request, slug, project_id):
         issue_ids = request.data.get("issue_ids", [])
 
@@ -325,7 +328,7 @@ class BulkArchiveIssuesEndpoint(BaseAPIView):
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            issue_activity.delay(
+            queue_issue_activity(
                 type="issue.activity.updated",
                 requested_data=json.dumps({"archived_at": str(timezone.now().date()), "automation": False}),
                 actor_id=str(request.user.id),

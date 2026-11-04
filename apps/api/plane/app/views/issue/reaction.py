@@ -19,7 +19,7 @@ from plane.app.serializers import IssueReactionSerializer
 from plane.app.permissions import allow_permission, ROLE
 from plane.db.models import IssueReaction
 from plane.research.utils.project_review import project_member_filters
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.utils.issue_mutations import notification_atomic_mutation, queue_issue_activity
 from plane.utils.host import base_host
 
 
@@ -47,11 +47,12 @@ class IssueReactionViewSet(BaseViewSet):
         )
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @notification_atomic_mutation
     def create(self, request, slug, project_id, issue_id):
         serializer = IssueReactionSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(issue_id=issue_id, project_id=project_id, actor=request.user)
-            issue_activity.delay(
+            queue_issue_activity(
                 type="issue_reaction.activity.created",
                 requested_data=json.dumps(request.data, cls=DjangoJSONEncoder),
                 actor_id=str(request.user.id),
@@ -66,6 +67,7 @@ class IssueReactionViewSet(BaseViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @notification_atomic_mutation
     def destroy(self, request, slug, project_id, issue_id, reaction_code):
         issue_reaction = IssueReaction.objects.get(
             workspace__slug=slug,
@@ -74,7 +76,7 @@ class IssueReactionViewSet(BaseViewSet):
             reaction=reaction_code,
             actor=request.user,
         )
-        issue_activity.delay(
+        queue_issue_activity(
             type="issue_reaction.activity.deleted",
             requested_data=None,
             actor_id=str(self.request.user.id),

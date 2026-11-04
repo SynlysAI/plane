@@ -6,16 +6,23 @@
 
 from django.utils import timezone
 
-from plane.db.models import Notification, User
+from plane.db.models import Notification, NotificationEvent, User
+from plane.utils.notification_outbox import persist_research_notification_batch
 
 RESEARCH_STAGE_REVIEW_ENTITY = "research_stage_review"
 
 
 def _create(instance, receivers, *, actor, action, title, extra=None):
     created = []
+    email_policy = {}
     for receiver in receivers:
         if receiver is None or receiver == actor:
             continue
+        email_policy[str(receiver.id)] = {
+            "category": NotificationEvent.Category.RESEARCH_ACTION,
+            "reason": "direct_reviewer",
+            "immediate": True,
+        }
         created.append(
             Notification(
                 workspace_id=instance.workspace_id,
@@ -37,8 +44,11 @@ def _create(instance, receivers, *, actor, action, title, extra=None):
                 receiver=receiver,
             )
         )
-    if created:
-        Notification.objects.bulk_create(created, batch_size=100)
+    persist_research_notification_batch(
+        created,
+        category=NotificationEvent.Category.RESEARCH_ACTION,
+        email_policy=email_policy,
+    )
     return created
 
 

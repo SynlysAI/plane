@@ -29,7 +29,7 @@ from plane.db.models import (
     IssueLink,
     CycleIssue,
 )
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.utils.issue_mutations import notification_atomic_mutation, queue_issue_activity
 from plane.utils.issue_relation_mapper import get_actual_relation
 from plane.utils.host import base_host
 from plane.utils.administrative_projects import active_issue_assignees
@@ -209,6 +209,7 @@ class IssueRelationViewSet(BaseViewSet):
 
         return Response(response_data, status=status.HTTP_200_OK)
 
+    @notification_atomic_mutation
     def create(self, request, slug, project_id, issue_id):
         relation_type = request.data.get("relation_type", None)
         if relation_type is None:
@@ -248,7 +249,7 @@ class IssueRelationViewSet(BaseViewSet):
             ignore_conflicts=True,
         )
 
-        issue_activity.delay(
+        queue_issue_activity(
             type="issue_relation.activity.created",
             requested_data=json.dumps(request.data, cls=DjangoJSONEncoder),
             actor_id=str(request.user.id),
@@ -271,6 +272,7 @@ class IssueRelationViewSet(BaseViewSet):
                 status=status.HTTP_201_CREATED,
             )
 
+    @notification_atomic_mutation
     def remove_relation(self, request, slug, project_id, issue_id):
         related_issue = request.data.get("related_issue", None)
 
@@ -282,7 +284,7 @@ class IssueRelationViewSet(BaseViewSet):
         issue_relations = issue_relations.first()
         current_instance = json.dumps(IssueRelationSerializer(issue_relations).data, cls=DjangoJSONEncoder)
         issue_relations.delete()
-        issue_activity.delay(
+        queue_issue_activity(
             type="issue_relation.activity.deleted",
             requested_data=json.dumps(request.data, cls=DjangoJSONEncoder),
             actor_id=str(request.user.id),

@@ -75,7 +75,7 @@ def test_project_member_can_delete_attachment_uploaded_by_others(attachment_cont
     _, _, _, asset, member_a = context
     client = client_for(member_a)
     with (
-        patch("plane.app.views.issue.attachment.issue_activity.delay"),
+        patch("plane.app.views.issue.attachment.queue_issue_activity"),
     ):
         assert client.delete(v2_url(context, asset.id)).status_code == 204
     asset.refresh_from_db()
@@ -83,18 +83,24 @@ def test_project_member_can_delete_attachment_uploaded_by_others(attachment_cont
 
 
 @pytest.mark.django_db
-def test_v1_project_member_can_delete_attachment_uploaded_by_others(attachment_context):
+def test_v1_project_member_can_delete_attachment_uploaded_by_others(
+    attachment_context, django_capture_on_commit_callbacks
+):
     """v1 附件删除同样允许普通项目成员操作。"""
     context = attachment_context
     _, _, _, asset, member_a = context
     client = client_for(member_a)
+    storage = asset.asset.storage
     with (
-        patch("plane.app.views.issue.attachment.issue_activity.delay"),
+        patch("plane.app.views.issue.attachment.queue_issue_activity"),
         patch("plane.db.mixins.soft_delete_related_objects.delay"),
-        patch("django.db.models.fields.files.FieldFile.delete"),
+        patch.object(storage, "delete") as storage_delete,
     ):
-        assert client.delete(v1_url(context, asset.id)).status_code == 204
+        with django_capture_on_commit_callbacks(execute=True):
+            assert client.delete(v1_url(context, asset.id)).status_code == 204
+            storage_delete.assert_not_called()
     assert not FileAsset.objects.filter(pk=asset.id).exists()
+    storage_delete.assert_called_once_with(asset.asset.name)
 
 
 @pytest.mark.django_db
@@ -104,6 +110,6 @@ def test_non_project_member_cannot_delete_attachment(attachment_context):
     workspace, _, _, asset, _ = context
     outsider = User.objects.create(email=f"{uuid4()}@example.com", username=uuid4().hex)
     WorkspaceMember.objects.create(workspace=workspace, member=outsider, role=15)
-    with patch("plane.app.views.issue.attachment.issue_activity.delay"):
+    with patch("plane.app.views.issue.attachment.queue_issue_activity"):
         response = client_for(outsider).delete(v2_url(context, asset.id))
     assert response.status_code == 403

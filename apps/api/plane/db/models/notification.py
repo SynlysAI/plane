@@ -2,9 +2,12 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+import uuid
+
 # Django imports
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 # Module imports
 from .base import BaseModel
@@ -199,19 +202,76 @@ class UserNotificationPreference(BaseModel):
     comment = models.BooleanField(default=True)
     mention = models.BooleanField(default=True)
     issue_completed = models.BooleanField(default=True)
+    assignment = models.BooleanField(default=True)
+    research_property_change = models.BooleanField(default=True)
+    research_state_change = models.BooleanField(default=True)
+    research_comment = models.BooleanField(default=True)
+    research_mention = models.BooleanField(default=True)
+    research_completion = models.BooleanField(default=True)
 
     class Meta:
         verbose_name = "UserNotificationPreference"
         verbose_name_plural = "UserNotificationPreferences"
         db_table = "user_notification_preferences"
         ordering = ("-created_at",)
+        constraints = [models.UniqueConstraint(fields=["user"], name="notification_preference_unique_user")]
 
     def __str__(self):
         """Return the user"""
         return f"<{self.user}>"
 
 
+class WorkspaceNotificationPolicy(BaseModel):
+    """Store an administrator's channel policy for one notification category."""
+
+    class Category(models.TextChoices):
+        PROPERTY_CHANGE = "property_change", "Property change"
+        STATE_CHANGE = "state_change", "State change"
+        COMPLETION = "completion", "Completion"
+        ASSIGNMENT = "assignment", "Assignment"
+        COMMENT = "comment", "Comment"
+        MENTION = "mention", "Mention"
+        RESEARCH_PROPERTY_CHANGE = "research_property_change", "Research property change"
+        RESEARCH_STATE_CHANGE = "research_state_change", "Research state change"
+        RESEARCH_COMPLETION = "research_completion", "Research completion"
+        RESEARCH_COMMENT = "research_comment", "Research comment"
+        RESEARCH_MENTION = "research_mention", "Research mention"
+        SYSTEM_ANNOUNCEMENT = "system_announcement", "System announcement"
+
+    workspace = models.ForeignKey(
+        "db.Workspace",
+        on_delete=models.CASCADE,
+        related_name="notification_policies",
+    )
+    category = models.CharField(max_length=64, choices=Category.choices)
+    in_app_enabled = models.BooleanField(default=True)
+    email_enabled = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "WorkspaceNotificationPolicy"
+        verbose_name_plural = "WorkspaceNotificationPolicies"
+        db_table = "workspace_notification_policies"
+        ordering = ("workspace", "category")
+        constraints = [
+            models.UniqueConstraint(fields=["workspace", "category"], name="workspace_notification_policy_uq")
+        ]
+
+    def __str__(self):
+        """Return the workspace and notification category."""
+        return f"{self.workspace}:{self.category}"
+
+
 class EmailNotificationLog(BaseModel):
+    class DeliveryStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PROCESSING = "processing", "Processing"
+        RETRY = "retry", "Waiting to retry"
+        ACCEPTED = "accepted", "Accepted by SMTP"
+        SUPPRESSED = "suppressed", "Suppressed"
+        FAILED = "failed", "Failed"
+        UNCERTAIN = "uncertain", "Result uncertain"
+        LEGACY = "legacy", "Legacy record"
+
     # receiver
     receiver = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -231,6 +291,12 @@ class EmailNotificationLog(BaseModel):
     # sent at
     processed_at = models.DateTimeField(null=True)
     sent_at = models.DateTimeField(null=True)
+    delivery_status = models.CharField(max_length=16, choices=DeliveryStatus.choices, default=DeliveryStatus.PENDING)
+    available_at = models.DateTimeField(default=timezone.now)
+    lease_until = models.DateTimeField(null=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    last_error_code = models.CharField(max_length=128, blank=True, default="")
+    immediate = models.BooleanField(default=False)
     entity = models.CharField(max_length=200)
     old_value = models.CharField(max_length=300, blank=True, null=True)
     new_value = models.CharField(max_length=300, blank=True, null=True)
@@ -240,3 +306,199 @@ class EmailNotificationLog(BaseModel):
         verbose_name_plural = "Email Notification Logs"
         db_table = "email_notification_logs"
         ordering = ("-created_at",)
+
+
+class NotificationPreferenceMigrationAudit(BaseModel):
+    """Record preference rows consolidated before enforcing one row per user."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="notification_preference_migration_audits",
+    )
+    source_row_count = models.PositiveIntegerField()
+    merged_disabled_fields = models.JSONField(default=list)
+
+    class Meta:
+        db_table = "notification_preference_migration_audits"
+        ordering = ("-created_at",)
+
+
+class NotificationGenerationOutbox(BaseModel):
+    """Persist issue-activity generation requests beside the business write."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PROCESSING = "processing", "Processing"
+        RETRY = "retry", "Waiting to retry"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+
+    idempotency_key = models.CharField(max_length=255, unique=True)
+    workspace = models.ForeignKey(
+        "db.Workspace",
+        on_delete=models.CASCADE,
+        related_name="notification_generation_events",
+        null=True,
+    )
+    payload = models.JSONField(default=dict)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    available_at = models.DateTimeField(default=timezone.now)
+    lease_until = models.DateTimeField(null=True)
+    lease_token = models.CharField(max_length=64, blank=True, default="")
+    attempts = models.PositiveSmallIntegerField(default=0)
+    processed_at = models.DateTimeField(null=True)
+    last_error_code = models.CharField(max_length=128, blank=True, default="")
+
+    class Meta:
+        db_table = "notification_generation_outbox"
+        indexes = [
+            models.Index(fields=["status", "available_at"], name="notif_gen_due_idx"),
+            models.Index(fields=["status", "lease_until"], name="notif_gen_lease_idx"),
+        ]
+
+
+class NotificationEvent(BaseModel):
+    """Persist one recipient-specific notification event for durable delivery."""
+
+    class Category(models.TextChoices):
+        PROPERTY_CHANGE = "property_change", "Property change"
+        STATE_CHANGE = "state_change", "State change"
+        COMMENT = "comment", "Comment"
+        MENTION = "mention", "Mention"
+        COMPLETION = "completion", "Completion"
+        ASSIGNMENT = "assignment", "Assignment"
+        RESEARCH_PROPERTY_CHANGE = "research_property_change", "Research property change"
+        RESEARCH_STATE_CHANGE = "research_state_change", "Research state change"
+        RESEARCH_COMMENT = "research_comment", "Research comment"
+        RESEARCH_MENTION = "research_mention", "Research mention"
+        RESEARCH_COMPLETION = "research_completion", "Research completion"
+        RESEARCH_ACTION = "research_action", "Research action"
+
+    event_key = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    idempotency_key = models.CharField(max_length=255, unique=True)
+    workspace = models.ForeignKey("db.Workspace", on_delete=models.CASCADE, related_name="notification_events")
+    project = models.ForeignKey("db.Project", on_delete=models.CASCADE, null=True, related_name="notification_events")
+    receiver = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="notification_events",
+    )
+    triggered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="triggered_notification_events",
+    )
+    entity_name = models.CharField(max_length=255)
+    entity_identifier = models.UUIDField(null=True)
+    action = models.CharField(max_length=100)
+    category = models.CharField(max_length=64, choices=Category.choices)
+    recipient_reason = models.CharField(max_length=64, blank=True, default="")
+    title = models.TextField()
+    summary = models.TextField(blank=True, default="")
+    route = models.CharField(max_length=1024, blank=True, default="")
+    payload = models.JSONField(default=dict)
+    immediate = models.BooleanField(default=False)
+    notification = models.OneToOneField(
+        "db.Notification",
+        related_name="durable_event",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        db_table = "notification_events"
+        indexes = [
+            models.Index(fields=["receiver", "created_at"], name="notif_event_receiver_idx"),
+            models.Index(fields=["workspace", "entity_name", "entity_identifier"], name="notif_event_entity_idx"),
+        ]
+
+
+class NotificationEmailDelivery(BaseModel):
+    """Track durable SMTP delivery independently from in-app notification state."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PROCESSING = "processing", "Processing"
+        RETRY = "retry", "Waiting to retry"
+        ACCEPTED = "accepted", "Accepted by SMTP"
+        SUPPRESSED = "suppressed", "Suppressed"
+        FAILED = "failed", "Failed"
+        UNCERTAIN = "uncertain", "Result uncertain"
+
+    event = models.OneToOneField(
+        NotificationEvent,
+        on_delete=models.CASCADE,
+        related_name="email_delivery",
+    )
+    source_log = models.OneToOneField(
+        EmailNotificationLog,
+        on_delete=models.SET_NULL,
+        related_name="durable_delivery",
+        null=True,
+        blank=True,
+    )
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    available_at = models.DateTimeField()
+    lease_until = models.DateTimeField(null=True)
+    lease_token = models.CharField(max_length=64, blank=True, default="")
+    attempts = models.PositiveSmallIntegerField(default=0)
+    smtp_accepted_at = models.DateTimeField(null=True)
+    last_error_code = models.CharField(max_length=128, blank=True, default="")
+    last_error_at = models.DateTimeField(null=True)
+
+    class Meta:
+        db_table = "notification_email_deliveries"
+        indexes = [
+            models.Index(fields=["status", "available_at"], name="notif_mail_due_idx"),
+            models.Index(fields=["status", "lease_until"], name="notif_mail_lease_idx"),
+        ]
+
+
+class NotificationDeliveryAudit(BaseModel):
+    """Retain operator actions after a delivery is retried or cleaned up."""
+
+    workspace = models.ForeignKey(
+        "db.Workspace",
+        on_delete=models.CASCADE,
+        related_name="notification_delivery_audits",
+    )
+    delivery = models.ForeignKey(
+        NotificationEmailDelivery,
+        on_delete=models.SET_NULL,
+        related_name="audit_entries",
+        null=True,
+        blank=True,
+    )
+    delivery_identifier = models.UUIDField()
+    event_identifier = models.UUIDField(null=True, blank=True)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="notification_delivery_audits",
+        null=True,
+    )
+    action = models.CharField(max_length=32)
+    previous_status = models.CharField(max_length=16)
+    new_status = models.CharField(max_length=16)
+    reason = models.TextField()
+
+    class Meta:
+        db_table = "notification_delivery_audits"
+        ordering = ("-created_at",)
+
+
+class NotificationEmailCircuit(BaseModel):
+    """Persist a shared SMTP circuit breaker state."""
+
+    key = models.CharField(max_length=64, unique=True, default="smtp")
+    opened_at = models.DateTimeField(null=True)
+    reason_code = models.CharField(max_length=128, blank=True, default="")
+    next_probe_at = models.DateTimeField(null=True)
+    probe_lease_until = models.DateTimeField(null=True)
+    probe_lease_token = models.CharField(max_length=64, blank=True, default="")
+
+    class Meta:
+        db_table = "notification_email_circuits"

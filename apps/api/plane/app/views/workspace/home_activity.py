@@ -20,7 +20,6 @@ from plane.db.models import (
     PeriodicReport,
     Project,
     ProjectMember,
-    ProjectNetwork,
     ResearchAuditEvent,
     ResearchChain,
     ResearchChainNodeTask,
@@ -31,11 +30,10 @@ from plane.db.models import (
     ResearchOutcome,
     ResearchProjectProfile,
     Workspace,
-    WorkspaceMember,
 )
 from plane.research.utils.config import research_module_enabled
 from plane.research.utils.settings import workspace_research_enabled
-from plane.utils.administrative_projects import administrative_projects_for_user
+from plane.utils.administrative_projects import restrict_administrative_project_visibility
 
 RESEARCH_HOME_RESOURCE_TYPES = {
     "report",
@@ -86,29 +84,12 @@ def _project_detail(project):
 def _visible_project_ids(user, workspace):
     """Resolve projects visible to the requesting user in this workspace.
 
-    Workspace admins retain the existing global view. Other members see public
-    projects, their active memberships, administrative projects they manage, and
-    research profiles already exposed by the research visibility rules.
+    Reuse the authoritative project-domain ACL so the feed can never expose a
+    project the user cannot already see through project, research, or
+    administrative access rules.
     """
     projects = Project.objects.filter(workspace=workspace, archived_at__isnull=True)
-    if WorkspaceMember.objects.filter(workspace=workspace, member=user, is_active=True, role=20).exists():
-        return set(projects.values_list("id", flat=True))
-
-    visible = projects.filter(
-        Q(network=ProjectNetwork.PUBLIC.value)
-        | Q(
-            project_projectmember__member=user,
-            project_projectmember__is_active=True,
-            project_projectmember__deleted_at__isnull=True,
-        )
-    ).values_list("id", flat=True)
-    managed = administrative_projects_for_user(user, workspace.slug).values_list("id", flat=True)
-    research = ()
-    if research_module_enabled() and workspace_research_enabled(workspace):
-        from plane.research.views.projects import visible_profile_queryset
-
-        research = visible_profile_queryset(workspace, user).values_list("project_id", flat=True)
-    return set(visible) | set(managed) | set(research)
+    return set(restrict_administrative_project_visibility(projects, user, workspace.slug).values_list("id", flat=True))
 
 
 def _visible_issues(user, workspace, project_ids):

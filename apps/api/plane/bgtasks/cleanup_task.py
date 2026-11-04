@@ -10,7 +10,7 @@ from typing import Callable, Iterable
 # Django imports
 from django.conf import settings
 from django.utils import timezone
-from django.db.models import F, Window, Subquery
+from django.db.models import F, Q, Window, Subquery
 from django.db.models.functions import RowNumber
 
 # Third party imports
@@ -19,6 +19,9 @@ from celery import shared_task
 # Module imports
 from plane.db.models import (
     EmailNotificationLog,
+    NotificationDeliveryAudit,
+    NotificationEvent,
+    NotificationGenerationOutbox,
     PageVersion,
     APIActivityLog,
     IssueDescriptionVersion,
@@ -98,7 +101,62 @@ def get_email_logs_queryset():
     cutoff_time = timezone.now() - timedelta(days=settings.EMAIL_LOG_RETENTION_DAYS)
     logger.info(f"Email logs cutoff time: {cutoff_time}")
     return (
-        EmailNotificationLog.all_objects.filter(sent_at__lte=cutoff_time)
+        EmailNotificationLog.all_objects.filter(
+            Q(sent_at__lte=cutoff_time)
+            | Q(
+                created_at__lte=cutoff_time,
+                delivery_status__in=(
+                    EmailNotificationLog.DeliveryStatus.ACCEPTED,
+                    EmailNotificationLog.DeliveryStatus.SUPPRESSED,
+                    EmailNotificationLog.DeliveryStatus.FAILED,
+                    EmailNotificationLog.DeliveryStatus.UNCERTAIN,
+                    EmailNotificationLog.DeliveryStatus.LEGACY,
+                ),
+            )
+        )
+        .values_list("id", flat=True)
+        .iterator(chunk_size=BATCH_SIZE)
+    )
+
+
+def get_notification_events_queryset():
+    """Get old notification events after their email work is terminal."""
+    cutoff_time = timezone.now() - timedelta(days=settings.EMAIL_LOG_RETENTION_DAYS)
+    return (
+        NotificationEvent.all_objects.filter(created_at__lte=cutoff_time)
+        .filter(
+            Q(email_delivery__isnull=True)
+            | Q(
+                email_delivery__status__in=("accepted", "suppressed", "failed", "uncertain"),
+                email_delivery__updated_at__lte=cutoff_time,
+            )
+        )
+        .values_list("id", flat=True)
+        .iterator(chunk_size=BATCH_SIZE)
+    )
+
+
+def get_notification_delivery_audits_queryset():
+    """Return operator audit records older than the email retention window."""
+    cutoff_time = timezone.now() - timedelta(days=settings.EMAIL_LOG_RETENTION_DAYS)
+    return (
+        NotificationDeliveryAudit.all_objects.filter(created_at__lte=cutoff_time)
+        .values_list("id", flat=True)
+        .iterator(chunk_size=BATCH_SIZE)
+    )
+
+
+def get_notification_generation_outbox_queryset():
+    """Return terminal notification generation requests older than retention."""
+    cutoff_time = timezone.now() - timedelta(days=settings.EMAIL_LOG_RETENTION_DAYS)
+    return (
+        NotificationGenerationOutbox.all_objects.filter(
+            created_at__lte=cutoff_time,
+            status__in=(
+                NotificationGenerationOutbox.Status.COMPLETED,
+                NotificationGenerationOutbox.Status.FAILED,
+            ),
+        )
         .values_list("id", flat=True)
         .iterator(chunk_size=BATCH_SIZE)
     )
@@ -175,6 +233,21 @@ def delete_email_notification_logs():
         queryset_func=get_email_logs_queryset,
         model=EmailNotificationLog,
         task_name="Email Notification Log",
+    )
+    process_cleanup_task(
+        queryset_func=get_notification_events_queryset,
+        model=NotificationEvent,
+        task_name="Notification Event",
+    )
+    process_cleanup_task(
+        queryset_func=get_notification_delivery_audits_queryset,
+        model=NotificationDeliveryAudit,
+        task_name="Notification Delivery Audit",
+    )
+    process_cleanup_task(
+        queryset_func=get_notification_generation_outbox_queryset,
+        model=NotificationGenerationOutbox,
+        task_name="Notification Generation Outbox",
     )
 
 

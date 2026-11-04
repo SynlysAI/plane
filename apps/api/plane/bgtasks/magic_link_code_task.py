@@ -16,10 +16,10 @@ from django.template.loader import render_to_string
 # Module imports
 from plane.license.utils.instance_value import get_email_configuration
 from plane.utils.email import generate_plain_text_from_html
-from plane.utils.exception_logger import log_exception
+from plane.utils.account_email import handle_account_email_error, send_account_email
 
 
-@shared_task
+@shared_task(max_retries=2)
 def magic_link(email, key, token):
     try:
         (
@@ -56,9 +56,9 @@ def magic_link(email, key, token):
             connection=connection,
         )
         msg.attach_alternative(html_content, "text/html")
-        msg.send()
+        send_account_email(msg)
         logging.getLogger("plane.worker").info("Email sent successfully.")
         return
     except Exception as e:
-        log_exception(e)
+        handle_account_email_error(e)
         return

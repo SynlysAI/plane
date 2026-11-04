@@ -23,7 +23,7 @@ from plane.app.serializers import (
     EstimateReadSerializer,
 )
 from plane.utils.cache import invalidate_cache
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.utils.issue_mutations import notification_atomic_mutation, queue_issue_activity
 
 
 def generate_random_name(length=10):
@@ -194,6 +194,7 @@ class EstimatePointEndpoint(BaseViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @notification_atomic_mutation
     def destroy(self, request, slug, project_id, estimate_id, estimate_point_id):
         new_estimate_id = request.data.get("new_estimate_id", None)
         estimate_points = EstimatePoint.objects.filter(
@@ -207,7 +208,7 @@ class EstimatePointEndpoint(BaseViewSet):
                 estimate_point_id=estimate_point_id,
             )
             for issue in issues:
-                issue_activity.delay(
+                queue_issue_activity(
                     type="issue.activity.updated",
                     requested_data=json.dumps({"estimate_point": (str(new_estimate_id) if new_estimate_id else None)}),
                     actor_id=str(request.user.id),
@@ -226,7 +227,7 @@ class EstimatePointEndpoint(BaseViewSet):
                 estimate_point_id=estimate_point_id,
             )
             for issue in issues:
-                issue_activity.delay(
+                queue_issue_activity(
                     type="issue.activity.updated",
                     requested_data=json.dumps({"estimate_point": None}),
                     actor_id=str(request.user.id),

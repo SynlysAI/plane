@@ -6,18 +6,37 @@
 
 from django.utils import timezone
 
-from plane.db.models import Notification, User
+from plane.db.models import Notification, NotificationEvent, User
 from plane.research.utils.acl import direct_advisor_ids
+from plane.utils.notification_outbox import persist_research_notification_batch
 
 RESEARCH_EXPERIMENT_ENTITY = "research_experiment"
 RESEARCH_AMENDMENT_ENTITY = "research_experiment_amendment"
 
 
-def _create(workspace_id, project_id, entity_id, entity_name, receivers, *, actor, title, data):
+def _create(
+    workspace_id,
+    project_id,
+    entity_id,
+    entity_name,
+    receivers,
+    *,
+    actor,
+    title,
+    data,
+    email_category=None,
+):
     created = []
+    email_policy = {}
     for receiver in receivers:
         if receiver is None or receiver == actor:
             continue
+        if email_category is not None:
+            email_policy[str(receiver.id)] = {
+                "category": email_category,
+                "reason": "direct_reviewer",
+                "immediate": True,
+            }
         created.append(
             Notification(
                 workspace_id=workspace_id,
@@ -34,8 +53,11 @@ def _create(workspace_id, project_id, entity_id, entity_name, receivers, *, acto
                 receiver=receiver,
             )
         )
-    if created:
-        Notification.objects.bulk_create(created, batch_size=100)
+    persist_research_notification_batch(
+        created,
+        category=email_category or NotificationEvent.Category.RESEARCH_ACTION,
+        email_policy=email_policy,
+    )
     return created
 
 
@@ -80,6 +102,7 @@ def notify_amendment_created(record, amendment, actor):
         approver_ids(record),
         actor=actor,
         title=f"实验修订待审核：# {record.sequence_no} {record.title}",
+        email_category=NotificationEvent.Category.RESEARCH_ACTION,
         data={
             "action": "amendment_created",
             "experiment_id": str(record.id),
@@ -98,6 +121,7 @@ def notify_amendment_reviewed(record, amendment, actor, *, approved):
         [receiver],
         actor=actor,
         title=f"实验修订{'已通过' if approved else '被拒绝'}：# {record.sequence_no}",
+        email_category=NotificationEvent.Category.RESEARCH_COMPLETION,
         data={
             "action": "amendment_approved" if approved else "amendment_rejected",
             "experiment_id": str(record.id),

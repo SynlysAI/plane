@@ -27,7 +27,7 @@ from plane.api.serializers import (
     ModuleUpdateSerializer,
 )
 from plane.app.permissions import ProjectEntityPermission
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.utils.issue_mutations import notification_atomic_mutation, queue_issue_activity
 from plane.db.models import (
     Issue,
     FileAsset,
@@ -551,6 +551,7 @@ class ModuleDetailAPIEndpoint(BaseAPIView):
             404: MODULE_NOT_FOUND_RESPONSE,
         },
     )
+    @notification_atomic_mutation
     def delete(self, request, slug, project_id, pk):
         """Delete module
 
@@ -578,7 +579,7 @@ class ModuleDetailAPIEndpoint(BaseAPIView):
             )
 
         module_issues = list(ModuleIssue.objects.filter(module_id=pk).values_list("issue", flat=True))
-        issue_activity.delay(
+        queue_issue_activity(
             type="module.activity.deleted",
             requested_data=json.dumps(
                 {
@@ -728,6 +729,7 @@ class ModuleIssueListCreateAPIEndpoint(BaseAPIView):
             404: MODULE_NOT_FOUND_RESPONSE,
         },
     )
+    @notification_atomic_mutation
     def post(self, request, slug, project_id, module_id):
         """Add module work items
 
@@ -780,7 +782,7 @@ class ModuleIssueListCreateAPIEndpoint(BaseAPIView):
         ModuleIssue.objects.bulk_update(records_to_update, ["module"], batch_size=10)
 
         # Capture Issue Activity
-        issue_activity.delay(
+        queue_issue_activity(
             type="module.activity.created",
             requested_data=json.dumps({"modules_list": str(issues)}),
             actor_id=str(self.request.user.id),
@@ -930,6 +932,7 @@ class ModuleIssueDetailAPIEndpoint(BaseAPIView):
             404: MODULE_ISSUE_NOT_FOUND_RESPONSE,
         },
     )
+    @notification_atomic_mutation
     def delete(self, request, slug, project_id, module_id, issue_id):
         """Remove module work item
 
@@ -952,7 +955,7 @@ class ModuleIssueDetailAPIEndpoint(BaseAPIView):
 
         module_name = module_issue.module.name if module_issue.module is not None else ""
         module_issue.delete()
-        issue_activity.delay(
+        queue_issue_activity(
             type="module.activity.deleted",
             requested_data=json.dumps({"module_id": str(module_id), "issues": [str(module_issue.issue_id)]}),
             actor_id=str(request.user.id),

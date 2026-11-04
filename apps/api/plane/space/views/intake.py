@@ -25,7 +25,7 @@ from plane.app.serializers import (
 )
 from plane.utils.content_validator import validate_html_content
 from plane.utils.issue_filters import issue_filters
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.utils.issue_mutations import notification_atomic_mutation, queue_issue_activity
 from plane.db.models.intake import SourceType
 
 
@@ -105,6 +105,7 @@ class IntakeIssuePublicViewSet(BaseViewSet):
         issues_data = IssueStateIntakeSerializer(issues, many=True).data
         return Response(issues_data, status=status.HTTP_200_OK)
 
+    @notification_atomic_mutation
     def create(self, request, anchor, intake_id):
         project_deploy_board = DeployBoard.objects.get(anchor=anchor, entity_name="project")
         if project_deploy_board.intake is None:
@@ -166,7 +167,7 @@ class IntakeIssuePublicViewSet(BaseViewSet):
         )
 
         # Create an Issue Activity
-        issue_activity.delay(
+        queue_issue_activity(
             type="issue.activity.created",
             requested_data=json.dumps(request.data, cls=DjangoJSONEncoder),
             actor_id=str(request.user.id),
@@ -186,6 +187,7 @@ class IntakeIssuePublicViewSet(BaseViewSet):
         serializer = IssueStateIntakeSerializer(issue)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    @notification_atomic_mutation
     def partial_update(self, request, anchor, intake_id, pk):
         project_deploy_board = DeployBoard.objects.get(anchor=anchor, entity_name="project")
         if project_deploy_board.intake is None:
@@ -239,7 +241,7 @@ class IntakeIssuePublicViewSet(BaseViewSet):
             # Log all the updates
             requested_data = json.dumps(issue_data, cls=DjangoJSONEncoder)
             if issue is not None:
-                issue_activity.delay(
+                queue_issue_activity(
                     type="issue.activity.updated",
                     requested_data=requested_data,
                     actor_id=str(request.user.id),

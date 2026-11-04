@@ -23,7 +23,7 @@ from plane.bgtasks.cleanup_task import (
     delete_webhook_logs,
     process_cleanup_task,
 )
-from plane.db.models import APIActivityLog, EmailNotificationLog, WebhookLog
+from plane.db.models import APIActivityLog, EmailNotificationLog, NotificationDeliveryAudit, WebhookLog
 from plane.tests.factories import UserFactory, WorkspaceFactory
 
 
@@ -124,6 +124,46 @@ class TestDeleteEmailLogs:
         delete_email_notification_logs()
 
         assert EmailNotificationLog.all_objects.filter(pk=recent.pk).exists()
+
+    def test_expired_delivery_audits_are_hard_deleted(self):
+        """Remove retry audit records beyond the configured retention window."""
+        workspace = WorkspaceFactory()
+        retention_days = settings.EMAIL_LOG_RETENTION_DAYS
+        expired = NotificationDeliveryAudit.objects.create(
+            workspace=workspace,
+            delivery_identifier=uuid4(),
+            action="retry",
+            previous_status="failed",
+            new_status="pending",
+            reason="Operator reviewed the failure",
+        )
+        NotificationDeliveryAudit.all_objects.filter(pk=expired.pk).update(
+            created_at=timezone.now() - timedelta(days=retention_days + 1)
+        )
+
+        delete_email_notification_logs()
+
+        assert not NotificationDeliveryAudit.all_objects.filter(pk=expired.pk).exists()
+
+    def test_recent_delivery_audits_are_retained(self):
+        """Retain retry audit records within the configured retention window."""
+        workspace = WorkspaceFactory()
+        retention_days = settings.EMAIL_LOG_RETENTION_DAYS
+        recent = NotificationDeliveryAudit.objects.create(
+            workspace=workspace,
+            delivery_identifier=uuid4(),
+            action="retry",
+            previous_status="failed",
+            new_status="pending",
+            reason="Operator reviewed the failure",
+        )
+        NotificationDeliveryAudit.all_objects.filter(pk=recent.pk).update(
+            created_at=timezone.now() - timedelta(days=retention_days - 1)
+        )
+
+        delete_email_notification_logs()
+
+        assert NotificationDeliveryAudit.all_objects.filter(pk=recent.pk).exists()
 
 
 @pytest.mark.unit

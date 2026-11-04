@@ -14,6 +14,7 @@ from rest_framework.test import APIClient
 
 from plane.db.models import (
     AdministrativeOrganization,
+    AdministrativeOrganizationMember,
     HomeActivityEvent,
     Issue,
     IssueActivity,
@@ -21,6 +22,7 @@ from plane.db.models import (
     Page,
     PeriodicReport,
     Project,
+    ProjectNetwork,
     ResearchAuditEvent,
     ResearchChain,
     ResearchChainNode,
@@ -32,6 +34,7 @@ from plane.db.models import (
     Workspace,
     WorkspaceHomePreference,
     WorkspaceMember,
+    WorkspaceResearchSetting,
 )
 from plane.tests.research_fixtures import make_user
 from plane.utils.home_activity import record_project_activity
@@ -107,6 +110,14 @@ def create_preference_group(workspace, user, *, enabled=True):
             sort_order=sort_order,
         )
         for key, config, sort_order in rows
+    )
+
+
+def enable_workspace_research(workspace):
+    """开启真实工作区科研配置，避免首页动态测试绕过科研准入链路。"""
+    WorkspaceResearchSetting.objects.update_or_create(
+        workspace=workspace,
+        defaults={"module_enabled": True},
     )
 
 
@@ -314,11 +325,15 @@ def test_home_activity_cursor_pagination_exceeds_legacy_window(env):
 
 def test_home_activity_cursor_is_scoped_and_permission_safe(env, monkeypatch):
     """游标不能跨上下文复用，后续页也必须延续项目可见性过滤。"""
+    from plane.utils.administrative_projects import get_or_create_default_administrative_organization
+
+    default_organization = get_or_create_default_administrative_organization(env["workspace"])
     visible_project = Project.objects.create(
         workspace=env["workspace"],
         name="Public",
         identifier="PUB",
         network=2,
+        administrative_organization=default_organization,
     )
     record_project_activity(visible_project, env["user"], "created", occurred_at=BASE_TIME)
     record_project_activity(
@@ -470,6 +485,131 @@ def test_home_activity_feed_respects_project_visibility_and_time_filter(env):
     assert response.data["results"] == []
 
 
+def test_home_activity_feed_hides_public_research_without_research_acl(env):
+    """公开 Plane 网络不能让无科研 ACL 的成员读取科研动态。"""
+    enable_workspace_research(env["workspace"])
+    research_project = Project.objects.create(
+        workspace=env["workspace"],
+        name="Public research",
+        identifier="PRS",
+        network=ProjectNetwork.PUBLIC.value,
+    )
+    profile = ResearchProjectProfile.objects.create(
+        workspace=env["workspace"],
+        project=research_project,
+        owner=env["user"],
+        chain_visibility=ResearchProjectProfile.ChainVisibility.PRIVATE,
+    )
+    ResearchAuditEvent.objects.create(
+        workspace=env["workspace"],
+        actor=env["user"],
+        action="project.create",
+        resource_type="research_project",
+        resource_id=profile.id,
+        metadata={"project": str(research_project.id), "owner": str(env["user"].id)},
+    )
+    record_project_activity(
+        env["project"],
+        env["user"],
+        "created",
+        occurred_at=BASE_TIME - timedelta(minutes=1),
+    )
+
+    outsider = make_user(first_name="Research outsider")
+    WorkspaceMember.objects.create(workspace=env["workspace"], member=outsider, role=15)
+    client = APIClient()
+    client.force_authenticate(user=outsider)
+    url = reverse("workspace-home-activities", kwargs={"slug": env["workspace"].slug})
+
+    pages = []
+    cursor = None
+    for _ in range(2):
+        response = client.get(
+            url,
+            {
+                "days": "all",
+                "pagination": "cursor",
+                "per_page": 1,
+                **({"cursor": cursor} if cursor else {}),
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+        pages.extend(response.data["results"])
+        cursor = response.data["next_cursor"]
+        if cursor is None:
+            break
+
+    assert pages, "默认公共行政项目事件应提供可翻页的可见动态"
+    assert all(row["entity_id"] != str(profile.id) for row in pages)
+    assert all(row["project"] is None or row["project"]["id"] != str(research_project.id) for row in pages)
+
+
+def test_home_activity_feed_scopes_public_administrative_projects_to_organization(env):
+    """公开行政项目动态只进入组织成员或既有 ACL 授权者的首页。"""
+    organization = AdministrativeOrganization.objects.create(
+        workspace=env["workspace"],
+        name="财务行政中心",
+    )
+    project = Project.objects.create(
+        workspace=env["workspace"],
+        name="Finance office",
+        identifier="FIN",
+        network=ProjectNetwork.PUBLIC.value,
+        administrative_organization=organization,
+    )
+    record_project_activity(project, env["user"], "updated", occurred_at=BASE_TIME)
+
+    outsider = make_user(first_name="Administrative outsider")
+    WorkspaceMember.objects.create(workspace=env["workspace"], member=outsider, role=15)
+    client = APIClient()
+    client.force_authenticate(user=outsider)
+    url = reverse("workspace-home-activities", kwargs={"slug": env["workspace"].slug})
+
+    response = client.get(url, {"days": "all"})
+    assert response.status_code == status.HTTP_200_OK, response.data
+    assert all(row["project"] is None or row["project"]["id"] != str(project.id) for row in response.data["results"])
+
+    AdministrativeOrganizationMember.objects.create(
+        workspace=env["workspace"],
+        organization=organization,
+        member=outsider,
+        role=AdministrativeOrganizationMember.Role.MEMBER,
+    )
+    response = client.get(url, {"days": "all"})
+    assert response.status_code == status.HTTP_200_OK, response.data
+    assert any(
+        row["project"] is not None and row["project"]["id"] == str(project.id) for row in response.data["results"]
+    )
+
+
+def test_home_activity_feed_keeps_default_public_administrative_project(env):
+    """默认公共行政项目继续对有效工作区成员开放动态。"""
+    from plane.utils.administrative_projects import get_or_create_default_administrative_organization
+
+    organization = get_or_create_default_administrative_organization(env["workspace"])
+    project = Project.objects.create(
+        workspace=env["workspace"],
+        name="Public office",
+        identifier="PUB",
+        network=ProjectNetwork.PUBLIC.value,
+        administrative_organization=organization,
+    )
+    record_project_activity(project, env["user"], "created", occurred_at=BASE_TIME)
+
+    member = make_user(first_name="Public member")
+    WorkspaceMember.objects.create(workspace=env["workspace"], member=member, role=15)
+    client = APIClient()
+    client.force_authenticate(user=member)
+    response = client.get(
+        reverse("workspace-home-activities", kwargs={"slug": env["workspace"].slug}),
+        {"days": "all"},
+    )
+    assert response.status_code == status.HTTP_200_OK, response.data
+    assert any(
+        row["project"] is not None and row["project"]["id"] == str(project.id) for row in response.data["results"]
+    )
+
+
 def test_meaningful_project_patch_creates_a_traceable_home_event(env, monkeypatch):
     """项目字段修改必须写入事件；变更值可读且属于当前操作者。"""
     from django.conf import settings
@@ -492,12 +632,9 @@ def test_meaningful_project_patch_creates_a_traceable_home_event(env, monkeypatc
     assert event.changes == [{"field": "name", "old_value": "Office", "new_value": "Office 2"}]
 
 
-def test_home_activity_feed_includes_visible_research_audit_events(env, monkeypatch):
+def test_home_activity_feed_includes_visible_research_audit_events(env):
     """科研审计事件应按科研档案可见性过滤并解析业务对象。"""
-    from plane.app.views.workspace import home_activity
-
-    monkeypatch.setattr(home_activity, "research_module_enabled", lambda: True)
-    monkeypatch.setattr(home_activity, "workspace_research_enabled", lambda workspace: True)
+    enable_workspace_research(env["workspace"])
     research_project = Project.objects.create(
         workspace=env["workspace"],
         name="Research",
@@ -542,12 +679,9 @@ def test_home_activity_feed_includes_visible_research_audit_events(env, monkeypa
     assert all(item["source"] != "research" for item in other_response.data["results"])
 
 
-def test_home_activity_research_links_use_frontend_routes(env, monkeypatch):
+def test_home_activity_research_links_use_frontend_routes(env):
     """科研动态必须链接到前端真实路由，任务链接直达节点工作台。"""
-    from plane.app.views.workspace import home_activity
-
-    monkeypatch.setattr(home_activity, "research_module_enabled", lambda: True)
-    monkeypatch.setattr(home_activity, "workspace_research_enabled", lambda workspace: True)
+    enable_workspace_research(env["workspace"])
     research_project = Project.objects.create(
         workspace=env["workspace"],
         name="Research links",
@@ -644,12 +778,9 @@ def test_home_activity_research_links_use_frontend_routes(env, monkeypatch):
     assert rows[str(report.id)]["url"] == f"/{slug}/research/reports/{report.id}/"
 
 
-def test_home_activity_renders_research_chain_stage_audit_events(env, monkeypatch):
+def test_home_activity_renders_research_chain_stage_audit_events(env):
     """科研阶段审计事件必须解析为阶段名称而不是让首页动态整体失败。"""
-    from plane.app.views.workspace import home_activity
-
-    monkeypatch.setattr(home_activity, "research_module_enabled", lambda: True)
-    monkeypatch.setattr(home_activity, "workspace_research_enabled", lambda workspace: True)
+    enable_workspace_research(env["workspace"])
     research_project = Project.objects.create(
         workspace=env["workspace"],
         name="Research stage",

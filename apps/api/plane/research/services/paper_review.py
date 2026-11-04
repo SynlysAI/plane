@@ -549,7 +549,7 @@ def submit_paper_version(*, review, actor, payload, request=None):
             locked_review.status = ResearchPaperReview.Status.WAITING_REVIEW
             locked_review.updated_by = actor
             locked_review.save(update_fields=["current_version_no", "status", "updated_by", "updated_at"])
-            _write_paper_event(
+            paper_event = _write_paper_event(
                 review=locked_review,
                 version=version,
                 actor=actor,
@@ -573,7 +573,7 @@ def submit_paper_version(*, review, actor, payload, request=None):
                 metadata={"version_no": version_no, "file_name": file_name},
                 request=request,
             )
-            notify_paper_version_submitted(locked_review, actor)
+            notify_paper_version_submitted(locked_review, actor, event_id=paper_event.event_id)
         return version, True
     except IntegrityError:
         existing = ResearchPaperReviewVersion.objects.filter(request_id=request_id).first()
@@ -644,7 +644,7 @@ def _run_version_decision(
             "status": locked_review.status,
             "version_no": locked_version.version_no,
         }
-        _write_paper_event(
+        paper_event = _write_paper_event(
             review=locked_review,
             version=locked_version,
             actor=actor,
@@ -667,9 +667,9 @@ def _run_version_decision(
             request=request,
         )
         if event_type == "PAPER_REVIEW_RETURNED":
-            notify_paper_returned(locked_review, actor, comment)
+            notify_paper_returned(locked_review, actor, comment, event_id=paper_event.event_id)
         else:
-            notify_paper_accepted(locked_review, actor, comment)
+            notify_paper_accepted(locked_review, actor, comment, event_id=paper_event.event_id)
         return locked_review, locked_version, True
 
 

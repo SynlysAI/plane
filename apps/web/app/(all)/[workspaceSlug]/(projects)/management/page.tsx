@@ -8,11 +8,12 @@ import { useResearch } from "@/hooks/store/use-research";
 import { AdministrativeOrganizationSettings } from "@/components/administrative/organization-settings";
 import { FeedbackDialog } from "@/components/research/feedback/feedback-dialog";
 import { WorkspaceResearchMCPWriteSetting } from "@/components/workspace/research-mcp-write-setting";
+import { WorkspaceNotificationSettings } from "@/components/workspace/workspace-notification-settings";
 import { ProjectDomainsService, domainError } from "@/services/project-domains.service";
 
 const service = new ProjectDomainsService();
 
-/** 工作区级设置、行政管理、科研管理与反馈管理的统一入口。 */
+/** 工作区级设置、通知、行政管理、科研管理与反馈管理的统一入口。 */
 export default observer(function WorkspaceManagementPage() {
   const { workspaceSlug } = useParams();
   const [params, setParams] = useSearchParams();
@@ -45,6 +46,7 @@ export default observer(function WorkspaceManagementPage() {
   );
   const tabs = [
     ...(context.navigation.workspace_settings ? [{ key: "workspace", label: "工作区设置" }] : []),
+    ...(context.navigation.workspace_settings ? [{ key: "notifications", label: "通知管理" }] : []),
     ...(context.navigation.administrative_organizations ? [{ key: "administrative", label: "行政组织" }] : []),
     ...(context.workspace_enabled &&
     context.capabilities?.nav.some((key) => RESEARCH_SETTINGS_NAVIGATION_ITEMS.some((item) => item.key === key))
@@ -125,6 +127,11 @@ export default observer(function WorkspaceManagementPage() {
       {active === "administrative" && (
         <div className="min-h-0 flex-1 overflow-auto">
           <AdministrativeOrganizationSettings key={workspaceSlug} workspaceSlug={workspaceSlug} />
+        </div>
+      )}
+      {active === "notifications" && context.navigation.workspace_settings && (
+        <div className="flex-1 overflow-auto p-5">
+          <WorkspaceNotificationSettings key={workspaceSlug} workspaceSlug={workspaceSlug} />
         </div>
       )}
       {active === "research" && (

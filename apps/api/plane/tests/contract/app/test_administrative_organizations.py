@@ -116,7 +116,7 @@ def no_async_side_effects():
     """屏蔽项目详情和创建流程中的异步任务。"""
     with (
         patch("plane.app.views.project.base.recent_visited_task.delay"),
-        patch("plane.app.views.project.base.model_activity.delay"),
+        patch("plane.app.views.project.base.queue_project_model_activity"),
     ):
         yield
 
@@ -298,7 +298,7 @@ def test_public_organization_grants_every_workspace_member_edit_role(env):
         default=True,
     )
     with (
-        patch("plane.app.views.issue.base.issue_activity.delay"),
+        patch("plane.app.views.issue.base.queue_issue_activity"),
         patch("plane.utils.issue_mutations.model_activity.delay"),
         patch("plane.utils.issue_mutations.issue_description_version_task.delay"),
     ):

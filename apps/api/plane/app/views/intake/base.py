@@ -45,7 +45,11 @@ from plane.app.serializers import (
 )
 from plane.utils.issue_filters import issue_filters
 from plane.utils.order_queryset import INTAKE_ISSUE_ORDER_BY_ALLOWLIST, sanitize_order_by
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.utils.issue_mutations import (
+    enqueue_task_on_commit,
+    notification_atomic_mutation,
+    queue_issue_activity,
+)
 from plane.bgtasks.issue_description_version_task import issue_description_version_task
 from plane.app.views.base import BaseAPIView
 from plane.utils.timezone_converter import user_timezone_converter
@@ -226,6 +230,7 @@ class IntakeIssueViewSet(BaseViewSet):
         )
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @notification_atomic_mutation
     def create(self, request, slug, project_id):
         if not request.data.get("issue", {}).get("name", False):
             return Response({"error": "Name is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -278,7 +283,7 @@ class IntakeIssueViewSet(BaseViewSet):
                 source=SourceType.IN_APP,
             )
             # Create an Issue Activity
-            issue_activity.delay(
+            queue_issue_activity(
                 type="issue.activity.created",
                 requested_data=json.dumps(request.data, cls=DjangoJSONEncoder),
                 actor_id=str(request.user.id),
@@ -291,7 +296,8 @@ class IntakeIssueViewSet(BaseViewSet):
                 intake=str(intake_issue.id),
             )
             # updated issue description version
-            issue_description_version_task.delay(
+            enqueue_task_on_commit(
+                issue_description_version_task,
                 updated_issue=json.dumps(request.data, cls=DjangoJSONEncoder),
                 issue_id=str(serializer.data["id"]),
                 user_id=request.user.id,
@@ -333,6 +339,7 @@ class IntakeIssueViewSet(BaseViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @allow_permission(allowed_roles=[ROLE.ADMIN], creator=True, model=Issue)
+    @notification_atomic_mutation
     def partial_update(self, request, slug, project_id, pk):
         skip_activity = request.data.pop("skip_activity", False)
         is_description_update = request.data.get("description_html") is not None
@@ -447,7 +454,7 @@ class IntakeIssueViewSet(BaseViewSet):
             # Log all the updates
             if not is_migration_description_update:
                 if issue is not None:
-                    issue_activity.delay(
+                    queue_issue_activity(
                         type="issue.activity.updated",
                         requested_data=issue_requested_data,
                         actor_id=str(request.user.id),
@@ -460,7 +467,8 @@ class IntakeIssueViewSet(BaseViewSet):
                         intake=str(intake_issue.id),
                     )
                     # updated issue description version
-                    issue_description_version_task.delay(
+                    enqueue_task_on_commit(
+                        issue_description_version_task,
                         updated_issue=issue_current_instance,
                         issue_id=str(pk),
                         user_id=request.user.id,
@@ -469,7 +477,7 @@ class IntakeIssueViewSet(BaseViewSet):
         if intake_serializer:
             intake_serializer.save()
             # create a activity for status change
-            issue_activity.delay(
+            queue_issue_activity(
                 type="intake.activity.created",
                 requested_data=json.dumps(request.data, cls=DjangoJSONEncoder),
                 actor_id=str(request.user.id),

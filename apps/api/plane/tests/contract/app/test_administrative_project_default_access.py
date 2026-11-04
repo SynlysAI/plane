@@ -63,8 +63,8 @@ def no_side_effects():
     """屏蔽异步任务，测试只验证接口权限和数据库结果。"""
     with (
         patch("plane.app.views.project.base.recent_visited_task.delay"),
-        patch("plane.app.views.project.base.model_activity.delay"),
-        patch("plane.app.views.issue.base.issue_activity.delay"),
+        patch("plane.app.views.project.base.queue_project_model_activity"),
+        patch("plane.app.views.issue.base.queue_issue_activity"),
         patch("plane.utils.issue_mutations.model_activity.delay"),
         patch("plane.utils.issue_mutations.issue_description_version_task.delay"),
     ):

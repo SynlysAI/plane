@@ -200,6 +200,19 @@ class TestResearchPaperReviewApi:
             ).values_list("data__action", flat=True)
         )
         assert notification_actions == {"submitted": 2, "returned": 1, "accepted": 1}
+        submitted_notification_event_ids = set(
+            Notification.objects.filter(
+                entity_name="research_paper_review",
+                data__review_id=review["id"],
+                data__action="submitted",
+            ).values_list("data__event_id", flat=True)
+        )
+        submitted_event_ids = set(
+            ResearchChainEvent.objects.filter(
+                node=env["paper_node"], event_type="PAPER_VERSION_SUBMITTED"
+            ).values_list("event_id", flat=True)
+        )
+        assert submitted_notification_event_ids == submitted_event_ids
 
     def test_workspace_admin_can_review_without_org_relation(self, env):
         """工作区管理员无需组织关系即可退回论文评审。"""
