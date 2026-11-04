@@ -227,7 +227,7 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
                   </button>
                   <ResearchDeleteButton
                     name={uploadRecord.file_name}
-                    onDelete={() => deleteUpload(uploadRecord.id).then(() => undefined)}
+                    onDelete={() => deleteUpload(uploadRecord.id)}
                     disabled={uploading}
                     confirmMessage={t("research.knowledge.delete_confirm", { name: uploadRecord.file_name })}
                   />

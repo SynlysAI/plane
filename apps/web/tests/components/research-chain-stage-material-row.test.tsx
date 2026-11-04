@@ -277,3 +277,36 @@ it("uses the evaluation-specific hint for pasted text", async () => {
   const textarea = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="原理可行性分析 · 填写文字材料"]');
   expect(textarea?.getAttribute("placeholder")).toContain("原理/进行性分析、实验条件");
 });
+
+it("shows the backend rejection for duplicate text material", async () => {
+  await act(async () => {
+    root.render(
+      <ResearchChainStageMaterialRow
+        workspaceSlug="lab"
+        chainId="chain-1"
+        stageCode="TOPIC_SELECTION"
+        material={material({ title: "题目" })}
+        editable
+        busy={false}
+        knowledge={knowledge()}
+        onStageChanged={vi.fn()}
+      />
+    );
+  });
+  const textarea = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="题目 · 填写文字材料"]');
+  mocks.createChainStageMaterial.mockRejectedValueOnce({
+    error_code: "research_chain_invalid",
+    message: "重复的文字材料已提交，请修改内容后再保存。",
+  });
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    setter?.call(textarea, "重复内容");
+    textarea?.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "保存文字")?.click();
+    await Promise.resolve();
+  });
+
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("重复的文字材料");
+});

@@ -695,7 +695,7 @@ def add_stage_material(
     Returns:
         The created stage material item.
     """
-    from plane.db.models import ResearchChainStageMaterialItem
+    from plane.db.models import ResearchChainStageMaterialItem, ResearchChainUpload
 
     with transaction.atomic():
         locked_stage = type(stage).objects.select_for_update().get(pk=stage.pk)
@@ -713,6 +713,14 @@ def add_stage_material(
             raise ChainStageRuleError(
                 ResearchErrorCode.CHAIN_INVALID,
                 "requirement_code is not defined for this stage.",
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        if upload is not None:
+            upload = ResearchChainUpload.all_objects.select_for_update().get(pk=upload.pk)
+        if upload is not None and upload.deleted_at is not None:
+            raise ChainStageRuleError(
+                ResearchErrorCode.CHAIN_INVALID,
+                "upload_id must reference an active upload in this chain.",
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
         if upload is not None and upload.chain_id != locked_stage.chain_id:

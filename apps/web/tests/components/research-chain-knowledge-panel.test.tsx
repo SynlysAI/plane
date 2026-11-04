@@ -35,6 +35,10 @@ vi.mock("@/services/research/chain.service", () => ({
     deleteKnowledgeUpload = mocks.deleteKnowledgeUpload;
   },
 }));
+vi.mock("@plane/ui", () => ({
+  ModalCore: ({ isOpen, children }: { isOpen: boolean; children: React.ReactNode }) =>
+    isOpen ? <div role="dialog">{children}</div> : null,
+}));
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 let container: HTMLDivElement;
@@ -179,6 +183,45 @@ it("restores processing uploads for the selected node after a page reload", asyn
     true
   );
   expect(container.querySelector('a[aria-label="下载资料"]')?.getAttribute("href")).toBe("/download/upload-restored/");
+});
+
+it("keeps the delete dialog open and shows the backend rejection", async () => {
+  mocks.getKnowledgeUploads.mockResolvedValueOnce({
+    data: [
+      {
+        id: "upload-delete-failure",
+        status: "SUCCESS",
+        knowledge_id: "knowledge-delete-failure",
+        knowledge_base_id: "kb-1",
+        file_name: "linked.pdf",
+        file_type: "pdf",
+        file_size: 128,
+        preview_url: "",
+        download_url: "",
+        error_code: "",
+        source_node_title: "文献调研",
+        created_at: new Date().toISOString(),
+      },
+    ],
+  });
+  mocks.deleteKnowledgeUpload.mockRejectedValueOnce({
+    error_code: "research_chain_invalid",
+    message: "该资料仍关联阶段材料，请先解除关联。",
+  });
+  await renderPanel();
+  await act(async () => undefined);
+
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>('button[aria-label="删除 linked.pdf"]')?.click();
+  });
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "删除")?.click();
+    await Promise.resolve();
+  });
+
+  expect(mocks.deleteKnowledgeUpload).toHaveBeenCalledWith("lab", "chain-1", "upload-delete-failure");
+  expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("请先解除关联");
 });
 
 it("truncates long failed filenames and keeps an inline recovery action", async () => {

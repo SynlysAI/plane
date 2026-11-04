@@ -391,7 +391,7 @@ it("does not register a title-only material when the upload fails", async () => 
   expect(mocks.uploadFiles).toHaveBeenCalledWith([file]);
   expect(mocks.createChainStageMaterial).not.toHaveBeenCalled();
   expect(container.textContent).toContain("文件被网关拒绝");
-  expect(container.textContent).toContain("当前节点还没有可关联资料，请先上传。");
+  expect(container.textContent).toContain("全流程还没有可关联资料，请先上传。");
 });
 
 it("offers node creation when the stage has no business node", async () => {

@@ -463,6 +463,80 @@ def test_upload_idempotence_is_scoped_to_the_whole_chain(env):
     upload_mock.assert_not_called()
 
 
+def test_upload_retry_resets_stale_upstream_receipt_before_calling_ragportal(env):
+    """失败记录重试期间不能继续暴露旧的上传 receipt 或下载入口。"""
+    _mark_ready(env)
+    content = b"%PDF-1.4 retry"
+    file_hash = hashlib.sha256(content).hexdigest()
+    stale_reference = ResearchExternalReference.objects.create(
+        workspace=env["workspace"],
+        system="RAGPORTAL",
+        external_type=ResearchExternalReference.ExternalType.KNOWLEDGE_ENTRY,
+        external_id="knowledge-stale",
+        external_parent_id="kb-1",
+        title="retry.pdf",
+        source_url="https://ragportal.example.com/api/uploads/700",
+        metadata={"chain_id": str(env["chain"].id)},
+        created_by=env["owner"],
+    )
+    stale = ResearchChainUpload.objects.create(
+        workspace=env["workspace"],
+        chain=env["chain"],
+        node=env["node"],
+        request_id=f"upload-stale-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        external_upload_id="700",
+        knowledge_id="knowledge-stale",
+        knowledge_base_id="kb-1",
+        task_id="task-stale",
+        file_name="retry.pdf",
+        file_type="pdf",
+        file_size=len(content),
+        file_hash=file_hash,
+        status=ResearchChainUpload.Status.FAILED,
+        error_code="upstream_not_found",
+        reference=stale_reference,
+        created_by=env["owner"],
+    )
+    receipt = {
+        "external_id": "knowledge-retry",
+        "external_type": "KNOWLEDGE_ENTRY",
+        "external_parent_id": "kb-1",
+        "title": "retry.pdf",
+        "source_url": "/api/uploads/701",
+        "metadata": {"upload_id": "701", "parse_status": "success"},
+    }
+
+    def inspect_and_upload(**_kwargs):
+        """在上游调用期间检查 Plane 投影已回到安全的待处理状态。"""
+        refreshed = ResearchChainUpload.objects.get(pk=stale.pk)
+        assert refreshed.status == ResearchChainUpload.Status.PENDING
+        assert refreshed.external_upload_id == ""
+        assert refreshed.knowledge_id == ""
+        assert refreshed.task_id == ""
+        assert refreshed.reference_id is None
+        return _result(items=[receipt], request_id="req-retry-stale")
+
+    with patch(
+        "plane.research.services.integrations.adapters.RagPortalClient.upload",
+        side_effect=inspect_and_upload,
+    ):
+        response = env["owner_client"].post(
+            f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/",
+            {
+                "node_id": str(env["node"].id),
+                "kb_id": "kb-1",
+                "file": SimpleUploadedFile("retry.pdf", content, content_type="application/pdf"),
+            },
+            format="multipart",
+            HTTP_X_REQUEST_ID=f"req-retry-{uuid4().hex}",
+        )
+
+    assert response.status_code == 200, response.json()
+    assert response.json()["data"]["external_upload_id"] == "701"
+    assert response.json()["data"]["knowledge_id"] == "knowledge-retry"
+
+
 def test_upload_delete_is_soft_and_blocked_while_linked(env):
     """删除仅移除 Plane 投影，且被阶段引用时必须先解除关联。"""
     linked = _stored_upload(env, knowledge_id="knowledge-delete-linked", file_name="linked.pdf")
@@ -654,6 +728,7 @@ def test_upload_status_refresh_updates_projection_and_appends_fact(env):
     [
         ("finalizing", "SUCCESS", ""),
         ("deleted", "FAILED", "upstream_deleted"),
+        ("cancelled", "FAILED", "upstream_cancelled"),
     ],
 )
 def test_upload_status_maps_reference_ready_and_deleted_states(env, raw_status, expected_status, expected_error):

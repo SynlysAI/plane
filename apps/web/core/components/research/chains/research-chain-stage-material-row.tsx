@@ -113,11 +113,12 @@ export function ResearchChainStageMaterialRow({
 
   /** Convert one row action error to concise localized text. */
   const describeError = (error: unknown) => {
+    const message = (error as { message?: string } | null | undefined)?.message;
     const missing = (error as { missing?: unknown } | null | undefined)?.missing;
     if (Array.isArray(missing) && missing.includes(material.code)) {
       return t("research.chains.stage_approval.missing_materials", { materials: material.title });
     }
-    return t(getResearchErrorKey(error));
+    return message || t(getResearchErrorKey(error));
   };
 
   /** Link one already-uploaded file to this requirement. */
