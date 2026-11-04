@@ -488,12 +488,14 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
                 <TableHead>{t("research.reports.columns.read_state")}</TableHead>
                 <TableHead>{t("research.reports.columns.visibility")}</TableHead>
                 <TableHead className="text-right">{t("research.chains.updated_at")}</TableHead>
-                <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
+                <TableHead className="sticky right-0 z-10 bg-layer-1 text-right">
+                  {t("research.approvals.columns.actions")}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {reports.map((report) => (
-                <TableRow key={report.id} className="hover:bg-surface-2">
+                <TableRow key={report.id} className="group/report-row hover:bg-surface-2">
                   <TableCell>
                     {isDeletedScope ? (
                       <span className="font-medium text-primary">{report.period_key}</span>
@@ -560,7 +562,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
                   <TableCell className="text-right text-tertiary tabular-nums">
                     {formatResearchDate(report.updated_at, currentLocale)}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="sticky right-0 z-10 border-l border-subtle bg-surface-1 text-right group-hover/report-row:bg-surface-2">
                     {isDeletedScope ? (
                       report.can_restore ? (
                         <Button
