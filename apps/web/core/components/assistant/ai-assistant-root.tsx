@@ -107,22 +107,21 @@ const AIAssistantRootContent = observer(function AIAssistantRootContent({ childr
   if (!workspaceSlug) return <>{children}</>;
 
   return (
-    <div className="relative flex size-full min-h-0 min-w-0 flex-1 items-stretch overflow-hidden">
-      <div className="relative flex size-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
-      <RightDockShell
-        agentOpen={assistantStore.isOpen}
-        onOpenAgent={() => assistantStore.open()}
-        agentPanel={
-          <AIAssistantPanel
-            workspaceSlug={workspaceSlug}
-            statusState={resolvedStatus?.state ?? "loading"}
-            onRetryStatus={() => void mutate()}
-          />
-        }
-      >
-        {children}
-      </RightDockShell>
-    </div>
+    <RightDockShell
+      agentOpen={assistantStore.isOpen}
+      agentDocked={assistantStore.dockMode === "docked"}
+      launcherVisible={resolvedStatus !== null}
+      onOpenAgent={() => assistantStore.open()}
+      agentPanel={
+        <AIAssistantPanel
+          workspaceSlug={workspaceSlug}
+          statusState={resolvedStatus?.state ?? "loading"}
+          onRetryStatus={() => void mutate()}
+        />
+      }
+    >
+      {children}
+    </RightDockShell>
   );
 });
 

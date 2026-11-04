@@ -164,11 +164,15 @@ export function RightDockShell({
   children,
   agentPanel,
   agentOpen,
+  agentDocked = false,
+  launcherVisible = true,
   onOpenAgent,
 }: {
   children: ReactNode;
   agentPanel: ReactNode;
   agentOpen: boolean;
+  agentDocked?: boolean;
+  launcherVisible?: boolean;
   onOpenAgent: () => void;
 }) {
   const { t } = useTranslation();
@@ -181,48 +185,69 @@ export function RightDockShell({
   }, [hasDetail]);
 
   const showDetail = hasDetail && (wide || preferred === "detail");
-  const showAgent = agentOpen && (wide || preferred === "agent");
+  const showDockedAgent = agentDocked && agentOpen && (wide || preferred === "agent");
+  const showFloatingAgent = agentOpen && !agentDocked;
+  const showRail = hasDetail || (agentOpen && agentDocked);
+  const showLauncher = launcherVisible && !agentOpen && !hasDetail;
 
   return (
     <div className="relative flex size-full min-h-0 min-w-0 flex-1 items-stretch overflow-hidden">
-      <main className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</main>
+      <div data-right-dock-workspace className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {children}
+      </div>
       <RightDockOutlet visible={showDetail} />
-      {showAgent ? (
+      {showDockedAgent ? (
         <div data-right-dock-agent className="flex h-full min-h-0">
           {agentPanel}
         </div>
+      ) : showFloatingAgent ? (
+        agentPanel
       ) : null}
-      <nav
-        aria-label="右侧停靠"
-        data-right-dock-rail
-        className="flex h-full w-11 shrink-0 flex-col items-center justify-start gap-1 border-l border-subtle bg-surface-2 py-2"
-      >
+      {showLauncher ? (
         <button
           type="button"
-          onClick={() => {
-            setPreferred("agent");
-            onOpenAgent();
-          }}
-          aria-pressed={showAgent}
+          data-right-dock-agent-launcher
+          onClick={onOpenAgent}
           aria-label={t("aiAssistant.open")}
           title={t("aiAssistant.open")}
-          className="flex size-8 items-center justify-center rounded-md text-secondary transition hover:bg-surface-1 hover:text-primary"
+          className="fixed top-1/2 right-5 z-40 flex size-11 -translate-y-1/2 items-center justify-center rounded-[6px] border border-subtle bg-surface-1 text-primary transition-colors duration-150 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-strong"
         >
-          <Sparkles className="size-4" />
+          <Sparkles className="size-[18px]" />
         </button>
-        {hasDetail ? (
+      ) : null}
+      {showRail ? (
+        <nav
+          aria-label="右侧停靠"
+          data-right-dock-rail
+          className="flex h-full w-11 shrink-0 flex-col items-center justify-start gap-1 border-l border-subtle bg-surface-2 py-2"
+        >
           <button
             type="button"
-            onClick={() => setPreferred("detail")}
-            aria-pressed={showDetail}
-            aria-label="任务详情"
-            title="任务详情"
+            onClick={() => {
+              setPreferred("agent");
+              onOpenAgent();
+            }}
+            aria-pressed={showDockedAgent}
+            aria-label={t("aiAssistant.open")}
+            title={t("aiAssistant.open")}
             className="flex size-8 items-center justify-center rounded-md text-secondary transition hover:bg-surface-1 hover:text-primary"
           >
-            <FileText className="size-4" />
+            <Sparkles className="size-4" />
           </button>
-        ) : null}
-      </nav>
+          {hasDetail ? (
+            <button
+              type="button"
+              onClick={() => setPreferred("detail")}
+              aria-pressed={showDetail}
+              aria-label="任务详情"
+              title="任务详情"
+              className="flex size-8 items-center justify-center rounded-md text-secondary transition hover:bg-surface-1 hover:text-primary"
+            >
+              <FileText className="size-4" />
+            </button>
+          ) : null}
+        </nav>
+      ) : null}
     </div>
   );
 }
