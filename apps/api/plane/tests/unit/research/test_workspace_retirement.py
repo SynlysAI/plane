@@ -82,9 +82,10 @@ def test_every_research_table_has_a_condition(db):
     from plane.tests.research_fixtures import make_user, make_workspace
 
     workspace = make_workspace(make_user())
-    # IdentityMapping is instance level and AccountLink is a global external
-    # identity binding; neither is scoped to one Plane workspace.
-    workspace_agnostic = {"IdentityMapping", "AccountLink"}
+    # IdentityMapping is instance level; AccountLink and the personal
+    # ResearchAgentIdentityBinding are global external identity bindings,
+    # none of which are scoped to one Plane workspace.
+    workspace_agnostic = {"IdentityMapping", "AccountLink", "ResearchAgentIdentityBinding"}
     missing = [
         model.__name__
         for model, condition in _conditions(workspace).items()
