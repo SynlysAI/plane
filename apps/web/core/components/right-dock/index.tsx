@@ -171,7 +171,11 @@ export function RightDockShell({
 
   return (
     <div className="relative flex size-full min-h-0 min-w-0 flex-1 items-stretch overflow-hidden">
-      <div data-right-dock-workspace className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <div
+        data-right-dock-workspace
+        className="relative flex min-h-0 min-w-0 flex-col overflow-hidden"
+        style={{ flexBasis: "min(320px, 100%)", flexGrow: 1, flexShrink: 0 }}
+      >
         {children}
       </div>
       <RightDockOutlet compact={showDockedAgent} />
@@ -212,7 +216,6 @@ export function RightDockShell({
           <button
             type="button"
             onClick={() => {
-              setPreferred("agent");
               onOpenAgent();
             }}
             aria-pressed={showDockedAgent}
