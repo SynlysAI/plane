@@ -2,6 +2,7 @@
 # ruff: noqa: F811
 
 import asyncio
+import hashlib
 import json
 from datetime import timedelta
 from uuid import uuid4
@@ -606,7 +607,7 @@ def test_transport_negotiation_methods_notifications_batch_and_origin(unified):
         "initialize",
         {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "probe", "version": "1"}},
     )
-    assert result.json()["result"]["protocolVersion"] == "2025-03-26"
+    assert result.json()["result"]["protocolVersion"] == "2025-06-18"
     assert not result.has_header("Mcp-Session-Id")
     assert client.get("/api/mcp/").status_code == 405
     assert client.delete("/api/mcp/").status_code == 405
@@ -622,10 +623,139 @@ def test_transport_negotiation_methods_notifications_batch_and_origin(unified):
     assert batch.json() == [{"jsonrpc": "2.0", "id": 0, "result": {}}]
     assert rpc(client, "ping", identity=False).json()["error"]["code"] == -32600
     assert client.post("/api/mcp/", {}, format="json", HTTP_ORIGIN="http://evil.invalid").status_code == 403
-    client.credentials(HTTP_AUTHORIZATION="Bearer " + value["secret"], HTTP_ACCEPT="application/json")
+    future_header = APIClient()
+    future_header.credentials(
+        HTTP_AUTHORIZATION="Bearer " + value["secret"],
+        HTTP_ACCEPT="application/json",
+        HTTP_MCP_PROTOCOL_VERSION="2025-11-25",
+    )
+    response = future_header.post(
+        "/api/mcp/",
+        {
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "initialize",
+            "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "early header"}},
+        },
+        format="json",
+    )
+    assert response.json()["result"]["protocolVersion"] == "2025-06-18"
+    quality = APIClient()
+    quality.credentials(HTTP_AUTHORIZATION="Bearer " + value["secret"], HTTP_ACCEPT="application/json;q=0, */*")
+    assert quality.post("/api/mcp/", {"jsonrpc": "2.0", "id": 10, "method": "ping"}, format="json").status_code == 406
+    quality.credentials(
+        HTTP_AUTHORIZATION="Bearer " + value["secret"], HTTP_ACCEPT="application/*;q=0, application/json"
+    )
+    assert quality.post("/api/mcp/", {"jsonrpc": "2.0", "id": 11, "method": "ping"}, format="json").status_code == 200
+    client.credentials(HTTP_AUTHORIZATION="Bearer " + value["secret"], HTTP_ACCEPT="text/plain")
     assert client.post("/api/mcp/", {}, format="json").status_code == 406
+    client.credentials(
+        HTTP_AUTHORIZATION="Bearer " + value["secret"],
+        HTTP_ACCEPT="application/json",
+        HTTP_MCP_PROTOCOL_VERSION="2024-01-01",
+    )
+    assert rpc(client, "ping").status_code == 400
     assert resolve("/api/mcp/").url_name == "unified-mcp"
+    assert resolve("/api/mcp").url_name == "unified-mcp-without-slash"
     assert resolve("/api/mcp/native/options/").url_name == "native-mcp-bridge"
+
+
+def test_workbuddy_configuration_transport_catalogue_and_call(unified):
+    """WorkBuddy 精简配置可完成初始化、全量工具发现和只读调用。"""
+    e = unified
+    value, _ = issued(e)
+    key = value["workbuddy_server_key"]
+    assert key == f"plane-unified-{value['id'].replace('-', '')}"
+    workbuddy = json.loads(value["workbuddy_json"])
+    server = workbuddy["mcpServers"][key]
+    assert set(workbuddy) == {"mcpServers"}
+    assert set(server) == {"url", "headers"}
+    assert server["url"].endswith("/api/mcp")
+    assert server["headers"] == {"Authorization": "Bearer " + value["secret"]}
+    assert len(json.loads(value["sciencediscovery_json"])["mcpServers"]) == 1
+    assert value["codex_toml"].count("[mcp_servers.") == 1
+
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION="Bearer " + value["secret"], HTTP_ACCEPT="application/json")
+    initialized = client.post(
+        "/api/mcp",
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "WorkBuddy"}},
+        },
+        format="json",
+    )
+    assert initialized.json()["result"]["protocolVersion"] == "2025-06-18"
+    legacy = client.post(
+        "/api/mcp",
+        {
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "initialize",
+            "params": {"protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "Codex"}},
+        },
+        format="json",
+    )
+    assert legacy.json()["result"]["protocolVersion"] == "2025-03-26"
+    assert (
+        client.post("/api/mcp", {"jsonrpc": "2.0", "method": "notifications/initialized"}, format="json").status_code
+        == 202
+    )
+    listed = client.post("/api/mcp", {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}, format="json")
+    tools = listed.json()["result"]["tools"]
+    assert len(tools) == 6 and "nextCursor" not in listed.json()["result"]
+
+    def schemas(value):
+        if isinstance(value, dict):
+            yield value
+            for item in value.values():
+                yield from schemas(item)
+        elif isinstance(value, list):
+            for item in value:
+                yield from schemas(item)
+
+    assert not [
+        (tool["name"], key)
+        for tool in tools
+        for schema in schemas(tool["inputSchema"])
+        for key in ("anyOf", "oneOf", "const")
+        if key in schema
+    ]
+    assert not [
+        schema["type"]
+        for tool in tools
+        for schema in schemas(tool["inputSchema"])
+        if isinstance(schema.get("type"), list)
+    ]
+    from django.core import signing
+
+    from plane.mcp.reading import encode
+
+    connection = db.UnifiedMCPConnection.objects.get(pk=value["id"])
+    digest = hashlib.sha256(encode(connection.scope).encode()).hexdigest()
+    cursor = signing.dumps(
+        {"connection": value["id"], "scope": digest, "start": 1},
+        salt="unified-mcp.catalogue",
+        compress=True,
+    )
+    old_page = client.post(
+        "/api/mcp", {"jsonrpc": "2.0", "id": 4, "method": "tools/list", "params": {"cursor": cursor}}, format="json"
+    )
+    assert len(old_page.json()["result"]["tools"]) == 5
+    assert "nextCursor" not in old_page.json()["result"]
+    called = client.post(
+        "/api/mcp",
+        {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {"name": "plane_list_workspaces", "arguments": {}},
+        },
+        format="json",
+    )
+    assert called.json()["result"]["isError"] is False
 
 
 @pytest.mark.django_db(transaction=True)

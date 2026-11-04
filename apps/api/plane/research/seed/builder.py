@@ -895,6 +895,7 @@ class ResearchSeedBuilder:
                 return self.user_for(mentor_key)
         return self.actor
 
+    @transaction.atomic
     def _apply_report_status(self, report, *, owner, project, status):
         owner_key = self._account_key(owner)
         reviewer = self._report_reviewer(owner_key) if owner_key else self.actor

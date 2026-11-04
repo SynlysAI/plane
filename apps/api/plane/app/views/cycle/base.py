@@ -41,7 +41,7 @@ from plane.app.serializers import (
     CycleUserPropertiesSerializer,
     CycleWriteSerializer,
 )
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.utils.issue_mutations import notification_atomic_mutation, queue_issue_activity
 from plane.db.models import (
     Cycle,
     CycleIssue,
@@ -479,12 +479,13 @@ class CycleViewSet(BaseViewSet):
         return Response(data, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN], creator=True, model=Cycle)
+    @notification_atomic_mutation
     def destroy(self, request, slug, project_id, pk):
         cycle = Cycle.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
 
         cycle_issues = list(CycleIssue.objects.filter(cycle_id=self.kwargs.get("pk")).values_list("issue", flat=True))
 
-        issue_activity.delay(
+        queue_issue_activity(
             type="cycle.activity.deleted",
             requested_data=json.dumps(
                 {

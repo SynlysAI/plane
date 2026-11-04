@@ -10,15 +10,22 @@ from plane.app.views import (
     InboxListEndpoint,
     InboxMarkAllReadEndpoint,
     InboxUnreadEndpoint,
+    NotificationDeliveryDiagnosticsEndpoint,
     NotificationViewSet,
     SystemAnnouncementEndpoint,
     UnreadNotificationEndpoint,
     MarkAllReadNotificationViewSet,
     UserNotificationPreferenceEndpoint,
+    WorkspaceNotificationPolicyEndpoint,
 )
 
 
 urlpatterns = [
+    path(
+        "workspaces/<str:slug>/users/notification-deliveries/",
+        NotificationDeliveryDiagnosticsEndpoint.as_view(),
+        name="notification-delivery-diagnostics",
+    ),
     path(
         "workspaces/<str:slug>/users/inbox/",
         InboxListEndpoint.as_view(),
@@ -78,5 +85,10 @@ urlpatterns = [
         "users/me/notification-preferences/",
         UserNotificationPreferenceEndpoint.as_view(),
         name="user-notification-preferences",
+    ),
+    path(
+        "workspaces/<str:slug>/notification-policies/",
+        WorkspaceNotificationPolicyEndpoint.as_view(),
+        name="workspace-notification-policies",
     ),
 ]

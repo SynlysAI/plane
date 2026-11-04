@@ -11,6 +11,8 @@ import pytest
 from rest_framework import status
 
 from plane.db.models import (
+    AdministrativeOrganization,
+    AdministrativeOrganizationMember,
     Issue,
     Notification,
     Page,
@@ -18,11 +20,14 @@ from plane.db.models import (
     PeriodicReportComment,
     PeriodicReportCommentThread,
     Project,
+    ProjectNetwork,
     ResearchFeedback,
     SystemAnnouncement,
     User,
+    WorkspaceMember,
 )
 from plane.app.services.inbox import generate_inbox_todo_reminders, todo_payload_hash
+from plane.app.views.notification.base import renderable_inbox_notifications
 from plane.research.utils.notifications import notify_report_comment
 
 
@@ -193,6 +198,56 @@ def create_feedback_notification(workspace, receiver, actor):
 class TestUnifiedWorkspaceInbox:
     """Verify notification and todo projections share one inbox contract."""
 
+    def test_administrative_project_assignment_notifications_enter_inbox(
+        self, session_client, workspace, create_user
+    ):
+        """Assignments in inherited administrative projects remain visible in the inbox."""
+        default_organization = AdministrativeOrganization.objects.get(
+            workspace=workspace,
+            is_default=True,
+        )
+        member_organization = AdministrativeOrganization.objects.create(
+            workspace=workspace,
+            name="Inbox organization",
+            created_by=create_user,
+        )
+        AdministrativeOrganizationMember.objects.create(
+            workspace=workspace,
+            organization=member_organization,
+            member=create_user,
+            created_by=create_user,
+        )
+
+        projects = []
+        for identifier, organization in (
+            ("INBPD", default_organization),
+            ("INBPO", member_organization),
+        ):
+            project = Project.objects.create(
+                name=f"Inbox administrative project {identifier}",
+                identifier=identifier,
+                workspace=workspace,
+                network=ProjectNetwork.PUBLIC.value,
+                administrative_organization=organization,
+                created_by=create_user,
+            )
+            issue = Issue.objects.create(
+                name=f"Assigned work item {identifier}",
+                project=project,
+                workspace=workspace,
+                created_by=create_user,
+            )
+            projects.append(create_work_item_notification(workspace, create_user, issue))
+
+        response = session_client.get(inbox_url(workspace), {"read": "false"})
+        payload = response.json()
+
+        assert response.status_code == status.HTTP_200_OK
+        assert {f"notification:{notification.id}" for notification in projects} <= {
+            item["id"] for item in payload["results"]
+        }
+        assert payload["unread_counts"]["work_item_unread_count"] == 2
+
     def test_feedback_notifications_enter_unified_inbox_as_system_items(
         self, session_client, workspace, create_user, monkeypatch
     ):
@@ -222,6 +277,46 @@ class TestUnifiedWorkspaceInbox:
             "work_item_unread_count": 0,
             "system_unread_count": 1,
         }
+
+    def test_feedback_notification_is_hidden_when_receiver_cannot_reply(
+        self, workspace, create_user
+    ):
+        """Feedback inbox visibility follows the recipient's current feedback access."""
+        WorkspaceMember.objects.filter(workspace=workspace, member=create_user).update(role=15)
+        author = User.objects.create(
+            username=f"feedback-author-{uuid4().hex}",
+            email=f"feedback-author-{uuid4()}@example.com",
+            first_name="Author",
+        )
+        feedback = ResearchFeedback.objects.create(
+            workspace=workspace,
+            username="Feedback author",
+            feedback_type="bug",
+            content="Private report",
+            created_by=author,
+            idempotency_key=uuid4().hex,
+            payload_hash=uuid4().hex,
+        )
+        notification = Notification.objects.create(
+            workspace=workspace,
+            receiver=create_user,
+            entity_identifier=feedback.id,
+            entity_name="research_feedback",
+            title="反馈有新回复",
+            message={"action": "replied"},
+            sender="research:feedback",
+            triggered_by=author,
+            data={"action": "replied", "feedback_id": str(feedback.id)},
+        )
+
+        assert not renderable_inbox_notifications(workspace.slug, create_user.id).filter(
+            pk=notification.pk
+        ).exists()
+
+        WorkspaceMember.objects.filter(workspace=workspace, member=create_user).update(is_active=False)
+        assert not renderable_inbox_notifications(workspace.slug, create_user.id).filter(
+            pk=notification.pk
+        ).exists()
 
     def test_system_announcements_include_body_for_inbox_detail(
         self, session_client, workspace, create_user, monkeypatch

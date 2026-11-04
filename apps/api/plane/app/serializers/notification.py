@@ -63,3 +63,4 @@ class UserNotificationPreferenceSerializer(BaseSerializer):
     class Meta:
         model = UserNotificationPreference
         fields = "__all__"
+        read_only_fields = ("user", "workspace", "project", "created_at", "updated_at", "deleted_at")

@@ -26,7 +26,7 @@ from plane.api.serializers import (
     IntakeIssueUpdateSerializer,
 )
 from plane.app.permissions import ProjectLitePermission
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.utils.issue_mutations import notification_atomic_mutation, queue_issue_activity
 from plane.db.models import Intake, IntakeIssue, Issue, Project, ProjectMember, State, StateGroup
 from plane.utils.host import base_host
 from plane.utils.content_validator import validate_html_content
@@ -140,6 +140,7 @@ class IntakeIssueListCreateAPIEndpoint(BaseAPIView):
             400: INVALID_REQUEST_RESPONSE,
         },
     )
+    @notification_atomic_mutation
     def post(self, request, slug, project_id):
         """Create intake work item
 
@@ -209,7 +210,7 @@ class IntakeIssueListCreateAPIEndpoint(BaseAPIView):
             source=SourceType.IN_APP,
         )
         # Create an Issue Activity
-        issue_activity.delay(
+        queue_issue_activity(
             type="issue.activity.created",
             requested_data=json.dumps(request.data, cls=DjangoJSONEncoder),
             actor_id=str(request.user.id),
@@ -305,6 +306,7 @@ class IntakeIssueDetailAPIEndpoint(BaseAPIView):
             400: INVALID_REQUEST_RESPONSE,
         },
     )
+    @notification_atomic_mutation
     def patch(self, request, slug, project_id, issue_id):
         """Update intake work item
 
@@ -401,7 +403,7 @@ class IntakeIssueDetailAPIEndpoint(BaseAPIView):
             current_instance = issue
             # Log all the updates
             requested_data = json.dumps(issue_data, cls=DjangoJSONEncoder)
-            issue_activity.delay(
+            queue_issue_activity(
                 type="issue.activity.updated",
                 requested_data=requested_data,
                 actor_id=str(request.user.id),
@@ -422,7 +424,7 @@ class IntakeIssueDetailAPIEndpoint(BaseAPIView):
             intake_serializer.save()
 
             # create a activity for status change
-            issue_activity.delay(
+            queue_issue_activity(
                 type="intake.activity.created",
                 requested_data=json.dumps(request.data, cls=DjangoJSONEncoder),
                 actor_id=str(request.user.id),

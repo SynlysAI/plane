@@ -48,7 +48,7 @@ def add_workspace_member(workspace, user, role=15):
 def no_issue_side_effects():
     """Keep contract tests focused on HTTP assignment validation."""
     with (
-        mock.patch("plane.app.views.issue.base.issue_activity.delay"),
+        mock.patch("plane.app.views.issue.base.queue_issue_activity"),
         mock.patch("plane.utils.issue_mutations.model_activity.delay"),
         mock.patch("plane.utils.issue_mutations.issue_description_version_task.delay"),
     ):

@@ -45,7 +45,7 @@ from plane.app.serializers import (
     IssueSerializer,
     ProjectUserPropertySerializer,
 )
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.utils.issue_mutations import notification_atomic_mutation, queue_issue_activity
 from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.utils.issue_mutations import save_issue, soft_delete_issue
 from plane.db.models import (
@@ -1073,6 +1073,7 @@ class IssueBulkUpdateDateEndpoint(BaseAPIView):
         return True
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @notification_atomic_mutation
     def post(self, request, slug, project_id):
         updates = request.data.get("updates", [])
 
@@ -1101,7 +1102,7 @@ class IssueBulkUpdateDateEndpoint(BaseAPIView):
                 )
 
             if start_date:
-                issue_activity.delay(
+                queue_issue_activity(
                     type="issue.activity.updated",
                     requested_data=json.dumps({"start_date": update.get("start_date")}),
                     current_instance=json.dumps({"start_date": str(issue.start_date)}),
@@ -1114,7 +1115,7 @@ class IssueBulkUpdateDateEndpoint(BaseAPIView):
                 issues_to_update.append(issue)
 
             if target_date:
-                issue_activity.delay(
+                queue_issue_activity(
                     type="issue.activity.updated",
                     requested_data=json.dumps({"target_date": update.get("target_date")}),
                     current_instance=json.dumps({"target_date": str(issue.target_date)}),

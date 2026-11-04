@@ -51,13 +51,14 @@ def native_effects(monkeypatch):
     """Execute real existing tasks; substitute only their Redis origin hint, never business logic."""
     from plane.bgtasks import issue_activities_task
     from plane.bgtasks.issue_description_version_task import issue_description_version_task
+    from plane.bgtasks.issue_activities_task import process_notification_generation_outbox
     from plane.bgtasks.notification_task import notifications
     from plane.bgtasks.webhook_task import model_activity, webhook_activity
 
     # Run the unchanged native task bodies synchronously after actual DB commit.
     # This is an execution adapter, not a substitute for activities/notification rules.
     for task in (
-        issue_activities_task.issue_activity,
+        process_notification_generation_outbox,
         notifications,
         model_activity,
         issue_description_version_task,
@@ -543,7 +544,7 @@ def test_nonempty_comment_rollback_and_no_postcommit_on_failure(writable):
             "plane.mcp.writing.UnifiedWriteService.receipt",
             side_effect=__import__("django.db", fromlist=["IntegrityError"]).IntegrityError,
         ),
-        patch("plane.utils.issue_mutations.issue_activity.delay") as activity,
+        patch("plane.utils.issue_mutations.process_notification_generation_outbox.delay") as activity,
     ):
         invoke(e["client"], "plane_create_task", create_args(e), error="state_conflict")
         activity.assert_not_called()
@@ -569,7 +570,10 @@ def test_committed_but_readback_failed_recovers_without_duplicate(writable):
 def test_broker_publish_failure_does_not_report_committed_write_as_failure(writable):
     e = writable
     with (
-        patch("plane.utils.issue_mutations.issue_activity.delay", side_effect=RuntimeError("synthetic broker outage")),
+        patch(
+            "plane.utils.issue_mutations.process_notification_generation_outbox.delay",
+            side_effect=RuntimeError("synthetic broker outage"),
+        ),
         patch("plane.utils.issue_mutations.model_activity.delay") as webhook,
     ):
         created(e)

@@ -21,7 +21,7 @@ from rest_framework.response import Response
 # Module imports
 from .. import BaseViewSet
 from plane.app.serializers import CycleIssueSerializer
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.utils.issue_mutations import notification_atomic_mutation, queue_issue_activity
 from plane.db.models import Cycle, CycleIssue, Issue, FileAsset, IssueLink
 from plane.utils.grouper import (
     issue_group_values,
@@ -221,6 +221,7 @@ class CycleIssueViewSet(BaseViewSet):
             )
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @notification_atomic_mutation
     def create(self, request, slug, project_id, cycle_id):
         issues = request.data.get("issues", [])
 
@@ -298,7 +299,7 @@ class CycleIssueViewSet(BaseViewSet):
         # Update the cycle issues
         CycleIssue.objects.bulk_update(updated_records, ["cycle_id"], batch_size=100)
         # Capture Issue Activity
-        issue_activity.delay(
+        queue_issue_activity(
             type="cycle.activity.created",
             requested_data=json.dumps({"cycles_list": issues}),
             actor_id=str(self.request.user.id),
@@ -317,6 +318,7 @@ class CycleIssueViewSet(BaseViewSet):
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @notification_atomic_mutation
     def destroy(self, request, slug, project_id, cycle_id, issue_id):
         cycle_issue = CycleIssue.objects.filter(
             issue_id=issue_id,
@@ -324,7 +326,7 @@ class CycleIssueViewSet(BaseViewSet):
             project_id=project_id,
             cycle_id=cycle_id,
         )
-        issue_activity.delay(
+        queue_issue_activity(
             type="cycle.activity.deleted",
             requested_data=json.dumps(
                 {

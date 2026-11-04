@@ -35,7 +35,7 @@ from plane.api.serializers import (
     IssueSerializer,
 )
 from plane.app.permissions import ProjectEntityPermission
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.utils.issue_mutations import notification_atomic_mutation, queue_issue_activity
 from plane.db.models import (
     Cycle,
     CycleIssue,
@@ -614,6 +614,7 @@ class CycleDetailAPIEndpoint(BaseAPIView):
             204: DELETED_RESPONSE,
         },
     )
+    @notification_atomic_mutation
     def delete(self, request, slug, project_id, pk):
         """Delete cycle
 
@@ -637,7 +638,7 @@ class CycleDetailAPIEndpoint(BaseAPIView):
 
         cycle_issues = list(CycleIssue.objects.filter(cycle_id=self.kwargs.get("pk")).values_list("issue", flat=True))
 
-        issue_activity.delay(
+        queue_issue_activity(
             type="cycle.activity.deleted",
             requested_data=json.dumps(
                 {
@@ -963,6 +964,7 @@ class CycleIssueListCreateAPIEndpoint(BaseAPIView):
             400: REQUIRED_FIELDS_RESPONSE,
         },
     )
+    @notification_atomic_mutation
     def post(self, request, slug, project_id, cycle_id):
         """Add cycle issues
 
@@ -1043,7 +1045,7 @@ class CycleIssueListCreateAPIEndpoint(BaseAPIView):
         CycleIssue.objects.bulk_update(updated_records, ["cycle_id"], batch_size=100)
 
         # Capture Issue Activity
-        issue_activity.delay(
+        queue_issue_activity(
             type="cycle.activity.created",
             requested_data=json.dumps({"cycles_list": issues}),
             actor_id=str(self.request.user.id),
@@ -1139,6 +1141,7 @@ class CycleIssueDetailAPIEndpoint(BaseAPIView):
             204: DELETED_RESPONSE,
         },
     )
+    @notification_atomic_mutation
     def delete(self, request, slug, project_id, cycle_id, issue_id):
         """Remove cycle work item
 
@@ -1153,7 +1156,7 @@ class CycleIssueDetailAPIEndpoint(BaseAPIView):
         )
         issue_id = cycle_issue.issue_id
         cycle_issue.delete()
-        issue_activity.delay(
+        queue_issue_activity(
             type="cycle.activity.deleted",
             requested_data=json.dumps(
                 {

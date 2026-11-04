@@ -2,17 +2,19 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-from plane.db.models import Notification
+from plane.db.models import Notification, NotificationEvent
+from plane.utils.notification_outbox import persist_research_notification_batch
 
 from .approvals import pending_approver_users
 from .notifications import RESEARCH_APPROVAL_ENTITY
 
 
 def notify_approvers(request, actor, title):
+    rows = []
     for receiver in pending_approver_users(request):
         if receiver.id == actor.id:
             continue
-        Notification.objects.create(
+        rows.append(Notification(
             workspace_id=request.flow.workspace_id,
             project_id=request.issue.project_id,
             data={
@@ -30,13 +32,25 @@ def notify_approvers(request, actor, title):
             sender="research",
             triggered_by=actor,
             receiver=receiver,
-        )
+        ))
+    persist_research_notification_batch(
+        rows,
+        category=NotificationEvent.Category.RESEARCH_ACTION,
+        email_policy={
+            str(row.receiver_id): {
+                "category": NotificationEvent.Category.RESEARCH_ACTION,
+                "reason": "pending_approver",
+                "immediate": True,
+            }
+            for row in rows
+        },
+    )
 
 
 def notify_requester(request, actor, title, action):
     if not request.requested_by_id:
         return
-    Notification.objects.create(
+    row = Notification(
         workspace_id=request.flow.workspace_id,
         project_id=request.issue.project_id,
         data={
@@ -53,4 +67,15 @@ def notify_requester(request, actor, title, action):
         sender="research",
         triggered_by=actor,
         receiver_id=request.requested_by_id,
+    )
+    persist_research_notification_batch(
+        [row],
+        category=NotificationEvent.Category.RESEARCH_ACTION,
+        email_policy={
+            str(row.receiver_id): {
+                "category": NotificationEvent.Category.RESEARCH_ACTION,
+                "reason": "requester",
+                "immediate": True,
+            }
+        },
     )

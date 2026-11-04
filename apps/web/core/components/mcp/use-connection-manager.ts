@@ -9,7 +9,7 @@ export type ConnectionMetadata = {
   last_used_at: string | null;
   configuration_available: boolean;
 };
-export type ConfigurationFiles = { toml: string; json: string };
+export type ConfigurationFiles = { toml: string; json: string; workbuddy?: string };
 export type ConnectionAdapter<T extends ConnectionMetadata, Issued, Input> = {
   list: (cursor?: string) => Promise<{ results: T[]; next_cursor: string | null; csrf_token: string }>;
   issue: (data: Input, csrf: string) => Promise<Issued>;

@@ -12,6 +12,19 @@ def server_key(name):
     return name.strip()
 
 
+def workbuddy_server_key(connection_id):
+    """生成适合 WorkBuddy 配置导入的稳定安全服务标识。
+
+    Args:
+        connection_id: 统一 MCP 连接 UUID。
+
+    Returns:
+        由连接 UUID 全量十六进制形式派生的 ASCII 服务标识，保证不同连接
+        在 WorkBuddy 中不会因键名碰撞而互相覆盖。
+    """
+    return f"plane-unified-{str(connection_id).replace('-', '')}"
+
+
 def _valid_origin(value):
     """Return a configured HTTP(S) origin, or an empty string for invalid values."""
     value = str(value or "").strip().rstrip("/")
@@ -58,13 +71,29 @@ def public_url(request, path):
     return public_origin(request) + path
 
 
-def client_files(key, url, headers):
-    """Generate Codex TOML and generic MCP JSON with the same server key.
+def workbuddy_files(key, url, headers):
+    """生成 WorkBuddy 自定义连接使用的精简 JSON。
+
+    Args:
+        key: 由连接 ID 派生的安全服务标识。
+        url: 统一 MCP 公开地址；导出时去掉尾斜杠以避免客户端重定向。
+        headers: 认证请求头。
+
+    Returns:
+        可直接导入 WorkBuddy 的 JSON 字符串。
+    """
+    payload = {"mcpServers": {key: {"url": url.rstrip("/"), "headers": headers}}}
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def client_files(key, url, headers, workbuddy_key=None):
+    """Generate Codex TOML, generic MCP JSON, and optional WorkBuddy JSON.
 
     Args:
         key: User-supplied MCP server key.
         url: Absolute public MCP endpoint.
         headers: Authentication headers to embed in client configuration.
+        workbuddy_key: Optional safe server key used by WorkBuddy import.
 
     Returns:
         TOML and JSON strings suitable for direct client import.
@@ -80,7 +109,11 @@ def client_files(key, url, headers):
         'default_tools_approval_mode = "prompt"\n'
     )
     payload = {"mcpServers": {key: value}}
-    return {
+    files = {
         "codex_toml": toml,
         "sciencediscovery_json": json.dumps(payload, ensure_ascii=False),
     }
+    if workbuddy_key is not None:
+        files["workbuddy_server_key"] = workbuddy_key
+        files["workbuddy_json"] = workbuddy_files(workbuddy_key, url, headers)
+    return files

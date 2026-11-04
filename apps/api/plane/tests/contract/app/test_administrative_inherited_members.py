@@ -58,7 +58,7 @@ def inherited(workspace, create_user):
     owner_client = APIClient()
     owner_client.force_authenticate(user=create_user)
     with (
-        patch("plane.app.views.issue.base.issue_activity.delay"),
+        patch("plane.app.views.issue.base.queue_issue_activity"),
         patch("plane.utils.issue_mutations.model_activity.delay"),
         patch("plane.utils.issue_mutations.issue_description_version_task.delay"),
         patch("plane.app.views.issue.base.recent_visited_task.delay"),

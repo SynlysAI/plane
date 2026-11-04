@@ -105,6 +105,15 @@ const project = {
   secret: projectSecret,
   server_key: "我的连接",
   mcp_url: "https://plane.test/api/mcp/",
+  workbuddy_server_key: "plane-unified-11111111222243338444555555555555",
+  workbuddy_json: JSON.stringify({
+    mcpServers: {
+      "plane-unified-11111111222243338444555555555555": {
+        url: "https://plane.test/api/mcp",
+        headers: { Authorization: "Bearer " + projectSecret },
+      },
+    },
+  }),
   codex_toml: "unused",
   sciencediscovery_json: JSON.stringify({
     mcpServers: {
@@ -300,6 +309,12 @@ describe.each(["project", "weekly"] as const)("%s 连接的公共行为", (kind)
     expect(text()).toContain(secret);
     await click("通用 MCP JSON");
     expect(Object.keys(JSON.parse(text()!).mcpServers)).toHaveLength(1);
+    if (!isWeekly) {
+      await click("WorkBuddy JSON");
+      const workbuddy = JSON.parse(text()!).mcpServers["plane-unified-11111111222243338444555555555555"];
+      expect(Object.keys(workbuddy)).toEqual(["url", "headers"]);
+      expect(workbuddy.url).toBe("https://plane.test/api/mcp");
+    }
     await click("复制配置");
     expect(mocks.copy).toHaveBeenCalledWith(text());
     await click("导出配置");

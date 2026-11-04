@@ -4,6 +4,9 @@
 
 # Python imports
 import json
+import logging
+import uuid
+from datetime import timedelta
 
 
 # Third Party imports
@@ -11,6 +14,8 @@ from celery import shared_task
 
 # Django imports
 from django.core.serializers.json import DjangoJSONEncoder
+from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 
@@ -25,6 +30,7 @@ from plane.db.models import (
     IssueComment,
     IssueReaction,
     IssueSubscriber,
+    NotificationGenerationOutbox,
     Label,
     Module,
     Project,
@@ -36,6 +42,8 @@ from plane.settings.redis import redis_instance
 from plane.utils.exception_logger import log_exception
 from plane.utils.issue_relation_mapper import get_inverse_relation
 from plane.utils.uuid import is_valid_uuid
+
+logger = logging.getLogger("plane.worker")
 
 
 def extract_ids(data: dict | None, primary_key: str, fallback_key: str) -> set[str]:
@@ -1513,6 +1521,7 @@ def issue_activity(
     notification=False,
     origin=None,
     intake=None,
+    durable_generation=False,
 ):
     try:
         issue_activities = []
@@ -1584,21 +1593,103 @@ def issue_activity(
         issue_activities_created = IssueActivity.objects.bulk_create(issue_activities)
 
         if notification:
-            notifications.delay(
-                type=type,
-                issue_id=issue_id,
-                actor_id=actor_id,
-                project_id=project_id,
-                subscriber=subscriber,
-                issue_activities_created=json.dumps(
+            notification_payload = {
+                "type": type,
+                "issue_id": issue_id,
+                "actor_id": actor_id,
+                "project_id": project_id,
+                "subscriber": subscriber,
+                "issue_activities_created": json.dumps(
                     IssueActivitySerializer(issue_activities_created, many=True).data,
                     cls=DjangoJSONEncoder,
                 ),
-                requested_data=requested_data,
-                current_instance=current_instance,
-            )
+                "requested_data": requested_data,
+                "current_instance": current_instance,
+            }
+            if durable_generation:
+                notifications.run(**notification_payload)
+            else:
+                transaction.on_commit(
+                    lambda: notifications.delay(**notification_payload),
+                    robust=True,
+                )
 
         return
     except Exception as e:
         log_exception(e)
+        if durable_generation:
+            raise
         return
+
+
+@shared_task
+def process_notification_generation_outbox(outbox_id=None):
+    """Claim durable activity requests and recover expired processing leases.
+
+    Args:
+        outbox_id: Optional outbox row to process immediately.
+
+    Returns:
+        Number of rows claimed during this run.
+    """
+    now = timezone.now()
+    due_statuses = (NotificationGenerationOutbox.Status.PENDING, NotificationGenerationOutbox.Status.RETRY)
+    due_filter = Q(status__in=due_statuses, available_at__lte=now) | Q(
+        status=NotificationGenerationOutbox.Status.PROCESSING,
+        lease_until__lte=now,
+    )
+    candidates = NotificationGenerationOutbox.objects.filter(due_filter)
+    if outbox_id:
+        candidates = candidates.filter(pk=outbox_id)
+
+    with transaction.atomic():
+        rows = list(candidates.select_for_update(skip_locked=True).order_by("created_at")[:100])
+        claims = []
+        for row in rows:
+            token = uuid.uuid4().hex
+            row.status = NotificationGenerationOutbox.Status.PROCESSING
+            row.lease_until = now + timedelta(minutes=5)
+            row.lease_token = token
+            row.attempts += 1
+            row.save(update_fields=["status", "lease_until", "lease_token", "attempts", "updated_at"])
+            claims.append((row.pk, row.payload, token, row.attempts))
+
+    for row_id, payload, token, attempt in claims:
+        try:
+            with transaction.atomic():
+                issue_activity.run(**payload, durable_generation=True)
+                completed = NotificationGenerationOutbox.objects.filter(
+                    pk=row_id,
+                    status=NotificationGenerationOutbox.Status.PROCESSING,
+                    lease_token=token,
+                ).update(
+                    status=NotificationGenerationOutbox.Status.COMPLETED,
+                    processed_at=timezone.now(),
+                    lease_until=None,
+                    lease_token="",
+                    last_error_code="",
+                )
+                if completed != 1:
+                    raise RuntimeError("notification generation lease was lost")
+        except Exception as exc:
+            retry_delays = (1, 5, 15, 60, 360)
+            terminal = attempt >= len(retry_delays) + 1
+            retry_minutes = retry_delays[min(attempt - 1, len(retry_delays) - 1)]
+            NotificationGenerationOutbox.objects.filter(
+                pk=row_id,
+                status=NotificationGenerationOutbox.Status.PROCESSING,
+                lease_token=token,
+            ).update(
+                status=(
+                    NotificationGenerationOutbox.Status.FAILED
+                    if terminal
+                    else NotificationGenerationOutbox.Status.RETRY
+                ),
+                available_at=timezone.now() + timedelta(minutes=retry_minutes),
+                lease_until=None,
+                lease_token="",
+                last_error_code=type(exc).__name__[:128],
+            )
+            logger.exception("Durable notification generation failed", exc_info=exc)
+
+    return len(claims)

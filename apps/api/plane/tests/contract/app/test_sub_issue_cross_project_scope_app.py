@@ -170,7 +170,7 @@ class TestSubIssuesCrossProjectScope:
         task does an unscoped lookup + updated_at bump on whatever id it receives).
         """
         mock_activity = mocker.patch(
-            "plane.app.views.issue.sub_issue.issue_activity.delay"
+            "plane.app.views.issue.sub_issue.queue_issue_activity"
         )
         url = SUB_ISSUES_URL.format(
             slug=workspace.slug, project_id=project_a.id, issue_id=parent_a.id

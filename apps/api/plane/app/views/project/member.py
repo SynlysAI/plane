@@ -98,6 +98,7 @@ class ProjectMemberViewSet(BaseViewSet):
         # Initialize the bulk arrays
         updated_members = []
         new_members = []
+        reactivated_member_ids = set()
         bulk_issue_props = []
 
         # Create a dictionary of the member_id and their roles
@@ -124,6 +125,7 @@ class ProjectMemberViewSet(BaseViewSet):
                 )
 
         with transaction.atomic():
+            Project.objects.select_for_update().get(pk=project_id, workspace__slug=slug)
             existing_members = ProjectMember.objects.select_for_update().filter(
                 project_id=project_id,
                 member_id__in=requested_member_ids,
@@ -134,6 +136,8 @@ class ProjectMemberViewSet(BaseViewSet):
             # Re-enable revoked members and update requested roles.
             for project_member in existing_members:
                 existing_member_ids.add(str(project_member.member_id))
+                if not project_member.is_active:
+                    reactivated_member_ids.add(str(project_member.member_id))
                 project_member.role = member_roles[str(project_member.member_id)]
                 project_member.is_active = True
                 project_member.inheritance_revoked = False
@@ -187,9 +191,12 @@ class ProjectMemberViewSet(BaseViewSet):
             ProjectMember.objects.bulk_create(new_members, batch_size=10, ignore_conflicts=True)
             ProjectUserProperty.objects.bulk_create(bulk_issue_props, batch_size=10, ignore_conflicts=True)
 
+        notification_member_ids = reactivated_member_ids | {
+            str(member.member_id) for member in new_members
+        }
         project_members = ProjectMember.objects.filter(
             project_id=project_id,
-            member_id__in=[member.get("member_id") for member in members],
+            member_id__in=notification_member_ids,
         )
         # Send emails to notify the users
         [

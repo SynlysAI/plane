@@ -10,7 +10,19 @@ services:
     command: !override
       - /bin/bash
       - -c
-      - python manage.py wait_for_db && python manage.py wait_for_migrations && celery -A plane worker -l info --concurrency=2
+      - python manage.py wait_for_db && python manage.py wait_for_migrations && celery -A plane worker -l info --concurrency=2 --queues=celery
+  notification-generation-worker:
+    image: pilab-windows-worker:latest
+    command: !override
+      - /bin/bash
+      - -c
+      - python manage.py wait_for_db && python manage.py wait_for_migrations && celery -A plane worker -l info --concurrency=1 --queues=notification-generation
+  notification-email-worker:
+    image: pilab-windows-worker:latest
+    command: !override
+      - /bin/bash
+      - -c
+      - python manage.py wait_for_db && python manage.py wait_for_migrations && celery -A plane worker -l info --concurrency=1 --queues=notification-email
   beat-worker:
     image: pilab-windows-beat-worker:latest
     command: !override ["/bin/bash", "./bin/docker-entrypoint-beat.sh"]

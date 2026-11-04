@@ -39,7 +39,7 @@ old_url_patterns = [
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/issues/<uuid:pk>/",
-        IssueDetailAPIEndpoint.as_view(http_method_names=["get", "patch", "delete"]),
+        IssueDetailAPIEndpoint.as_view(http_method_names=["get", "put", "patch", "delete"]),
         name="issue",
     ),
     path(
@@ -103,7 +103,7 @@ new_url_patterns = [
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/work-items/<uuid:pk>/",
-        IssueDetailAPIEndpoint.as_view(http_method_names=["get", "patch", "delete"]),
+        IssueDetailAPIEndpoint.as_view(http_method_names=["get", "put", "patch", "delete"]),
         name="work-item-detail",
     ),
     path(

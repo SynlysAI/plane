@@ -4,7 +4,8 @@ from html import escape
 
 from django.utils import timezone
 
-from plane.db.models import Notification
+from plane.db.models import Notification, NotificationEvent
+from plane.utils.notification_outbox import persist_research_notification_batch
 
 
 RESEARCH_CHAIN_STAGE_ENTITY = "research_chain_stage"
@@ -48,10 +49,16 @@ def _notify(stage, receivers, actor, *, title, action):
         The created notification rows.
     """
     rows = []
+    email_policy = {}
     display_title = f"{title}：{STAGE_TITLES.get(stage.stage_code, stage.stage_code)}"
     for receiver in receivers:
         if receiver is None or receiver.id == actor.id:
             continue
+        email_policy[str(receiver.id)] = {
+            "category": NotificationEvent.Category.RESEARCH_ACTION,
+            "reason": "direct_reviewer",
+            "immediate": True,
+        }
         rows.append(
             Notification(
                 workspace=stage.workspace,
@@ -77,8 +84,11 @@ def _notify(stage, receivers, actor, *, title, action):
                 },
             )
         )
-    if rows:
-        Notification.objects.bulk_create(rows, batch_size=100)
+    persist_research_notification_batch(
+        rows,
+        category=NotificationEvent.Category.RESEARCH_ACTION,
+        email_policy=email_policy,
+    )
     return rows
 
 

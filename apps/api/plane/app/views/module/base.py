@@ -50,7 +50,7 @@ from plane.app.serializers import (
     ModuleUserPropertiesSerializer,
     ModuleWriteSerializer,
 )
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.utils.issue_mutations import notification_atomic_mutation, queue_issue_activity
 from plane.db.models import (
     Issue,
     Module,
@@ -731,6 +731,7 @@ class ModuleViewSet(BaseViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @allow_permission([ROLE.ADMIN], creator=True, model=Module)
+    @notification_atomic_mutation
     def destroy(self, request, slug, project_id, pk):
         module = Module.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
         if administrative_settings_write_blocked(request.user, module.project):
@@ -741,7 +742,7 @@ class ModuleViewSet(BaseViewSet):
 
         module_issues = list(ModuleIssue.objects.filter(module_id=pk).values_list("issue", flat=True))
         _ = [
-            issue_activity.delay(
+            queue_issue_activity(
                 type="module.activity.deleted",
                 requested_data=json.dumps({"module_id": str(pk)}),
                 actor_id=str(request.user.id),

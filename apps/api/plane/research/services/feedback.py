@@ -20,6 +20,7 @@ from rest_framework import status
 from plane.db.models import (
     FileAsset,
     Notification,
+    NotificationEvent,
     OrgUnitMember,
     ResearchAuditEvent,
     ResearchFeedback,
@@ -38,6 +39,7 @@ from plane.research.utils.roles import (
 )
 from plane.settings.storage import S3Storage
 from plane.utils.path_validator import sanitize_filename
+from plane.utils.notification_outbox import persist_research_notification_batch
 
 LOGGER = logging.getLogger(__name__)
 SCREENSHOT_LIMIT = 10 * 1024 * 1024
@@ -424,6 +426,8 @@ def visible_feedback_queryset(user, workspace, *, scope="own"):
         return _management_queryset(user, workspace)
     if scope == "workspace":
         return _workspace_queryset(workspace)
+    if scope == "reply":
+        return _reply_queryset(user, workspace)
     return _feedback_queryset(user, workspace)
 
 
@@ -1037,7 +1041,18 @@ def create_feedback_reply(request, user, workspace, feedback_id):
         notifications = _reply_notification_rows(feedback, reply, user, workspace)
         if notifications:
             try:
-                Notification.objects.bulk_create(notifications, batch_size=100)
+                persist_research_notification_batch(
+                    notifications,
+                    category=NotificationEvent.Category.RESEARCH_COMMENT,
+                    email_policy={
+                        str(row.receiver_id): {
+                            "category": NotificationEvent.Category.RESEARCH_COMMENT,
+                            "reason": "feedback_participant",
+                            "immediate": False,
+                        }
+                        for row in notifications
+                    },
+                )
             except (DatabaseError, IntegrityError) as error:
                 raise ResearchAPIException(
                     ResearchErrorCode.FEEDBACK_STORAGE_UNAVAILABLE,

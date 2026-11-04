@@ -3,6 +3,8 @@
 import re
 import unicodedata
 from copy import deepcopy
+
+from plane.mcp.schema_compat import project_tools
 from uuid import UUID
 
 from plane.research.services.weekly_report_errors import WeeklyReportError
@@ -291,7 +293,7 @@ def tools_for(actions):
                 },
             }
         )
-    return tools
+    return project_tools(tools)
 
 
 def matches(schema, value):

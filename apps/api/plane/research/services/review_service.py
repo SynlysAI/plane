@@ -9,6 +9,7 @@ branch are always represented, manual reviewers are kept, and re-submitting a
 stage supersedes both the assignments and the reviews collected so far.
 """
 
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
 
@@ -55,6 +56,7 @@ def _active_query(instance):
     )
 
 
+@transaction.atomic
 def assign_reviewers(instance, actor=None, request=None):
     """Create the mandatory assignments for a submitted stage (P1-REV-01)."""
     owner_id = research_owner_id(instance)
@@ -174,6 +176,7 @@ def resolve_reviewer_role(instance, reviewer_id):
     return ReviewerRole.UNIT_ADMIN.value, None
 
 
+@transaction.atomic
 def submit_review(instance, actor, *, recommendation, comment="", score=None, request=None):
     """Submit one review; a second submission must go through ``revise``."""
     if instance.status != REVIEW_STATUS:
@@ -348,6 +351,7 @@ def revise_review(review, actor, *, reason, recommendation=None, comment=None, s
     return review
 
 
+@transaction.atomic
 def remind_reviewer(assignment, actor, message="", request=None):
     """Nudge a pending reviewer through the shared notification channel (P1-REV-09)."""
     if assignment.superseded_at is not None or not assignment.is_active:

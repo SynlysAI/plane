@@ -212,7 +212,7 @@ def test_issue_attachment_confirm_enforces_limit_and_delete_restores_quota(sessi
     def confirm(asset):
         with (
             patch("plane.app.views.issue.attachment.get_asset_object_metadata.delay"),
-            patch("plane.app.views.issue.attachment.issue_activity.delay"),
+            patch("plane.app.views.issue.attachment.queue_issue_activity"),
         ):
             return session_client.patch(f"{base}{asset.id}/", {}, format="json")
 
@@ -256,7 +256,7 @@ def test_project_member_can_delete_issue_attachment(attachment_context):
     client = APIClient()
     client.force_authenticate(user=member)
 
-    with patch("plane.app.views.issue.attachment.issue_activity.delay"):
+    with patch("plane.app.views.issue.attachment.queue_issue_activity"):
         response = client.delete(f"{attachments_url(attachment_context)}{asset.id}/")
 
     assert response.status_code == 204, response.data

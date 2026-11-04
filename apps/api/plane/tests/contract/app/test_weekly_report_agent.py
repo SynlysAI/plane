@@ -628,7 +628,7 @@ def test_http_rpc_and_direct_tool_use_same_catalogue_and_error_contract(env):
     bad_accept = APIClient()
     bad_accept.credentials(
         HTTP_X_WEEKLY_REPORT_TOKEN=raw,
-        HTTP_ACCEPT="application/json",
+        HTTP_ACCEPT="text/plain",
         HTTP_MCP_PROTOCOL_VERSION=PROTOCOL_VERSION,
     )
     bad_protocol = APIClient()
@@ -644,6 +644,23 @@ def test_http_rpc_and_direct_tool_use_same_catalogue_and_error_contract(env):
         bad_protocol.post(root + "mcp/", {"jsonrpc": "2.0", "id": 1, "method": "ping"}, format="json").status_code
         == 400
     )
+    early_future_header = APIClient()
+    early_future_header.credentials(
+        HTTP_X_WEEKLY_REPORT_TOKEN=raw,
+        HTTP_ACCEPT="application/json",
+        HTTP_MCP_PROTOCOL_VERSION="2025-11-25",
+    )
+    early_initialize = early_future_header.post(
+        root + "mcp/",
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "initialize",
+            "params": {"protocolVersion": "2025-11-25"},
+        },
+        format="json",
+    )
+    assert early_initialize.data["result"]["protocolVersion"] == "2025-06-18"
     assert rpc("initialize").data["result"]["serverInfo"]["name"] == "plane-weekly-report"
     assert rpc("tools/list").data["result"]["tools"] == api.get(root + "tools/").data["tools"]
     assert rpc("tools/list", {"cursor": "one", "unknown": True}).data["error"]["code"] == -32602

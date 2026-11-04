@@ -35,7 +35,7 @@ def comment_context(workspace, create_user):
     state = State.objects.create(workspace=workspace, project=project, name="完成", group="completed")
     issue = Issue.objects.create(workspace=workspace, project=project, state=state, name="完成后补充文件")
     with (
-        patch("plane.app.views.issue.comment.issue_activity.delay"),
+        patch("plane.app.views.issue.comment.queue_issue_activity"),
         patch("plane.app.views.issue.comment.model_activity.delay"),
         patch("plane.db.mixins.soft_delete_related_objects.delay"),
         patch("plane.app.views.asset.v2.get_asset_object_metadata.delay"),

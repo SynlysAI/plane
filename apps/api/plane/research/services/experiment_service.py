@@ -192,6 +192,7 @@ def submit_experiment(record, actor, request=None):
     return record
 
 
+@transaction.atomic
 def create_amendment(record, actor, *, reason, change_set, evidence_asset=None, request=None):
     """Validate and store a change request (P1-EXP-05, P1-EXP-06)."""
     if record.submitted_at is None or record.status == STATUS.ARCHIVED:
@@ -313,6 +314,7 @@ def approve_amendment(amendment, actor, comment="", request=None):
     return amendment
 
 
+@transaction.atomic
 def reject_amendment(amendment, actor, comment="", request=None):
     if amendment.status != ExperimentAmendment.Status.PENDING:
         raise StageRuleError(

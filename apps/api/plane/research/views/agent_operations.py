@@ -10,6 +10,7 @@ from rest_framework.authentication import SessionAuthentication
 from rest_framework.response import Response
 
 from plane.db.models import ResearchAgentOperation, ResearchContextGrant, WorkspaceResearchSetting
+from plane.mcp.schema_compat import project_tools
 from plane.research.services.agent_operations import (
     ResearchOperationService, allowed_actions, decide_operation, deployment_enabled,
     issue_write_grant,
@@ -50,7 +51,7 @@ class ResearchOperationMCPHTTPEndpoint(ResearchMCPHTTPEndpoint):
             if tool["name"] == "prepare_research_operation":
                 tool["inputSchema"]["oneOf"] = [schema for schema in tool["inputSchema"]["oneOf"]
                     if schema["properties"]["action"]["const"] in service.write.allowed_actions]
-        return tools_for(service.grant) + tools
+        return project_tools(tools_for(service.grant) + tools)
 
     def invoke(self, service, name, arguments):
         if isinstance(name, str) and name in TOOL_NAMES:

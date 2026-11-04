@@ -95,6 +95,16 @@ def test_shared_create_save_submit_and_returned_resubmit_keep_official_versions(
     assert ReportReviewLog.objects.filter(report=report, action="SUBMIT").count() == 2
     assert ResearchApprovalRoute.objects.filter(resource_id=report.pk, status="ACTIVE").count() == 1
     assert Notification.objects.filter(entity_identifier=report.pk, message__action="submitted").count() == 2
+    submit_log_ids = {
+        str(log_id)
+        for log_id in ReportReviewLog.objects.filter(report=report, action="SUBMIT").values_list("id", flat=True)
+    }
+    notification_event_ids = set(
+        Notification.objects.filter(entity_identifier=report.pk, message__action="submitted").values_list(
+            "data__event_id", flat=True
+        )
+    )
+    assert notification_event_ids == submit_log_ids
 
 
 def test_invalid_reviewer_rolls_back_submission_effects(env):

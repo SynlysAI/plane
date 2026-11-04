@@ -135,6 +135,54 @@ services:
       plane-redis:
         condition: service_started
 
+  notification-generation-worker:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.dev
+      args:
+        DOCKER_BUILDKIT: 1
+    restart: unless-stopped
+    networks:
+      - dev_env
+    volumes:
+      - ./apps/api:/code
+    command: ./bin/docker-entrypoint-worker.sh
+    environment:
+      CELERY_WORKER_QUEUES: notification-generation
+    env_file:
+      - ./apps/api/.env
+    depends_on:
+      api:
+        condition: service_started
+      plane-db:
+        condition: service_started
+      plane-redis:
+        condition: service_started
+
+  notification-email-worker:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.dev
+      args:
+        DOCKER_BUILDKIT: 1
+    restart: unless-stopped
+    networks:
+      - dev_env
+    volumes:
+      - ./apps/api:/code
+    command: ./bin/docker-entrypoint-worker.sh
+    environment:
+      CELERY_WORKER_QUEUES: notification-email
+    env_file:
+      - ./apps/api/.env
+    depends_on:
+      api:
+        condition: service_started
+      plane-db:
+        condition: service_started
+      plane-redis:
+        condition: service_started
+
   beat-worker:
     build:
       context: ./apps/api

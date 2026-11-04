@@ -4,6 +4,7 @@ Validation remains in the native serializers; this is not a second task model.
 """
 
 import json
+import uuid
 
 from crum import impersonate
 from django.core.serializers.json import DjangoJSONEncoder
@@ -12,10 +13,10 @@ from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
 from plane.app.permissions.base import ROLE, project_role_allows
-from plane.bgtasks.issue_activities_task import issue_activity
+from plane.bgtasks.issue_activities_task import process_notification_generation_outbox
 from plane.bgtasks.issue_description_version_task import issue_description_version_task
 from plane.bgtasks.webhook_task import model_activity
-from plane.db.models import Issue, ProjectMember, UserRecentVisit, WorkspaceMember
+from plane.db.models import Issue, NotificationGenerationOutbox, Project, ProjectMember, UserRecentVisit, WorkspaceMember
 from plane.utils.host import base_host
 from plane.utils.project_domains import project_domain_allows
 from plane.utils.workspace_access import user_can_access_workspace
@@ -69,45 +70,88 @@ def soft_delete_issue(issue: Issue, actor, request) -> None:
         actor: Human actor who authorized deletion.
         request: Native or MCP request used to resolve the activity origin.
     """
-    issue_id = issue.pk
-    project_id = issue.project_id
-    issue.delete()
-    UserRecentVisit.objects.filter(
-        project_id=project_id,
-        workspace=issue.workspace,
-        entity_identifier=issue_id,
-        entity_name="issue",
-    ).delete(soft=False)
-    _commit_task(
-        issue_activity,
-        type="issue.activity.deleted",
-        requested_data=json.dumps({"issue_id": str(issue_id)}),
-        actor_id=str(actor.pk),
-        issue_id=str(issue_id),
-        project_id=str(project_id),
-        current_instance={},
-        epoch=int(timezone.now().timestamp()),
-        notification=True,
-        origin=base_host(request=request, is_app=True),
-        subscriber=False,
-    )
+    with transaction.atomic():
+        issue_id = issue.pk
+        project_id = issue.project_id
+        issue.delete()
+        UserRecentVisit.objects.filter(
+            project_id=project_id,
+            workspace=issue.workspace,
+            entity_identifier=issue_id,
+            entity_name="issue",
+        ).delete(soft=False)
+        queue_issue_activity(
+            type="issue.activity.deleted",
+            requested_data=json.dumps({"issue_id": str(issue_id)}),
+            actor_id=str(actor.pk),
+            issue_id=str(issue_id),
+            project_id=str(project_id),
+            current_instance={},
+            epoch=int(timezone.now().timestamp()),
+            notification=True,
+            origin=base_host(request=request, is_app=True),
+            subscriber=False,
+        )
 
 
-def _commit_task(task, **kwargs):
+def enqueue_task_on_commit(task, *args, **kwargs):
+    """Queue a Celery task only after the current transaction commits.
+
+    Args:
+        task: Celery task to publish.
+        *args: Positional task arguments.
+        **kwargs: Keyword task arguments.
+    """
     # Each callback is independent: a failed broker publish cannot turn a
     # committed task into a reported rollback or suppress the other effects.
     def publish():
-        task.delay(**kwargs)
+        task.delay(*args, **kwargs)
 
     transaction.on_commit(publish, robust=True)
+
+
+def _commit_task(task, **kwargs):
+    """Queue a keyword-only side-effect task after transaction commit."""
+    enqueue_task_on_commit(task, **kwargs)
+
+
+def queue_issue_activity(**payload):
+    """Persist an activity request in the current business transaction.
+
+    Args:
+        **payload: JSON-serializable arguments accepted by ``issue_activity``.
+    """
+    serializable_payload = json.loads(json.dumps(payload, cls=DjangoJSONEncoder))
+    project_id = serializable_payload.get("project_id")
+    workspace_id = Project.objects.filter(pk=project_id).values_list("workspace_id", flat=True).first()
+    outbox_row = NotificationGenerationOutbox.objects.create(
+        idempotency_key=uuid.uuid4().hex,
+        workspace_id=workspace_id,
+        payload=serializable_payload,
+    )
+    transaction.on_commit(
+        lambda: process_notification_generation_outbox.delay(outbox_id=str(outbox_row.pk)),
+        robust=True,
+    )
+
+
+def notification_atomic_mutation(func):
+    """Keep a business mutation and its notification outbox row in one transaction.
+
+    Args:
+        func: Request or service method that persists a notification-producing mutation.
+
+    Returns:
+        The function wrapped in a database transaction.
+    """
+    return transaction.atomic(func)
 
 
 def _effects(*, model, instance, actor, request, data, previous, creating):
     origin = base_host(request=request, is_app=True) if request is not None else None
     is_comment = model == "issue_comment"
     issue_id = instance.issue_id if is_comment else instance.pk
-    _commit_task(
-        issue_activity,
+    queue_issue_activity(
         type=("comment" if is_comment else "issue") + ".activity." + ("created" if creating else "updated"),
         requested_data=json.dumps(data, cls=DjangoJSONEncoder),
         current_instance=previous,

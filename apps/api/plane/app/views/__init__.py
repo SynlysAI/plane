@@ -233,10 +233,12 @@ from .analytic.project_analytics import (
 )
 
 from .notification.base import (
+    NotificationDeliveryDiagnosticsEndpoint,
     NotificationViewSet,
     SystemAnnouncementEndpoint,
     UnreadNotificationEndpoint,
     UserNotificationPreferenceEndpoint,
+    WorkspaceNotificationPolicyEndpoint,
 )
 
 from .notification.inbox import (

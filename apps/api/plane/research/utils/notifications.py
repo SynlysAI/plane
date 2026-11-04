@@ -13,15 +13,28 @@ from django.utils import timezone
 from bs4 import BeautifulSoup
 from uuid import UUID
 
-from plane.db.models import Notification
+from plane.db.models import Notification, NotificationEvent
 from plane.research.utils.acl import build_actor_context, check_access, direct_advisor_ids, org_unit_scope_ids
 from plane.research.utils.reports import report_resource
+from plane.utils.notification_outbox import persist_research_notification_batch
 
 RESEARCH_REPORT_ENTITY = "research_report"
 RESEARCH_APPROVAL_ENTITY = "research_approval"
 
 
-def _notify(report, receivers, *, actor, title, message, mentioned_ids=None):
+def _notify(
+    report,
+    receivers,
+    *,
+    actor,
+    title,
+    message,
+    mentioned_ids=None,
+    email_category=None,
+    immediate=False,
+    recipient_reason="reviewer",
+    event_id=None,
+):
     """Create report notifications while preserving mention classification.
 
     Args:
@@ -37,10 +50,21 @@ def _notify(report, receivers, *, actor, title, message, mentioned_ids=None):
     """
     created = []
     mentions = mentioned_ids or set()
+    email_policy = {}
     for receiver in receivers:
         if receiver is None or receiver == actor:
             continue
         sender = "research:mentioned" if str(receiver.id) in mentions else "research"
+        if email_category is not None:
+            email_policy[str(receiver.id)] = {
+                "category": (
+                    NotificationEvent.Category.RESEARCH_MENTION
+                    if str(receiver.id) in mentions
+                    else email_category
+                ),
+                "reason": "mentioned" if str(receiver.id) in mentions else recipient_reason,
+                "immediate": immediate or str(receiver.id) in mentions,
+            }
         created.append(
             Notification(
                 workspace_id=report.workspace_id,
@@ -51,6 +75,7 @@ def _notify(report, receivers, *, actor, title, message, mentioned_ids=None):
                     "period_key": report.period_key,
                     "report_type": report.report_type,
                     "status": report.status,
+                    **({"event_id": str(event_id)} if event_id else {}),
                 },
                 entity_identifier=report.id,
                 entity_name=RESEARCH_REPORT_ENTITY,
@@ -63,8 +88,11 @@ def _notify(report, receivers, *, actor, title, message, mentioned_ids=None):
                 receiver=receiver,
             )
         )
-    if created:
-        Notification.objects.bulk_create(created, batch_size=100)
+    persist_research_notification_batch(
+        created,
+        category=email_category or NotificationEvent.Category.RESEARCH_ACTION,
+        email_policy=email_policy,
+    )
     return created
 
 
@@ -87,7 +115,7 @@ def report_reviewer_ids(report):
     return list(User.objects.filter(id__in=receiver_ids, is_active=True))
 
 
-def notify_report_submitted(report, actor, route=None):
+def notify_report_submitted(report, actor, route=None, event_id=None):
     """Notify the routed reviewer and optional carbon-copy readers."""
     if route is None:
         return _notify(
@@ -101,6 +129,9 @@ def notify_report_submitted(report, actor, route=None):
                 "owner": str(report.owner_id),
                 "submitted_at": timezone.now().isoformat(),
             },
+            email_category=NotificationEvent.Category.RESEARCH_ACTION,
+            immediate=True,
+            event_id=event_id,
         )
 
     from plane.research.services.approval_routes import route_users
@@ -118,6 +149,9 @@ def notify_report_submitted(report, actor, route=None):
                 "owner": str(report.owner_id),
                 "submitted_at": timezone.now().isoformat(),
             },
+            email_category=NotificationEvent.Category.RESEARCH_ACTION,
+            immediate=True,
+            event_id=event_id,
         ),
         *_notify(
             report,
@@ -130,11 +164,14 @@ def notify_report_submitted(report, actor, route=None):
                 "owner": str(report.owner_id),
                 "submitted_at": timezone.now().isoformat(),
             },
+            email_category=NotificationEvent.Category.RESEARCH_PROPERTY_CHANGE,
+            recipient_reason="cc",
+            event_id=event_id,
         ),
     ]
 
 
-def notify_report_withdrawn(report, actor, comment="", route=None):
+def notify_report_withdrawn(report, actor, comment="", route=None, event_id=None):
     """Notify reviewers that an author withdrew the current submission.
 
     Args:
@@ -163,6 +200,9 @@ def notify_report_withdrawn(report, actor, comment="", route=None):
                 "comment": comment[:500],
                 "withdrawn_at": timezone.now().isoformat(),
             },
+            email_category=NotificationEvent.Category.RESEARCH_ACTION,
+            immediate=True,
+            event_id=event_id,
         ),
         *_notify(
             report,
@@ -176,11 +216,14 @@ def notify_report_withdrawn(report, actor, comment="", route=None):
                 "comment": comment[:500],
                 "withdrawn_at": timezone.now().isoformat(),
             },
+            email_category=NotificationEvent.Category.RESEARCH_PROPERTY_CHANGE,
+            recipient_reason="cc",
+            event_id=event_id,
         ),
     ]
 
 
-def notify_report_returned(report, actor, comment="", route=None):
+def notify_report_returned(report, actor, comment="", route=None, event_id=None):
     from plane.db.models import User
     from plane.research.services.approval_routes import route_users
 
@@ -198,6 +241,9 @@ def notify_report_returned(report, actor, comment="", route=None):
                 "comment": comment[:500],
                 "reviewer": str(actor.id),
             },
+            email_category=NotificationEvent.Category.RESEARCH_ACTION,
+            immediate=True,
+            event_id=event_id,
         ),
         *_notify(
             report,
@@ -210,11 +256,14 @@ def notify_report_returned(report, actor, comment="", route=None):
                 "comment": comment[:500],
                 "reviewer": str(actor.id),
             },
+            email_category=NotificationEvent.Category.RESEARCH_PROPERTY_CHANGE,
+            recipient_reason="cc",
+            event_id=event_id,
         ),
     ]
 
 
-def notify_report_accepted(report, actor, route=None):
+def notify_report_accepted(report, actor, route=None, event_id=None):
     from plane.db.models import User
     from plane.research.services.approval_routes import route_users
 
@@ -227,6 +276,9 @@ def notify_report_accepted(report, actor, route=None):
             actor=actor,
             title=f"{report.period_key} 报告已验收",
             message={"action": "accepted", "period_key": report.period_key, "reviewer": str(actor.id)},
+            email_category=NotificationEvent.Category.RESEARCH_COMPLETION,
+            immediate=True,
+            event_id=event_id,
         ),
         *_notify(
             report,
@@ -234,6 +286,9 @@ def notify_report_accepted(report, actor, route=None):
             actor=actor,
             title=f"{report.period_key} 报告验收抄送",
             message={"action": "accepted.cc", "period_key": report.period_key, "reviewer": str(actor.id)},
+            email_category=NotificationEvent.Category.RESEARCH_PROPERTY_CHANGE,
+            recipient_reason="cc",
+            event_id=event_id,
         ),
     ]
 
@@ -306,4 +361,6 @@ def notify_report_comment(report, thread, comment, actor, *, action="created"):
             "quoted_text": thread.quoted_text[:500],
         },
         mentioned_ids=mentioned_ids,
+        email_category=NotificationEvent.Category.RESEARCH_COMMENT,
+        recipient_reason="comment_participant",
     )

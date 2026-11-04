@@ -22,6 +22,7 @@ from rest_framework.throttling import SimpleRateThrottle
 from plane.db import models as db
 from plane.mcp.api_documentation import document_weekly_tools, full_weekly_catalog
 from plane.mcp.client_config import client_files, public_url, server_key
+from plane.mcp.protocol import DEFAULT_PROTOCOL, accepts_json_response, negotiate_protocol, protocol_header_valid
 from plane.mcp.credentials import (
     DEFAULT_TTL_DAYS,
     TTL_DAYS,
@@ -53,7 +54,7 @@ class WeeklyReportThrottle(SimpleRateThrottle):
         return f"weekly-report-mcp:{request.user.pk}:{getattr(request.auth, 'pk', 'session')}"
 
 
-PROTOCOL_VERSION = "2025-03-26"
+PROTOCOL_VERSION = DEFAULT_PROTOCOL
 
 
 @method_decorator(sensitive_post_parameters(), name="dispatch")
@@ -118,16 +119,13 @@ class WeeklyReportMCPHTTPEndpoint(WeeklyMachineBase):
     def post(self, request, slug):
         if request.content_type != "application/json" or len(request.body) > 65536:
             return Response(self.rpc_error(None, -32600, "Use a bounded application/json request."), status=400)
-        if not {
-            "application/json",
-            "text/event-stream",
-        } <= {item.split(";", 1)[0].strip() for item in request.headers.get("Accept", "").split(",")}:
-            return Response(self.rpc_error(None, -32600, "Accept application/json and text/event-stream."), status=406)
-        if request.headers.get("MCP-Protocol-Version", PROTOCOL_VERSION) != PROTOCOL_VERSION:
+        if not accepts_json_response(request):
+            return Response(self.rpc_error(None, -32600, "Accept must permit application/json."), status=406)
+        message = request.data
+        if not protocol_header_valid(request, message):
             return Response(self.rpc_error(None, -32600, "Unsupported protocol version."), status=400)
 
         service = self.service(slug)
-        message = request.data
         if isinstance(message, list):
             if not 1 <= len(message) <= 20:
                 return Response(self.rpc_error(None, -32600, "Use a batch of 1 to 20 messages."), status=400)
@@ -150,7 +148,7 @@ class WeeklyReportMCPHTTPEndpoint(WeeklyMachineBase):
             if not isinstance(params.get("protocolVersion"), str):
                 return self.rpc_error(identity, -32602, "protocolVersion is required")
             result = {
-                "protocolVersion": PROTOCOL_VERSION,
+                "protocolVersion": negotiate_protocol(params["protocolVersion"]),
                 "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": "plane-weekly-report", "version": "2.0.0"},
                 "instructions": "Read visible reports and fixed proposals. Review the complete body/effects in the "
@@ -226,7 +224,7 @@ class WeeklyReportConnectionToolsEndpoint(WeeklyBase):
                 "server": {
                     "name": "plane-weekly-report",
                     "version": "2.0.0",
-                    "protocol_version": "2025-03-26",
+                    "protocol_version": DEFAULT_PROTOCOL,
                     "server_key": server_key(grant.label),
                     "url": public_url(
                         request,

@@ -496,7 +496,7 @@ def submit_report(*, workspace, actor, report_id, payload, request=None):
     report.status = target
     report.submitted_at = timezone.now()
     report.save(update_fields=["status", "submitted_at", "updated_at"])
-    ReportReviewLog.objects.create(
+    review_log = ReportReviewLog.objects.create(
         report=report,
         actor=actor,
         action=ReportReviewLog.Action.SUBMIT,
@@ -524,5 +524,7 @@ def submit_report(*, workspace, actor, report_id, payload, request=None):
         request=request,
     )
     report._workflow_approval_route = route
-    report._workflow_notifications = notify_report_submitted(report, actor, route=route)
+    report._workflow_notifications = notify_report_submitted(
+        report, actor, route=route, event_id=review_log.pk
+    )
     return report

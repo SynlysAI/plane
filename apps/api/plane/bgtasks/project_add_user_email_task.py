@@ -16,12 +16,12 @@ from django.template.loader import render_to_string
 # Module imports
 from plane.license.utils.instance_value import get_email_configuration
 from plane.utils.email import generate_plain_text_from_html
-from plane.utils.exception_logger import log_exception
+from plane.utils.account_email import handle_account_email_error, send_account_email
 from plane.db.models import ProjectMember
 from plane.db.models import User
 
 
-@shared_task
+@shared_task(max_retries=2)
 def project_add_user_email(current_site, project_member_id, invitor_id):
     try:
         # Get the invitor
@@ -80,10 +80,10 @@ def project_add_user_email(current_site, project_member_id, invitor_id):
         # Attach the html content
         msg.attach_alternative(html_content, "text/html")
         # Send the email
-        msg.send()
+        send_account_email(msg)
         # Log the success
         logging.getLogger("plane.worker").info("Email sent successfully.")
         return
     except Exception as e:
-        log_exception(e)
+        handle_account_email_error(e)
         return
