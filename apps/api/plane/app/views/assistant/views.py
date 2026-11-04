@@ -10,10 +10,11 @@ replayed before the live session SSE stream is forwarded.
 """
 
 import json
-from uuid import uuid4
 from dataclasses import replace
+from uuid import uuid4
 
 import httpx
+from django.conf import settings
 from django.http import StreamingHttpResponse
 from rest_framework import status
 from rest_framework.negotiation import BaseContentNegotiation
@@ -22,17 +23,19 @@ from rest_framework.response import Response
 from plane.app.permissions import ROLE, allow_permission
 from plane.app.views.base import BaseAPIView
 from plane.db.models import Workspace
+from plane.license.utils.encryption import decrypt_data
+from plane.research.services.agent_identity import (
+    ensure_synlora_identity_binding,
+)
 from plane.utils.exception_logger import log_exception
 
 from .client import (
     AssistantNotConfigured,
     SynloraAssistantClient,
+    assistant_history_messages,
     resolve_assistant_client,
     resolve_assistant_config,
-    assistant_history_messages,
 )
-from plane.license.utils.encryption import decrypt_data
-from plane.research.services.agent_identity import ensure_synlora_identity_binding
 
 UPSTREAM_UNAVAILABLE = "synlora_unavailable"
 UPSTREAM_ERROR = "synlora_error"
@@ -93,7 +96,7 @@ class AssistantStatusEndpoint(BaseAPIView):
                 service_token="",
                 auth_mode="PERSONAL_API_KEY",
             )
-        enabled = bool(config.base_url and config.token and config.is_enabled)
+        enabled = bool(config.base_url and config.is_enabled and (binding is not None or config.token))
         ready = False
         state = "not_configured"
         if not config.is_enabled or not config.base_url:
@@ -102,9 +105,24 @@ class AssistantStatusEndpoint(BaseAPIView):
             state = "personal_credential_required"
         elif enabled:
             try:
-                client = SynloraAssistantClient(config, workspace=workspace, user=request.user)
                 state = "service_unavailable"
-                if client.health().status_code == 200:
+                health_response = SynloraAssistantClient(
+                    config,
+                    workspace=workspace,
+                    user=request.user,
+                ).health()
+                token_response = SynloraAssistantClient(
+                    config,
+                    workspace=workspace,
+                    user=request.user,
+                ).verify_personal_token()
+                if token_response.status_code in (401, 403):
+                    state = "invalid_personal_credential"
+                elif token_response.status_code >= 400:
+                    state = "service_unavailable"
+                if health_response.status_code != 200:
+                    state = "service_unavailable"
+                elif token_response.status_code == 200:
                     ready = True
                     state = "ready"
             except Exception as e:
@@ -113,7 +131,12 @@ class AssistantStatusEndpoint(BaseAPIView):
             {
                 "enabled": enabled,
                 "ready": ready,
-                "credential_mode": config.credential_mode,
+                "credential_mode": "PERSONAL",
+                "portal_url": (
+                    getattr(settings, "SYNLORA_PORTAL_URL", "")
+                    or (binding.base_url if binding is not None else "")
+                    or None
+                ),
                 "state": state,
             }
         )

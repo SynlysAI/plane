@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   cancelRun: vi.fn(),
 }));
 
+const routerPush = vi.fn();
+
 vi.mock("@/services/agent-dock", () => ({
   AgentDockService: class {
     resolveContext = mocks.resolveContext;
@@ -38,6 +40,7 @@ vi.mock("@/services/agent-dock", () => ({
 vi.mock("next/navigation", () => ({
   useParams: () => ({ workspaceSlug: "lab" }),
   usePathname: () => currentPath,
+  useRouter: () => ({ push: routerPush }),
 }));
 
 let currentPath = "/lab/projects";
@@ -155,6 +158,7 @@ let originalMatchMedia: typeof window.matchMedia | undefined;
 
 beforeEach(() => {
   currentPath = "/lab/projects";
+  routerPush.mockClear();
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -342,24 +346,77 @@ describe("AIAssistantPanel", () => {
     expect(store.threadId).toBe("session-2");
   });
 
+  it("navigates before restoring a history session from another target", async () => {
+    globalThis.sessionStorage.setItem(
+      "PLANE_AGENT_DOCK_LAUNCH_HISTORY_lab:anonymous",
+      JSON.stringify({ launchId: "launch-1", sessionIds: ["session-cross"] })
+    );
+    const crossSession = {
+      ...session,
+      session_id: "session-cross",
+      target_key: "workspace:ws",
+      target_metadata: {
+        workspace: { id: "ws", slug: "lab", name: "Lab" },
+        target: { type: "WORKSPACE", id: "ws", title: "Lab", hierarchy: [] },
+        page: {
+          route: "/lab/research/chains/chain-1",
+          page_kind: "research_chain",
+          focus_id: "chain-1",
+          focus_title: "研究链",
+          hash: "hash",
+          generated_at: "2026-11-04T11:00:00Z",
+        },
+      },
+    };
+    mocks.listSessions.mockResolvedValue({ results: [crossSession], count: 1 });
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+
+    await act(async () => {
+      document
+        .querySelector('[aria-label="aiAssistant.launch_history"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await waitForText("研究链");
+    await act(async () => {
+      [...document.querySelectorAll("button")]
+        .find((button) => button.textContent?.includes("研究链"))
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(routerPush).toHaveBeenCalledWith("/lab/research/chains/chain-1");
+    expect(store.threadId).not.toBe("session-cross");
+  });
+
   it("shows tool execution directly in the conversation timeline", async () => {
     mocks.streamEvents.mockImplementation((_workspace: string, _run: string, _cursor: number, signal: AbortSignal) =>
       Promise.resolve(
         sseResponse(
           [
             { type: "run.started", seq: 3 },
+            { type: "context.bound", seq: 4, payload: { context_version: 1 } },
+            { type: "run.progress", seq: 5, payload: { phase: "thinking" } },
             {
               type: "tool.started",
-              seq: 4,
+              seq: 6,
               payload: { name: "plane_get_context", tool_call_id: "call-1" },
             },
             {
               type: "tool.completed",
-              seq: 5,
-              payload: { name: "plane_get_context", tool_call_id: "call-1", status: "completed" },
+              seq: 7,
+              payload: {
+                name: "plane_get_context",
+                tool_call_id: "call-1",
+                status: "completed",
+                arguments: { target: "project-1" },
+                result: "context read",
+              },
             },
-            { type: "output.delta", seq: 6, payload: { content: "你好，世界" } },
-            { type: "run.completed", seq: 7 },
+            { type: "output.delta", seq: 8, payload: { content: "你好，世界" } },
+            { type: "run.completed", seq: 9 },
           ],
           signal
         )
@@ -374,7 +431,28 @@ describe("AIAssistantPanel", () => {
     typeAndSend();
     await waitForText("你好，世界");
     expect(document.body.textContent).toContain("plane_get_context");
-    expect(document.body.textContent).toContain("completed");
+    expect(document.body.textContent).toContain("runtime_context_bound");
+    expect(document.body.textContent).toContain("runtime_thinking");
+    expect(document.body.textContent).toContain("runtime_status_completed");
+    expect(document.body.textContent).toContain("project-1");
+    expect(document.body.textContent).toContain("context read");
+  });
+
+  it("only listens to page selection while the cloud dock is open", async () => {
+    const addSpy = vi.spyOn(document, "addEventListener");
+    const removeSpy = vi.spyOn(document, "removeEventListener");
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+    expect(addSpy).toHaveBeenCalledWith("selectionchange", expect.any(Function));
+
+    await act(async () => store.close());
+
+    expect(removeSpy).toHaveBeenCalledWith("selectionchange", expect.any(Function));
+    addSpy.mockRestore();
+    removeSpy.mockRestore();
   });
 
   it("defers page context changes while a run is active", async () => {

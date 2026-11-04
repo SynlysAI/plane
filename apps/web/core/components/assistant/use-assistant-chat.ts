@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useTranslation } from "@plane/i18n";
 import { setToast, TOAST_TYPE } from "@plane/propel/toast";
 import {
@@ -121,6 +121,7 @@ export const useAssistantChat = (
 ) => {
   const { t } = useTranslation();
   const pathname = usePathname();
+  const router = useRouter();
   const assistantStore = useAIAssistant();
   const [messages, setMessages] = useState<TAssistantMessage[]>([]);
   const [streamState, setStreamState] = useState<TAssistantStreamState>({ phase: "idle" });
@@ -146,12 +147,14 @@ export const useAssistantChat = (
   const translateRef = useRef(t);
   const pendingContextKeyRef = useRef<string | null>(null);
   const resolvedContextKeyRef = useRef<string | null>(null);
+  const pendingHistorySessionRef = useRef<TAgentDockSession | null>(null);
 
   useEffect(() => {
     translateRef.current = t;
   }, [t]);
 
   useEffect(() => {
+    if (!assistantStore.isOpen || !enabled) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const update = () => {
       if (timer) clearTimeout(timer);
@@ -159,12 +162,13 @@ export const useAssistantChat = (
         setSelectedText(String(globalThis.getSelection()?.toString() ?? "").slice(0, 4000));
       }, 300);
     };
+    update();
     document.addEventListener("selectionchange", update);
     return () => {
       document.removeEventListener("selectionchange", update);
       if (timer) clearTimeout(timer);
     };
-  }, []);
+  }, [assistantStore.isOpen, enabled]);
 
   const contextKey = `${pathname ?? `/${workspaceSlug}`}|${JSON.stringify(pageFocusRef ?? null)}|${selectedText}`;
 
@@ -560,6 +564,49 @@ export const useAssistantChat = (
     if (assistantStore.isOpen && enabled && assistantStore.threadId && contextEnvelope) void loadHistory();
   }, [assistantStore.isOpen, assistantStore.threadId, contextEnvelope, enabled, loadHistory]);
 
+  const resetForHistorySession = useCallback(
+    (sessionId: string) => {
+      generationRef.current += 1;
+      disconnectStream();
+      approvalPendingRef.current = false;
+      activeRunIdRef.current = null;
+      sessionTargetKeyRef.current = null;
+      latestSeqRef.current = -1;
+      processedSeqRef.current = new Set();
+      setRuntimeEvents([]);
+      setMessages([]);
+      setStreamingAnswer("");
+      streamingAnswerRef.current = "";
+      setStreamState({ phase: "idle" });
+      assistantStore.setThreadId(workspaceSlug, sessionId);
+    },
+    [assistantStore, disconnectStream, workspaceSlug]
+  );
+
+  useEffect(() => {
+    const pendingSession = pendingHistorySessionRef.current;
+    if (!assistantStore.isOpen || !enabled || !pendingSession || !contextEnvelope) return;
+    if (pendingSession.target_key === contextEnvelope.session_binding.target_key) {
+      pendingHistorySessionRef.current = null;
+      resetForHistorySession(pendingSession.session_id);
+      return;
+    }
+    const targetRoute = pendingSession.target_metadata?.page?.route || "";
+    const currentRoute = pathname ?? `/${workspaceSlug}`;
+    if (!targetRoute || targetRoute.split("?")[0] === currentRoute.split("?")[0]) {
+      pendingHistorySessionRef.current = null;
+      setStreamState({
+        phase: "failed",
+        error: "launch_history_target_unavailable",
+        canRetry: false,
+      });
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: translateRef.current("aiAssistant.launch_history_target_unavailable"),
+      });
+    }
+  }, [assistantStore.isOpen, contextEnvelope, enabled, pathname, resetForHistorySession, workspaceSlug]);
+
   const ensureSession = useCallback(
     async (context: TAgentContextEnvelope): Promise<TAgentDockSession> => {
       if (assistantStore.threadId) {
@@ -731,22 +778,25 @@ export const useAssistantChat = (
 
   /** Switch to one session from this browser launch batch. */
   const selectHistorySession = useCallback(
-    (sessionId: string) => {
+    (session: TAgentDockSession) => {
       if (ACTIVE_PHASES.has(streamState.phase) || pendingSendRef.current) return;
-      generationRef.current += 1;
-      disconnectStream();
-      approvalPendingRef.current = false;
-      activeRunIdRef.current = null;
-      latestSeqRef.current = -1;
-      processedSeqRef.current = new Set();
-      setRuntimeEvents([]);
-      setMessages([]);
-      setStreamingAnswer("");
-      streamingAnswerRef.current = "";
-      setStreamState({ phase: "idle" });
-      assistantStore.setThreadId(workspaceSlug, sessionId);
+      if (session.target_key === contextEnvelope?.session_binding.target_key) {
+        resetForHistorySession(session.session_id);
+        return true;
+      }
+      const route = session.target_metadata?.page?.route;
+      if (!route) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: translateRef.current("aiAssistant.launch_history_target_unavailable"),
+        });
+        return false;
+      }
+      pendingHistorySessionRef.current = session;
+      router.push(route);
+      return true;
     },
-    [assistantStore, disconnectStream, streamState.phase, workspaceSlug]
+    [contextEnvelope, resetForHistorySession, router, streamState.phase]
   );
 
   useEffect(() => {

@@ -300,5 +300,5 @@ it("clears the browser launch batch when the user scope changes", async () => {
   await render();
 
   expect(window.sessionStorage.getItem("PLANE_AGENT_DOCK_LAUNCH_HISTORY_lab:user-b")).toBeNull();
-  expect(window.sessionStorage.getItem("PLANE_AGENT_DOCK_LAUNCH_HISTORY_lab:user-a")).not.toBeNull();
+  expect(window.sessionStorage.getItem("PLANE_AGENT_DOCK_LAUNCH_HISTORY_lab:user-a")).toBeNull();
 });

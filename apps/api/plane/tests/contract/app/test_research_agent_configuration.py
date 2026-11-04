@@ -151,7 +151,7 @@ def _allow_synlora_key(monkeypatch):
     monkeypatch.setattr(
         agent_identity,
         "verify_synlora_api_key",
-        lambda **_kwargs: SimpleNamespace(user_id="synlora-user", username="synlora"),
+        lambda **_kwargs: SimpleNamespace(user_id="synlora-user", username="synlora", deployment_id="synlora-test"),
     )
 
 
@@ -187,11 +187,13 @@ def test_cloud_and_local_configs_are_saved_and_removed_independently(sd_session,
         workspace=sd_session.workspace, user=sd_session.user, system="SYNLORA"
     )
     assert cloud.is_enabled
-    assert decrypt_data(cloud.credential_encrypted) == "yxkey_cloud"
+    assert cloud.credential_encrypted == ""
+    assert decrypt_data(cloud.identity_binding.credential_encrypted) == "yxkey_cloud"
     response = client.post(url, {"system": "SYNLORA", "base_url": ""}, format="json")
     assert response.status_code == 201
     cloud.refresh_from_db()
-    assert decrypt_data(cloud.credential_encrypted) == "yxkey_cloud"
+    assert cloud.credential_encrypted == ""
+    assert decrypt_data(cloud.identity_binding.credential_encrypted) == "yxkey_cloud"
     assert client.get(url, {"system": "SYNLORA"}).json()["connection"]["id"] == str(cloud.id)
     assert client.get(url).json()["connection"]["id"] == str(local.id)
     assert client.delete(f"{url}?system=SYNLORA").status_code == 204

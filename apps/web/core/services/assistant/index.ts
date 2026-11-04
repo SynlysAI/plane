@@ -17,7 +17,13 @@ export type TAssistantStatus = {
   enabled: boolean;
   ready: boolean;
   credential_mode?: "SHARED" | "PERSONAL";
-  state?: "ready" | "personal_credential_required" | "not_configured" | "service_unavailable";
+  state?:
+    | "ready"
+    | "personal_credential_required"
+    | "invalid_personal_credential"
+    | "not_configured"
+    | "service_unavailable";
+  portal_url?: string | null;
 };
 
 export type TAssistantSession = {

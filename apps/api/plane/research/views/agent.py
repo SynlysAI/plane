@@ -3,64 +3,64 @@
 import hashlib
 import os
 from dataclasses import replace
+from uuid import UUID
 
+import httpx
 from django.conf import settings as django_settings
-from django.db import transaction
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Max, Q
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
-from uuid import UUID
 
+from plane.api.middleware.api_authentication import APIKeyAuthentication
+from plane.app.views.assistant.client import (
+    AssistantNotConfigured,
+    SynloraAssistantClient,
+    resolve_assistant_config,
+)
+from plane.authentication.session import BaseSessionAuthentication
 from plane.db.models import (
     ResearchAgentBackendConnection,
     ResearchAgentRunEvent,
     ResearchAgentSession,
     ResearchAnalysisResult,
-    ResearchChainEvent,
     ResearchChain,
+    ResearchChainEvent,
     ResearchChainNode,
     ResearchChainSnapshot,
     ResearchChainUpload,
     WorkspaceResearchSetting,
 )
-from plane.api.middleware.api_authentication import APIKeyAuthentication
-from plane.app.views.assistant.client import (
-    AssistantNotConfigured,
-    resolve_assistant_config,
-    SynloraAssistantClient,
-)
-from plane.authentication.session import BaseSessionAuthentication
-import httpx
-
 from plane.license.utils.encryption import decrypt_data, encrypt_data
 from plane.research.serializers import ResearchAgentRunEventSerializer, ResearchAgentSessionSerializer
+from plane.research.services.agent_identity import (
+    SynloraIdentityConflict,
+    SynloraIdentityError,
+    bind_synlora_api_key,
+    ensure_synlora_identity_binding,
+    revoke_synlora_identity_connection,
+)
 from plane.research.services.agent_orchestrator import (
     AgentAssembly,
     create_science_discovery_session,
     issue_agent_context,
+)
+from plane.research.services.agent_runtime import (
+    SynloraRuntimeError,
+    resolve_synlora_runtime,
+    synlora_research_context,
 )
 from plane.research.services.backend_connections import (
     BackendConnectionError,
     resolve_science_discovery_connection,
     validate_backend_base_url,
 )
-from plane.research.services.report_context import ResearchReportContextError
-from plane.research.services.agent_runtime import (
-    SynloraRuntimeError,
-    resolve_synlora_runtime,
-    synlora_research_context,
-)
-from plane.research.services.agent_identity import (
-    SynloraIdentityConflict,
-    SynloraIdentityError,
-    bind_synlora_api_key,
-)
 from plane.research.services.chain_projection import project_science_discovery_events
-from plane.research.services.sciencediscovery import ScienceDiscoveryClient, ScienceDiscoveryError
 from plane.research.services.idempotency import conflict_response, payload_hash, request_id_from
+from plane.research.services.report_context import ResearchReportContextError
+from plane.research.services.sciencediscovery import ScienceDiscoveryClient, ScienceDiscoveryError
 from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
 from plane.research.utils.capabilities import NAV_PROJECTS
 from plane.research.utils.errors import (
@@ -77,7 +77,6 @@ from plane.research.views.chain_foundation import (
     _node_operator,
 )
 from plane.research.views.projects import can_read_project_research_metadata
-
 
 AGENT_MANIFEST = {
     "schema_version": "agent-plugin.v1",
@@ -631,9 +630,9 @@ class ResearchAgentMessageEndpoint(AgentPluginMixin):
         if not request_id or not content:
             return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "request_id and content are required.")
         from plane.research.services.report_context import (
-            selected_report_content,
             content_for_grant,
             inject_report_content,
+            selected_report_content,
         )
 
         selections = request.data.get("reports", session.context_grant.allowed_reports)
@@ -1369,7 +1368,13 @@ class ResearchAgentBackendConnectionEndpoint(AgentPluginMixin):
                         "system": connection.system,
                         "base_url": connection.base_url,
                         "is_enabled": connection.is_enabled,
-                        "has_credential": bool(connection.credential_encrypted),
+                        "has_credential": bool(
+                            connection.credential_encrypted
+                            or (
+                                connection.identity_binding is not None
+                                and connection.identity_binding.credential_encrypted
+                            )
+                        ),
                         "health_status": connection.health_status,
                         "last_health_at": connection.last_health_at,
                         "last_error": connection.last_error,
@@ -1377,6 +1382,7 @@ class ResearchAgentBackendConnectionEndpoint(AgentPluginMixin):
                             {
                                 "id": connection.identity_binding.external_user_id,
                                 "username": connection.identity_binding.external_username,
+                                "deployment_id": connection.identity_binding.deployment_id,
                             }
                             if connection.identity_binding_id is not None
                             and connection.identity_binding.deleted_at is None
@@ -1464,11 +1470,14 @@ class ResearchAgentBackendConnectionEndpoint(AgentPluginMixin):
                 is_enabled=is_enabled,
                 created_by=request.user,
             )
+            if system == "SYNLORA" and identity_binding is not None:
+                connection.credential_encrypted = ""
+                connection.save(update_fields=["credential_encrypted", "updated_at"])
         else:
             if base_url or system == "SCIENCE_DISCOVERY":
                 connection.base_url = base_url
             if token:
-                connection.credential_encrypted = encrypt_data(token)
+                connection.credential_encrypted = encrypt_data(token) if system != "SYNLORA" else ""
                 if identity_binding is not None:
                     connection.identity_binding = identity_binding
             connection.is_enabled = is_enabled
@@ -1499,11 +1508,15 @@ class ResearchAgentBackendConnectionEndpoint(AgentPluginMixin):
                 "id": str(connection.id),
                 "base_url": connection.base_url,
                 "is_enabled": connection.is_enabled,
-                "has_credential": bool(connection.credential_encrypted),
+                "has_credential": bool(
+                    connection.credential_encrypted
+                    or (connection.identity_binding is not None and connection.identity_binding.credential_encrypted)
+                ),
                 "external_user": (
                     {
                         "id": connection.identity_binding.external_user_id,
                         "username": connection.identity_binding.external_username,
+                        "deployment_id": connection.identity_binding.deployment_id,
                     }
                     if connection.identity_binding_id is not None
                     else None
@@ -1522,9 +1535,8 @@ class ResearchAgentBackendConnectionEndpoint(AgentPluginMixin):
             workspace=workspace, user=request.user, system=system, deleted_at__isnull=True
         ).first()
         if connection is not None:
-            # Retain credential material for historical sessions pinned to this
-            # connection; soft-deletion excludes it from new sessions and permits
-            # a replacement connection for the same member and workspace.
+            if system == "SYNLORA":
+                revoke_synlora_identity_connection(workspace, request.user, connection)
             connection.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -1546,17 +1558,24 @@ class ResearchAgentBackendConnectionTestEndpoint(AgentPluginMixin):
             return research_error(
                 ResearchErrorCode.AGENT_SCOPE_INVALID, "No connection is configured for this agent system."
             )
-        if not connection.credential_encrypted:
-            return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "The connection has no stored credential.")
         models = []
         error_code = ""
         try:
             if system == "SYNLORA":
+                binding = ensure_synlora_identity_binding(workspace, request.user)
+                if binding is None:
+                    error_code = (
+                        "invalid_token"
+                        if connection.credential_encrypted or connection.identity_binding_id
+                        else "not_configured"
+                    )
+                    raise ValueError(error_code)
                 config = resolve_assistant_config(workspace, user=request.user)
                 config = replace(
                     config,
-                    base_url=connection.base_url.rstrip("/") or config.base_url,
-                    token=decrypt_data(connection.credential_encrypted),
+                    base_url=binding.base_url or config.base_url,
+                    token=decrypt_data(binding.credential_encrypted),
+                    auth_mode="PERSONAL_API_KEY",
                 )
                 if not config.base_url:
                     error_code = "not_configured"
@@ -1581,6 +1600,10 @@ class ResearchAgentBackendConnectionTestEndpoint(AgentPluginMixin):
         except ScienceDiscoveryError as exc:
             connection.health_status = ResearchAgentBackendConnection.HealthStatus.DOWN
             connection.last_error = exc.message[:255]
+        except ValueError as exc:
+            connection.health_status = ResearchAgentBackendConnection.HealthStatus.DOWN
+            error_code = str(exc)
+            connection.last_error = error_code[:255]
         except AssistantNotConfigured:
             connection.health_status = ResearchAgentBackendConnection.HealthStatus.DOWN
             error_code = "not_configured"

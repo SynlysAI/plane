@@ -43,6 +43,7 @@ def _personal_binding(workspace, user, token="yxkey_personal"):
         user=user,
         system="SYNLORA",
         base_url="http://synlora.internal:5050",
+        deployment_id="synlora-test",
         external_user_id="synlora-user",
         external_username="synlora",
         credential_hash="hash-" + token,
@@ -108,7 +109,8 @@ def test_status_reports_disabled_without_a_connection(env):
     assert response.json() == {
         "enabled": False,
         "ready": False,
-        "credential_mode": "SHARED",
+        "credential_mode": "PERSONAL",
+        "portal_url": None,
         "state": "not_configured",
     }
 
@@ -143,8 +145,11 @@ def test_status_reports_ready_when_synlora_answers(env):
     assert response.json()["enabled"] is True
     assert response.json()["ready"] is True
     assert response.json()["state"] == "ready"
-    assert fake_get.call_args.args[0] == "http://synlora.internal:5050/api/health"
-    assert "headers" not in fake_get.call_args.kwargs
+    requested_urls = [call.args[0] for call in fake_get.call_args_list]
+    assert requested_urls[0] == "http://synlora.internal:5050/api/health"
+    assert requested_urls[1] == "http://synlora.internal:5050/api/v1/auth/me"
+    assert "headers" not in fake_get.call_args_list[0].kwargs
+    assert fake_get.call_args_list[1].kwargs["headers"] == {"Authorization": "Bearer yxkey_personal"}
 
 
 def test_status_reports_personal_token_missing(env):
@@ -158,6 +163,7 @@ def test_status_reports_personal_token_missing(env):
         "enabled": False,
         "ready": False,
         "credential_mode": "PERSONAL",
+        "portal_url": None,
         "state": "personal_credential_required",
     }
 
@@ -178,9 +184,33 @@ def test_status_reports_service_unavailable_when_synlora_health_fails(env):
     assert response.json() == {
         "enabled": True,
         "ready": False,
-        "credential_mode": "SHARED",
+        "credential_mode": "PERSONAL",
+        "portal_url": "http://synlora.internal:5050",
         "state": "service_unavailable",
     }
+
+
+def test_status_reports_invalid_personal_credential(env):
+    _configure(env["workspace"])
+    _personal_binding(env["workspace"], env["owner"])
+
+    class HealthResponse:
+        status_code = 200
+
+    class InvalidTokenResponse:
+        status_code = 401
+
+    def fake_get(url, **_kwargs):
+        return HealthResponse() if url.endswith("/api/health") else InvalidTokenResponse()
+
+    client = _client_for(env["owner"])
+    with (
+        patch("plane.app.views.assistant.client.httpx.get", side_effect=fake_get),
+    ):
+        response = client.get(f"/api/workspaces/{env['workspace'].slug}/assistant/status/")
+    assert response.status_code == 200
+    assert response.json()["ready"] is False
+    assert response.json()["state"] == "invalid_personal_credential"
 
 
 def test_chat_uses_v1_session_and_returns_run_identity(env):

@@ -5,10 +5,12 @@ from __future__ import annotations
 import hashlib
 import logging
 from dataclasses import dataclass
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from django.conf import settings
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from plane.db.models import ResearchAgentBackendConnection, ResearchAgentIdentityBinding
 from plane.license.utils.encryption import decrypt_data, encrypt_data
@@ -30,6 +32,25 @@ class SynloraIdentity:
 
     user_id: str
     username: str
+    deployment_id: str
+
+
+def normalize_synlora_base_url(base_url: str) -> str:
+    """Normalize a Synlora base URL without treating aliases as deployment identity."""
+
+    parsed = urlsplit(str(base_url or "").strip())
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+        raise SynloraIdentityError("invalid_synlora_base_url")
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise SynloraIdentityError("invalid_synlora_base_url")
+    scheme = parsed.scheme.lower()
+    host = parsed.hostname.lower()
+    port = parsed.port
+    if (scheme == "http" and port == 80) or (scheme == "https" and port == 443):
+        port = None
+    netloc = f"{host}:{port}" if port is not None else host
+    path = parsed.path.rstrip("/")
+    return urlunsplit((scheme, netloc, path, "", ""))
 
 
 def verify_synlora_api_key(
@@ -55,7 +76,7 @@ def verify_synlora_api_key(
     try:
         with httpx.Client(transport=transport) as client:
             response = client.get(
-                f"{base_url.rstrip('/')}/api/v1/auth/me",
+                f"{normalize_synlora_base_url(base_url)}/api/v1/auth/me",
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=timeout_seconds,
             )
@@ -69,11 +90,12 @@ def verify_synlora_api_key(
         payload = response.json()
         user_id = str(payload.get("sub") or "")
         username = str(payload.get("username") or "")
+        deployment_id = str(payload.get("deployment_id") or "")
     except ValueError as exc:
         raise SynloraIdentityError("invalid_synlora_response") from exc
-    if not user_id:
+    if not user_id or not deployment_id:
         raise SynloraIdentityError("invalid_synlora_response")
-    return SynloraIdentity(user_id=user_id, username=username)
+    return SynloraIdentity(user_id=user_id, username=username, deployment_id=deployment_id)
 
 
 def _active_binding(**filters) -> ResearchAgentIdentityBinding | None:
@@ -108,7 +130,7 @@ def bind_synlora_api_key(
         SynloraIdentityError: Verification failed.
         SynloraIdentityConflict: The key or Synlora user belongs to another Plane user.
     """
-    normalized_base_url = base_url.rstrip("/")
+    normalized_base_url = normalize_synlora_base_url(base_url)
     identity = verify_synlora_api_key(
         base_url=normalized_base_url,
         token=token,
@@ -122,15 +144,30 @@ def bind_synlora_api_key(
     with transaction.atomic():
         by_key = _active_binding(
             system="SYNLORA",
-            base_url=normalized_base_url,
+            deployment_id=identity.deployment_id,
             credential_hash=credential_hash,
         )
         by_external = _active_binding(
             system="SYNLORA",
-            base_url=normalized_base_url,
+            deployment_id=identity.deployment_id,
             external_user_id=identity.user_id,
         )
-        own = _active_binding(user=user, system="SYNLORA", base_url=normalized_base_url)
+        own = _active_binding(user=user, system="SYNLORA", deployment_id=identity.deployment_id)
+        if own is None:
+            # Bindings created before deployment_id was available used a stable
+            # URL-derived marker. Adopt the same owner during the one-time upgrade.
+            legacy_own = (
+                ResearchAgentIdentityBinding.objects.filter(
+                    user=user,
+                    system="SYNLORA",
+                    deleted_at__isnull=True,
+                    deployment_id__startswith="url:",
+                )
+                .order_by("-created_at")
+                .first()
+            )
+            if legacy_own is not None and str(legacy_own.external_user_id) == identity.user_id:
+                own = legacy_own
         if (by_key is not None and by_key.user_id != user.id) or (
             by_external is not None and by_external.user_id != user.id
         ):
@@ -144,6 +181,7 @@ def bind_synlora_api_key(
                 user=user,
                 system="SYNLORA",
                 base_url=normalized_base_url,
+                deployment_id=identity.deployment_id,
                 external_user_id=identity.user_id,
                 external_username=identity.username,
                 credential_hash=credential_hash,
@@ -156,21 +194,28 @@ def bind_synlora_api_key(
                 raise SynloraIdentityConflict("synlora_identity_race") from exc
         else:
             binding.user = user
+            binding.base_url = normalized_base_url
+            binding.deployment_id = identity.deployment_id
             binding.external_user_id = identity.user_id
             binding.external_username = identity.username
             binding.credential_hash = credential_hash
             binding.credential_encrypted = encrypt_data(token)
             binding.updated_by = user
-            binding.save(
-                update_fields=[
-                    "external_user_id",
-                    "external_username",
-                    "credential_hash",
-                    "credential_encrypted",
-                    "updated_by",
-                    "updated_at",
-                ]
-            )
+            try:
+                binding.save(
+                    update_fields=[
+                        "base_url",
+                        "deployment_id",
+                        "external_user_id",
+                        "external_username",
+                        "credential_hash",
+                        "credential_encrypted",
+                        "updated_by",
+                        "updated_at",
+                    ]
+                )
+            except IntegrityError as exc:
+                raise SynloraIdentityConflict("synlora_identity_race") from exc
 
         if connection is not None:
             connection.identity_binding = binding
@@ -201,29 +246,66 @@ def ensure_synlora_identity_binding(workspace, user) -> ResearchAgentIdentityBin
     )
     if connection is None:
         return None
-    if connection.identity_binding_id is not None and connection.identity_binding.deleted_at is None:
-        return connection.identity_binding
+    linked_binding = connection.identity_binding
+    if (
+        linked_binding is not None
+        and linked_binding.deleted_at is None
+        and not str(linked_binding.deployment_id).startswith("url:")
+    ):
+        return linked_binding
 
-    base_url = (connection.base_url or settings.SYNLORA_BASE_URL or "").rstrip("/")
-    if not base_url or not connection.credential_encrypted:
+    base_url = (
+        connection.base_url
+        or (linked_binding.base_url if linked_binding is not None else "")
+        or settings.SYNLORA_BASE_URL
+    ).rstrip("/")
+    credential_encrypted = connection.credential_encrypted or (
+        linked_binding.credential_encrypted if linked_binding is not None else ""
+    )
+    if not base_url or not credential_encrypted:
         return None
-    existing = _active_binding(user=user, system="SYNLORA", base_url=base_url)
-    if existing is not None:
-        connection.identity_binding = existing
-        connection.save(update_fields=["identity_binding", "updated_at"])
-        return existing
 
     try:
         return bind_synlora_api_key(
             workspace,
             user=user,
             base_url=base_url,
-            token=decrypt_data(connection.credential_encrypted),
+            token=decrypt_data(credential_encrypted),
             connection=connection,
         )
     except (SynloraIdentityError, SynloraIdentityConflict):
         _LOGGER.warning("Synlora identity binding failed user=%s workspace=%s", user.id, workspace.id)
         return None
+
+
+def revoke_synlora_identity_connection(workspace, user, connection) -> None:
+    """Remove one workspace's usable credential while preserving audit lineage.
+
+    Args:
+        workspace: Plane workspace owning the connection.
+        user: Plane user who owns the credential.
+        connection: Active Synlora workspace connection about to be soft-deleted.
+    """
+
+    binding = connection.identity_binding
+    has_other_connection = (
+        ResearchAgentBackendConnection.objects.filter(
+            identity_binding=binding,
+            system="SYNLORA",
+            deleted_at__isnull=True,
+            is_enabled=True,
+        )
+        .exclude(pk=connection.pk)
+        .exists()
+    )
+    connection.identity_binding = None
+    connection.credential_encrypted = ""
+    connection.save(update_fields=["identity_binding", "credential_encrypted", "updated_at"])
+    if binding is not None and not has_other_connection:
+        binding.deleted_at = timezone.now()
+        binding.credential_encrypted = ""
+        binding.updated_by = user
+        binding.save(update_fields=["deleted_at", "credential_encrypted", "updated_by", "updated_at"])
 
 
 def repair_synlora_account_links(*, dry_run: bool = False, transport: httpx.BaseTransport | None = None) -> dict:
@@ -278,6 +360,8 @@ def repair_synlora_account_links(*, dry_run: bool = False, transport: httpx.Base
             "external_subject": f"plane-ws-{connection.workspace_id}-user-{connection.user_id}",
             "synlora_user_id": binding.external_user_id,
             "synlora_username": binding.external_username,
+            "workspace_slug": connection.workspace.slug,
+            "workspace_name": connection.workspace.name,
         }
         if dry_run:
             submitted += 1

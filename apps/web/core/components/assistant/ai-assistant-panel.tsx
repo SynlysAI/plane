@@ -46,7 +46,7 @@ import { groupRuntimeEventsByRun, mergeRuntimeToolCalls } from "./lib/runtime-ev
 import { useWorkbenchChat } from "./use-workbench-chat";
 import { useAgentDockDesktop } from "@/hooks/use-agent-dock-desktop";
 import type { TAssistantStatus } from "@/services/assistant";
-import type { TAgentFocusRef } from "@/services/agent-dock";
+import type { TAgentDockEvent, TAgentFocusRef } from "@/services/agent-dock";
 // store
 import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
 import { AGENT_DOCK_MAX_WIDTH, AGENT_DOCK_MIN_WIDTH } from "@/store/ai-assistant";
@@ -55,6 +55,7 @@ type Props = {
   workspaceSlug: string;
   statusState: TAssistantStatus["state"] | "loading";
   onRetryStatus?: () => void;
+  portalUrl?: string | null;
   focusRef?: TAgentFocusRef | null;
 };
 
@@ -123,17 +124,37 @@ function ToolLine({ name, status }: { name: string; status?: string }) {
 /** Show a compact, conversation-inline execution timeline without chain-of-thought content. */
 function InlineRunTimeline({
   active,
+  approvalEvents,
+  contextEvents,
+  events,
+  generating,
   phaseLabel,
   latestEventLabel,
   tools,
 }: {
   active: boolean;
+  approvalEvents: TAgentDockEvent[];
+  contextEvents: TAgentDockEvent[];
+  events: TAgentDockEvent[];
+  generating: boolean;
   phaseLabel: string;
   latestEventLabel: string;
   tools: ReturnType<typeof mergeRuntimeToolCalls>;
 }) {
   const { t } = useTranslation();
   const visibleTools = tools.slice(-4);
+  const toolStatusLabel: Record<string, string> = {
+    running: t("aiAssistant.runtime_status_running"),
+    completed: t("aiAssistant.runtime_status_completed"),
+    failed: t("aiAssistant.runtime_status_failed"),
+    waiting_approval: t("aiAssistant.runtime_status_waiting"),
+  };
+  const firstEventAt = Date.parse(events[0]?.created_at ?? "");
+  const lastEventAt = Date.parse(events.at(-1)?.created_at ?? "");
+  const elapsedMs =
+    Number.isFinite(firstEventAt) && (active || Number.isFinite(lastEventAt))
+      ? Math.max(0, (active ? Date.now() : lastEventAt) - firstEventAt)
+      : 0;
   return (
     <section
       aria-label={t("aiAssistant.runtime_inline")}
@@ -142,23 +163,68 @@ function InlineRunTimeline({
       <div className="flex items-center gap-2 text-11 text-secondary">
         {active && <Loader2 className="size-3 animate-spin text-accent-primary" />}
         <span className="font-medium text-primary">{phaseLabel}</span>
+        <span className="text-tertiary">
+          {t("aiAssistant.runtime_elapsed", { count: Math.round(elapsedMs / 1000) })}
+        </span>
         <span className="text-tertiary">{t("aiAssistant.runtime_latest_event", { label: latestEventLabel })}</span>
       </div>
-      {visibleTools.length ? (
-        <ol className="mt-2 space-y-1" role="list">
-          {visibleTools.map((tool) => (
-            <li key={tool.id} className="flex min-w-0 items-center justify-between gap-3 text-11">
-              <span className="min-w-0 truncate text-secondary">{tool.name}</span>
-              <span className="shrink-0 text-tertiary">
-                {tool.status}
-                {tool.duration_ms !== null ? ` · ${tool.duration_ms}ms` : ""}
-              </span>
+      <ol className="mt-2 space-y-1.5" role="list">
+        {contextEvents.slice(-1).map((event) => (
+          <li key={`context-${event.seq}`} className="flex min-w-0 items-center gap-2 text-11 text-secondary">
+            <span className="size-1 shrink-0 rounded-full bg-current opacity-40" aria-hidden="true" />
+            <span className="min-w-0 truncate">{t("aiAssistant.runtime_context_bound")}</span>
+          </li>
+        ))}
+        {events
+          .filter((event) => event.event_type === "RUN_EVENT" && String(event.payload.phase ?? "") === "thinking")
+          .slice(-1)
+          .map((event) => (
+            <li key={`thinking-${event.seq}`} className="flex min-w-0 items-center gap-2 text-11 text-secondary">
+              <span className="size-1 shrink-0 rounded-full bg-current opacity-40" aria-hidden="true" />
+              <span className="min-w-0 truncate">{t("aiAssistant.runtime_thinking")}</span>
             </li>
           ))}
-        </ol>
-      ) : (
-        <p className="mt-1 text-10 text-tertiary">{t("aiAssistant.runtime_waiting_events")}</p>
-      )}
+        {visibleTools.map((tool) => (
+          <li key={tool.id} className="min-w-0 text-11">
+            <details>
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                <span className="min-w-0 truncate text-secondary">{tool.name}</span>
+                <span className="shrink-0 text-tertiary">
+                  {toolStatusLabel[tool.status] ?? tool.status}
+                  {tool.duration_ms !== null ? ` · ${tool.duration_ms}ms` : ""}
+                </span>
+              </summary>
+              <div className="mt-1 space-y-1 border-l border-subtle pl-3 text-10 text-tertiary">
+                <p className="break-all">
+                  {t("aiAssistant.runtime_arguments")}: {tool.arguments || "—"}
+                </p>
+                <p className="break-all">
+                  {t("aiAssistant.runtime_result")}: {tool.result || "—"}
+                </p>
+              </div>
+            </details>
+          </li>
+        ))}
+        {approvalEvents.slice(-1).map((event) => (
+          <li key={`approval-${event.seq}`} className="flex min-w-0 items-center gap-2 text-11 text-secondary">
+            <span className="size-1 shrink-0 rounded-full bg-current opacity-40" aria-hidden="true" />
+            <span className="min-w-0 truncate">{t("aiAssistant.approval_pending")}</span>
+          </li>
+        ))}
+        {generating && (
+          <li className="flex min-w-0 items-center gap-2 text-11 text-secondary">
+            <span className="size-1 shrink-0 rounded-full bg-current opacity-40" aria-hidden="true" />
+            <span className="min-w-0 truncate">{t("aiAssistant.runtime_generating")}</span>
+          </li>
+        )}
+        {!active && events.length > 0 && (
+          <li className="flex min-w-0 items-center gap-2 text-11 text-secondary">
+            <span className="size-1 shrink-0 rounded-full bg-current opacity-40" aria-hidden="true" />
+            <span className="min-w-0 truncate">{phaseLabel}</span>
+          </li>
+        )}
+        {!events.length && <li className="text-10 text-tertiary">{t("aiAssistant.runtime_waiting_events")}</li>}
+      </ol>
     </section>
   );
 }
@@ -167,6 +233,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
   workspaceSlug,
   statusState,
   onRetryStatus,
+  portalUrl = null,
   focusRef = null,
 }: Props) {
   const { t } = useTranslation();
@@ -393,7 +460,6 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
     () => cloud.runtimeEvents.filter((event) => event.event_type === "CONTEXT_ACCESSED"),
     [cloud.runtimeEvents]
   );
-  const currentRunningTool = runtimeTools.find((tool) => tool.status === "running");
   const phaseLabels: Record<string, string> = {
     idle: "空闲",
     connecting: "连接中",
@@ -683,10 +749,14 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setHistoryOpen((open) => !open)}
+              onClick={() => {
+                setHistoryOpen((open) => !open);
+                assistantStore.setActiveView("conversation");
+              }}
               aria-label={t("aiAssistant.launch_history")}
               title={t("aiAssistant.launch_history")}
               aria-pressed={historyOpen}
+              disabled={provider !== "cloud" || busy}
             >
               <History className="size-3.5" />
             </Button>
@@ -742,21 +812,6 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
         </div>
       )}
 
-      {provider === "cloud" && assistantStore.activeView === "conversation" && (
-        <aside className="shrink-0 border-b border-subtle px-4 py-2 text-10 text-secondary" aria-label="当前运行状态">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>{cloud.contextEnvelope?.status === "linked" ? "上下文已绑定" : `上下文 ${cloud.contextStatus}`}</span>
-            <span>Grant v{cloud.contextEnvelope?.context_version ?? "—"}</span>
-            <span>{phaseLabel}</span>
-            <span>{runtimeTools.length} 次工具调用</span>
-            {currentRunningTool && <span>当前工具：{currentRunningTool.name}</span>}
-            {cloud.streamState.phase === "waiting_approval" && <span>等待审批</span>}
-            <span>最近事件：{latestEventLabel}</span>
-          </div>
-          {cloud.streamState.error && <p className="mt-1 break-words text-danger-primary">{cloud.streamState.error}</p>}
-        </aside>
-      )}
-
       {provider === "cloud" && !cloudReady ? (
         <>
           {statusGuidance}
@@ -770,7 +825,22 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
         <section className="min-h-0 flex-1 overflow-y-auto px-4 py-4" aria-label={t("aiAssistant.launch_history")}>
           <header className="pb-3">
             <h3 className="text-12 font-semibold text-primary">{t("aiAssistant.launch_history")}</h3>
-            <p className="mt-1 text-11 text-tertiary">{t("aiAssistant.launch_history_hint")}</p>
+            <p className="mt-1 text-11 text-tertiary">
+              {t("aiAssistant.launch_history_hint")}
+              {portalUrl && (
+                <>
+                  {" "}
+                  <a
+                    href={portalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-accent-primary hover:underline"
+                  >
+                    {t("aiAssistant.launch_history_portal")}
+                  </a>
+                </>
+              )}
+            </p>
           </header>
           {cloud.historyLoading ? (
             <p className="py-3 text-11 text-tertiary">{t("common.loading")}</p>
@@ -781,10 +851,12 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
                   <button
                     type="button"
                     onClick={() => {
-                      cloud.selectHistorySession(item.session_id);
-                      setHistoryOpen(false);
+                      if (cloud.selectHistorySession(item)) setHistoryOpen(false);
                     }}
-                    className={`flex w-full flex-col gap-1 px-1 py-3 text-left transition hover:bg-surface-2 ${
+                    disabled={busy}
+                    aria-disabled={busy}
+                    title={busy ? t("aiAssistant.launch_history_busy") : undefined}
+                    className={`flex w-full flex-col gap-1 px-1 py-3 text-left transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50 ${
                       assistantStore.threadId === item.session_id ? "bg-surface-2" : ""
                     }`}
                   >
@@ -851,9 +923,13 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
             {provider === "cloud" &&
               (runtimeTools.length > 0 ||
                 ACTIVE_CLOUD_PHASES.has(cloud.streamState.phase) ||
-                cloud.streamState.phase === "completed") && (
+                ["completed", "failed", "cancelled", "expired"].includes(cloud.streamState.phase)) && (
                 <InlineRunTimeline
                   active={ACTIVE_CLOUD_PHASES.has(cloud.streamState.phase)}
+                  approvalEvents={approvalEvents}
+                  contextEvents={contextSnapshots}
+                  events={cloud.runtimeEvents}
+                  generating={Boolean(cloud.streamingAnswer)}
                   phaseLabel={phaseLabel}
                   latestEventLabel={latestEventLabel}
                   tools={runtimeTools}

@@ -12,7 +12,7 @@ import useSWR from "swr";
 import { AIAssistantPanel } from "./ai-assistant-panel";
 // helpers
 import { AssistantService, type TAssistantStatus } from "@/services/assistant";
-import { clearLaunchHistory } from "@/components/assistant/lib/launch-history";
+import { clearLaunchHistoryScopes } from "@/components/assistant/lib/launch-history";
 import { RightDockProvider, RightDockShell, useRightDockState } from "@/components/right-dock";
 import { useAgentDockDesktop } from "@/hooks/use-agent-dock-desktop";
 // store
@@ -49,7 +49,7 @@ const AIAssistantRootContent = observer(function AIAssistantRootContent({ childr
   const assistantStore = useAIAssistant();
   const { data: currentUser } = useUser();
   const { hasDetail } = useRightDockState();
-  const ownerScopeRef = useRef<string | null>(null);
+  const ownerScopeRef = useRef<{ workspaceSlug: string; ownerKey: string | null } | null>(null);
   const isDesktop = useAgentDockDesktop();
 
   const {
@@ -87,11 +87,15 @@ const AIAssistantRootContent = observer(function AIAssistantRootContent({ childr
   useEffect(() => {
     if (!workspaceSlug) return;
     const ownerKey = currentUser?.id ?? null;
-    const scope = `${workspaceSlug}:${ownerKey ?? "anonymous"}`;
-    if (ownerScopeRef.current !== null && ownerScopeRef.current !== scope) {
-      clearLaunchHistory(workspaceSlug, ownerKey);
+    const previousScope = ownerScopeRef.current;
+    if (
+      previousScope !== null &&
+      previousScope.ownerKey !== ownerKey &&
+      (previousScope.workspaceSlug !== workspaceSlug || previousScope.ownerKey !== ownerKey)
+    ) {
+      clearLaunchHistoryScopes(previousScope, { workspaceSlug, ownerKey });
     }
-    ownerScopeRef.current = scope;
+    ownerScopeRef.current = { workspaceSlug, ownerKey };
   }, [currentUser?.id, workspaceSlug]);
 
   useEffect(() => {
@@ -134,6 +138,7 @@ const AIAssistantRootContent = observer(function AIAssistantRootContent({ childr
         <AIAssistantPanel
           workspaceSlug={workspaceSlug}
           statusState={resolvedStatus?.state ?? "loading"}
+          portalUrl={resolvedStatus?.portal_url ?? null}
           onRetryStatus={() => void mutate()}
         />
       }

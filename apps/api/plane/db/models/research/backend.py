@@ -16,6 +16,7 @@ class ResearchAgentIdentityBinding(BaseModel):
     )
     system = models.CharField(max_length=24, default="SYNLORA")
     base_url = models.URLField(max_length=500)
+    deployment_id = models.CharField(max_length=128, default="")
     external_user_id = models.CharField(max_length=128)
     external_username = models.CharField(max_length=255, blank=True, default="")
     credential_hash = models.CharField(max_length=64)
@@ -27,24 +28,24 @@ class ResearchAgentIdentityBinding(BaseModel):
         ordering = ("-created_at",)
         constraints = [
             models.UniqueConstraint(
-                fields=["user", "system", "base_url"],
+                fields=["user", "system", "deployment_id"],
                 condition=Q(deleted_at__isnull=True),
                 name="rsch_agent_ident_uq_plane",
             ),
             models.UniqueConstraint(
-                fields=["system", "base_url", "external_user_id"],
+                fields=["system", "deployment_id", "external_user_id"],
                 condition=Q(deleted_at__isnull=True),
                 name="rsch_agent_ident_uq_ext",
             ),
             models.UniqueConstraint(
-                fields=["system", "base_url", "credential_hash"],
+                fields=["system", "deployment_id", "credential_hash"],
                 condition=Q(deleted_at__isnull=True),
                 name="rsch_agent_ident_uq_key",
             ),
         ]
         indexes = [
             models.Index(
-                fields=["system", "base_url", "external_user_id"],
+                fields=["system", "deployment_id", "external_user_id"],
                 name="rsch_agent_ident_ext_idx",
             ),
         ]

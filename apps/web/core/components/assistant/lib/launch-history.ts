@@ -53,3 +53,12 @@ export function addLaunchSession(workspaceSlug: string, ownerKey: string | null,
 export function clearLaunchHistory(workspaceSlug: string, ownerKey: string | null) {
   globalThis.sessionStorage?.removeItem(storageKey(workspaceSlug, ownerKey));
 }
+
+/** Clear two explicitly known scopes during a user change or logout. */
+export function clearLaunchHistoryScopes(
+  previous: { workspaceSlug: string; ownerKey: string | null },
+  next: { workspaceSlug: string; ownerKey: string | null }
+) {
+  clearLaunchHistory(previous.workspaceSlug, previous.ownerKey);
+  clearLaunchHistory(next.workspaceSlug, next.ownerKey);
+}
