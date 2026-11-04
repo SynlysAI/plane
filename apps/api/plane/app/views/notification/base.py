@@ -364,8 +364,12 @@ def renderable_inbox_notifications(workspace_slug, receiver_id):
                 deleted_at__isnull=True,
             ).values_list("project_id", flat=True)
         )
-        visible_project_ids.update(public_administrative_project_ids(receiver, workspace_slug))
-        visible_project_ids.update(administrative_organization_project_ids(receiver, workspace_slug))
+        visible_project_ids.update(
+            public_administrative_project_ids(receiver, workspace_slug).values_list("id", flat=True)
+        )
+        visible_project_ids.update(
+            administrative_organization_project_ids(receiver, workspace_slug).values_list("id", flat=True)
+        )
         visible_project_ids.update(
             administrative_projects_for_user(receiver, workspace_slug).values_list("id", flat=True)
         )
