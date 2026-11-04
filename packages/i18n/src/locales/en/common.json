@@ -1714,7 +1714,7 @@
         "reupload_material": "Upload again and link",
         "select_upload": "Select topic material",
         "link_material": "Link material",
-        "upload_empty": "No linkable material exists for this node yet. Upload one first.",
+        "upload_empty": "No linkable material exists for this chain yet. Upload one first.",
         "upload_unavailable": "Topic material upload is not ready. Complete knowledge-base binding before linking materials.",
         "upload_processing": "Parsing; available for review submission",
         "unlinked_file": "No linked file; not counted as complete",

@@ -66,7 +66,7 @@ export type TResearchChainKnowledgeController = {
   uploadFiles: (files: File[]) => Promise<TResearchChainUpload[]>;
   refreshUpload: (uploadId: string) => Promise<void>;
   confirmUpload: (upload: TResearchChainUpload) => Promise<boolean>;
-  deleteUpload: (uploadId: string) => Promise<boolean>;
+  deleteUpload: (uploadId: string) => Promise<void>;
 };
 
 /** Resolve the effective client-side limit from a research material filename. */
@@ -283,27 +283,26 @@ export function useResearchChainKnowledge(
   );
 
   const deleteUpload = useCallback(
-    async (uploadId: string) => {
+    async (uploadId: string): Promise<void> => {
       const generation = generationRef.current;
       setActionError("");
       try {
         await chainService.deleteKnowledgeUpload(workspaceSlug, chainId, uploadId);
-        if (generationRef.current !== generation) return false;
+        if (generationRef.current !== generation) return;
         setUploads((current) => current.filter((item) => item.id !== uploadId));
         setProcessingMeta((current) => {
           const next = { ...current };
           delete next[uploadId];
           return next;
         });
-        return true;
       } catch (error) {
-        if (generationRef.current !== generation) return false;
-        const detail = (error as { error_code?: string }).error_code ? getResearchErrorDetail(error) : null;
-        setActionError(detail ?? t("research.knowledge.action_failed"));
-        return false;
+        if (generationRef.current !== generation) return;
+        // The confirming dialog is the nearest error surface; avoid duplicating
+        // the same rejection once as a panel banner and once inside the modal.
+        throw error;
       }
     },
-    [chainId, t, workspaceSlug]
+    [chainId, workspaceSlug]
   );
 
   const confirmUpload = useCallback(

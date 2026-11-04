@@ -6,6 +6,7 @@ from uuid import UUID
 from urllib.parse import quote
 
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 from django.http import HttpResponse
 from rest_framework import status
@@ -53,10 +54,12 @@ UPLOAD_STATUS_MAP = {
     "success": ResearchChainUpload.Status.SUCCESS,
     "failed": ResearchChainUpload.Status.FAILED,
     "deleted": ResearchChainUpload.Status.FAILED,
+    "cancelled": ResearchChainUpload.Status.FAILED,
 }
 UPLOAD_STATUS_ERROR_CODES = {
     "failed": "parse_failed",
     "deleted": "upstream_deleted",
+    "cancelled": "upstream_cancelled",
 }
 UPLOAD_LIST_SCAN_LIMIT = 200
 UPLOAD_LIST_LIMIT = 50
@@ -428,6 +431,11 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
         else:
             upload.node = node
             upload.request_id = request_id
+            upload.status = ResearchChainUpload.Status.PENDING
+            upload.external_upload_id = ""
+            upload.knowledge_id = ""
+            upload.task_id = ""
+            upload.reference = None
         upload.payload_hash = digest
         upload.file_name = file_name
         upload.file_type = extension
@@ -658,31 +666,34 @@ class ResearchChainUploadDetailEndpoint(ResearchAPIView):
         if readonly_error:
             return readonly_error
         try:
-            upload = chain.uploads.select_related("workspace", "node").get(pk=UUID(str(upload_id)))
+            with transaction.atomic():
+                upload = (
+                    chain.uploads.select_related("workspace", "node").select_for_update().get(pk=UUID(str(upload_id)))
+                )
+                if ResearchChainStageMaterialItem.objects.filter(upload=upload, deleted_at__isnull=True).exists():
+                    return research_error(
+                        ResearchErrorCode.CHAIN_INVALID,
+                        "该资料仍关联阶段材料，请先解除关联。",
+                        status.HTTP_409_CONFLICT,
+                    )
+                upload.deleted_at = timezone.now()
+                upload.updated_by = request.user
+                upload.save(update_fields=["deleted_at", "updated_by", "updated_at"])
+                request_id = f"upload-delete-{upload.id}"
+                digest = payload_hash({"upload": str(upload.id), "action": "delete"})
+                _append_event(
+                    chain=chain,
+                    node=upload.node,
+                    request=request,
+                    event_type="DATA_CHANGE",
+                    summary=f"Deleted research file: {upload.file_name}",
+                    refs=[{"kind": "upload", "id": str(upload.id)}],
+                    metadata={"action": "deleted", "upstream_deleted": False},
+                    request_id=request_id,
+                    digest=digest,
+                )
         except (ResearchChainUpload.DoesNotExist, TypeError, ValueError):
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research upload not found.")
-        if ResearchChainStageMaterialItem.objects.filter(upload=upload, deleted_at__isnull=True).exists():
-            return research_error(
-                ResearchErrorCode.CHAIN_INVALID,
-                "该资料仍关联阶段材料，请先解除关联。",
-                status.HTTP_409_CONFLICT,
-            )
-        upload.deleted_at = timezone.now()
-        upload.updated_by = request.user
-        upload.save(update_fields=["deleted_at", "updated_by", "updated_at"])
-        request_id = f"upload-delete-{upload.id}"
-        digest = payload_hash({"upload": str(upload.id), "action": "delete"})
-        _append_event(
-            chain=chain,
-            node=upload.node,
-            request=request,
-            event_type="DATA_CHANGE",
-            summary=f"Deleted research file: {upload.file_name}",
-            refs=[{"kind": "upload", "id": str(upload.id)}],
-            metadata={"action": "deleted", "upstream_deleted": False},
-            request_id=request_id,
-            digest=digest,
-        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
