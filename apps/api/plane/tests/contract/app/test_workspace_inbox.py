@@ -11,6 +11,8 @@ import pytest
 from rest_framework import status
 
 from plane.db.models import (
+    AdministrativeOrganization,
+    AdministrativeOrganizationMember,
     Issue,
     Notification,
     Page,
@@ -18,6 +20,7 @@ from plane.db.models import (
     PeriodicReportComment,
     PeriodicReportCommentThread,
     Project,
+    ProjectNetwork,
     ResearchFeedback,
     SystemAnnouncement,
     User,
@@ -194,6 +197,56 @@ def create_feedback_notification(workspace, receiver, actor):
 @pytest.mark.django_db
 class TestUnifiedWorkspaceInbox:
     """Verify notification and todo projections share one inbox contract."""
+
+    def test_administrative_project_assignment_notifications_enter_inbox(
+        self, session_client, workspace, create_user
+    ):
+        """Assignments in inherited administrative projects remain visible in the inbox."""
+        default_organization = AdministrativeOrganization.objects.get(
+            workspace=workspace,
+            is_default=True,
+        )
+        member_organization = AdministrativeOrganization.objects.create(
+            workspace=workspace,
+            name="Inbox organization",
+            created_by=create_user,
+        )
+        AdministrativeOrganizationMember.objects.create(
+            workspace=workspace,
+            organization=member_organization,
+            member=create_user,
+            created_by=create_user,
+        )
+
+        projects = []
+        for identifier, organization in (
+            ("INBPD", default_organization),
+            ("INBPO", member_organization),
+        ):
+            project = Project.objects.create(
+                name=f"Inbox administrative project {identifier}",
+                identifier=identifier,
+                workspace=workspace,
+                network=ProjectNetwork.PUBLIC.value,
+                administrative_organization=organization,
+                created_by=create_user,
+            )
+            issue = Issue.objects.create(
+                name=f"Assigned work item {identifier}",
+                project=project,
+                workspace=workspace,
+                created_by=create_user,
+            )
+            projects.append(create_work_item_notification(workspace, create_user, issue))
+
+        response = session_client.get(inbox_url(workspace), {"read": "false"})
+        payload = response.json()
+
+        assert response.status_code == status.HTTP_200_OK
+        assert {f"notification:{notification.id}" for notification in projects} <= {
+            item["id"] for item in payload["results"]
+        }
+        assert payload["unread_counts"]["work_item_unread_count"] == 2
 
     def test_feedback_notifications_enter_unified_inbox_as_system_items(
         self, session_client, workspace, create_user, monkeypatch
