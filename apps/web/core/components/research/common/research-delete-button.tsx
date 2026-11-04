@@ -65,7 +65,8 @@ export function ResearchDeleteButton({ name, onDelete, disabled = false, confirm
                   await onDelete();
                   setOpen(false);
                 } catch (failure) {
-                  setError(t(getResearchErrorKey(failure)));
+                  const message = (failure as { message?: string })?.message;
+                  setError(message || t(getResearchErrorKey(failure)));
                 } finally {
                   setBusy(false);
                 }

@@ -36,10 +36,15 @@ const DEGRADED_ERROR_CODES = new Set([
 const PROCESSING_UPLOAD_STATUSES = new Set(["PENDING", "PROCESSING"]);
 const TERMINAL_UPLOAD_STATUSES = new Set(["SUCCESS", "FAILED", "DEGRADED"]);
 const UPLOAD_POLL_INTERVAL_MS = 5_000;
-const UPLOAD_POLL_MAX_MS = 5 * 60_000;
 const UPLOAD_POLL_BATCH_SIZE = 5;
 
 const chainService = new ResearchChainService();
+
+/** Resolve elapsed time from the server creation time so reloads do not reset it. */
+function processingSince(upload: TResearchChainUpload, fallback: number): number {
+  const parsed = Date.parse(upload.created_at);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
 
 export type TResearchChainKnowledgeController = {
   chainId: string;
@@ -61,6 +66,7 @@ export type TResearchChainKnowledgeController = {
   uploadFiles: (files: File[]) => Promise<TResearchChainUpload[]>;
   refreshUpload: (uploadId: string) => Promise<void>;
   confirmUpload: (upload: TResearchChainUpload) => Promise<boolean>;
+  deleteUpload: (uploadId: string) => Promise<boolean>;
 };
 
 /** Resolve the effective client-side limit from a research material filename. */
@@ -105,7 +111,7 @@ export function formatResearchChainFileSize(size: number | undefined): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** Load and mutate the node-scoped research material source used by both panels. */
+/** Load and mutate the chain-scoped research material source used by both panels. */
 export function useResearchChainKnowledge(
   workspaceSlug: string,
   chainId: string,
@@ -145,7 +151,7 @@ export function useResearchChainKnowledge(
     try {
       const [payload, uploadPayload] = await Promise.all([
         chainService.getKnowledgeBases(workspaceSlug, chainId),
-        chainService.getKnowledgeUploads(workspaceSlug, chainId, nodeId),
+        chainService.getKnowledgeUploads(workspaceSlug, chainId),
       ]);
       if (generationRef.current !== generation) return;
       setKnowledgeState(payload.state ?? KB_READY_STATE);
@@ -155,11 +161,10 @@ export function useResearchChainKnowledge(
       setKnowledgeBaseId(payload.items[0]?.external_id ?? "");
       setUploads(uploadPayload.data);
       setProcessingMeta(() => {
-        const now = Date.now();
         return Object.fromEntries(
           uploadPayload.data
             .filter((upload) => PROCESSING_UPLOAD_STATUSES.has(upload.status))
-            .map((upload) => [upload.id, { since: now, lastPolledAt: 0 }])
+            .map((upload) => [upload.id, { since: processingSince(upload, Date.now()), lastPolledAt: 0 }])
         );
       });
       setDegradedReason(payload.degraded_reason ?? "");
@@ -207,7 +212,7 @@ export function useResearchChainKnowledge(
           if (generationRef.current !== generation) break;
           setUploads((current) => [payload.data, ...current.filter((item) => item.id !== payload.data.id)]);
           if (PROCESSING_UPLOAD_STATUSES.has(payload.data.status)) {
-            const observedSince = Date.now();
+            const observedSince = processingSince(payload.data, Date.now());
             setProcessingMeta((current) => ({
               ...current,
               [payload.data.id]: { since: observedSince, lastPolledAt: 0 },
@@ -266,7 +271,7 @@ export function useResearchChainKnowledge(
         } else if (PROCESSING_UPLOAD_STATUSES.has(payload.data.status)) {
           setProcessingMeta((current) => ({
             ...current,
-            [uploadId]: current[uploadId] ?? { since: Date.now(), lastPolledAt: 0 },
+            [uploadId]: current[uploadId] ?? { since: processingSince(payload.data, Date.now()), lastPolledAt: 0 },
           }));
         }
         setState(payload.degraded ? "degraded" : "ready");
@@ -275,6 +280,30 @@ export function useResearchChainKnowledge(
       }
     },
     [chainId, uploads, workspaceSlug]
+  );
+
+  const deleteUpload = useCallback(
+    async (uploadId: string) => {
+      const generation = generationRef.current;
+      setActionError("");
+      try {
+        await chainService.deleteKnowledgeUpload(workspaceSlug, chainId, uploadId);
+        if (generationRef.current !== generation) return false;
+        setUploads((current) => current.filter((item) => item.id !== uploadId));
+        setProcessingMeta((current) => {
+          const next = { ...current };
+          delete next[uploadId];
+          return next;
+        });
+        return true;
+      } catch (error) {
+        if (generationRef.current !== generation) return false;
+        const detail = (error as { error_code?: string }).error_code ? getResearchErrorDetail(error) : null;
+        setActionError(detail ?? t("research.knowledge.action_failed"));
+        return false;
+      }
+    },
+    [chainId, t, workspaceSlug]
   );
 
   const confirmUpload = useCallback(
@@ -300,9 +329,7 @@ export function useResearchChainKnowledge(
   /** Poll the oldest processing uploads in bounded, sequential detail requests. */
   const pollProcessingUploads = useCallback(async () => {
     if (typeof document === "undefined" || document.visibilityState !== "visible" || uploading) return;
-    const now = Date.now();
     const candidates = Object.entries(processingMeta)
-      .filter(([, meta]) => now - meta.since < UPLOAD_POLL_MAX_MS)
       // oxlint-disable-next-line eslint-plugin-unicorn/no-array-sort -- Object.entries copies the source before sorting.
       .sort((left, right) => left[1].lastPolledAt - right[1].lastPolledAt)
       .slice(0, UPLOAD_POLL_BATCH_SIZE)
@@ -346,5 +373,6 @@ export function useResearchChainKnowledge(
     uploadFiles,
     refreshUpload,
     confirmUpload,
+    deleteUpload,
   };
 }

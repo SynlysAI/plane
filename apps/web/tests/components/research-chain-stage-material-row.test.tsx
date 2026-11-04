@@ -217,3 +217,63 @@ it("renders one mutually exclusive state and explains historical text-only rows"
   expect(row.textContent).toContain("历史文字记录，不计入完成度");
   expect(row.textContent).not.toContain("解析失败");
 });
+
+it("submits pasted text as material evidence while retaining file upload", async () => {
+  const onStageChanged = vi.fn();
+  await act(async () => {
+    root.render(
+      <ResearchChainStageMaterialRow
+        workspaceSlug="lab"
+        chainId="chain-1"
+        stageCode="TOPIC_SELECTION"
+        material={material({ title: "题目" })}
+        editable
+        busy={false}
+        knowledge={knowledge()}
+        onStageChanged={onStageChanged}
+      />
+    );
+  });
+
+  const textarea = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="题目 · 填写文字材料"]');
+  expect(textarea).not.toBeNull();
+  expect(textarea?.getAttribute("placeholder")).toContain("题目、研究课题、研究问题");
+  expect(container.querySelector('input[aria-label="题目 · 上传并关联"]')).not.toBeNull();
+  mocks.createChainStageMaterial.mockResolvedValueOnce({});
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    setter?.call(textarea, "题目：单分子电导研究");
+    textarea?.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const save = [...container.querySelectorAll("button")].find((button) => button.textContent === "保存文字");
+  await act(async () => {
+    save?.click();
+    await Promise.resolve();
+  });
+
+  expect(mocks.createChainStageMaterial).toHaveBeenCalledWith("lab", "chain-1", "TOPIC_SELECTION", {
+    requirement_code: "TOPIC_TITLE",
+    content: "题目：单分子电导研究",
+  });
+  expect(onStageChanged).toHaveBeenCalledTimes(1);
+});
+
+it("uses the evaluation-specific hint for pasted text", async () => {
+  await act(async () => {
+    root.render(
+      <ResearchChainStageMaterialRow
+        workspaceSlug="lab"
+        chainId="chain-1"
+        stageCode="TOPIC_EVALUATION"
+        material={material({ code: "PRINCIPLE_FEASIBILITY", title: "原理可行性分析" })}
+        editable
+        busy={false}
+        knowledge={knowledge()}
+        onStageChanged={vi.fn()}
+      />
+    );
+  });
+
+  const textarea = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="原理可行性分析 · 填写文字材料"]');
+  expect(textarea?.getAttribute("placeholder")).toContain("原理/进行性分析、实验条件");
+});

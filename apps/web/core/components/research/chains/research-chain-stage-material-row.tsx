@@ -74,12 +74,18 @@ export function ResearchChainStageMaterialRow({
 }: Props) {
   const { t } = useTranslation();
   const [selectedUploadId, setSelectedUploadId] = useState("");
+  const [textContent, setTextContent] = useState("");
   const [rowBusy, setRowBusy] = useState(false);
   const [rowError, setRowError] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const processing = material.submission_state === "PROCESSING";
   const failed = material.submission_state === "FAILED";
   const ready = material.submission_state === "READY";
+  const supportsTextMaterial = stageCode === "TOPIC_SELECTION" || stageCode === "TOPIC_EVALUATION";
+  const textPlaceholderKey =
+    stageCode === "TOPIC_SELECTION"
+      ? "research.chains.stage_approval.material_text_placeholder_topic"
+      : "research.chains.stage_approval.material_text_placeholder_evaluation";
 
   useEffect(() => {
     if (!processing) return;
@@ -163,6 +169,26 @@ export function ResearchChainStageMaterialRow({
     setRowError("");
     try {
       await chainService.deleteChainStageMaterial(workspaceSlug, chainId, stageCode, item.id);
+      await onStageChanged();
+    } catch (error) {
+      setRowError(describeError(error));
+    } finally {
+      setRowBusy(false);
+    }
+  };
+
+  /** Save bounded pasted text as evidence for one stage requirement. */
+  const saveTextMaterial = async () => {
+    const content = textContent.trim();
+    if (!content || rowBusy) return;
+    setRowBusy(true);
+    setRowError("");
+    try {
+      await chainService.createChainStageMaterial(workspaceSlug, chainId, stageCode, {
+        requirement_code: material.code,
+        content,
+      });
+      setTextContent("");
       await onStageChanged();
     } catch (error) {
       setRowError(describeError(error));
@@ -264,6 +290,15 @@ export function ResearchChainStageMaterialRow({
                   ? ` · ${t("research.knowledge.parse_failed_reason", { reason: item.upload_detail.error_code })}`
                   : ""}
               </span>
+            ) : item.description ? (
+              <span key={item.id} className="min-w-0">
+                <span className="block truncate text-11 text-secondary" title={item.title}>
+                  {item.title} · {t("research.chains.stage_approval.text_material_item")}
+                </span>
+                <span className="mt-1 block max-h-24 overflow-y-auto text-11 whitespace-pre-wrap text-tertiary">
+                  {item.description}
+                </span>
+              </span>
             ) : (
               <span key={item.id} className="truncate text-11 text-tertiary" title={item.title}>
                 {item.title} · {t("research.chains.stage_approval.historical_text_item")}
@@ -271,6 +306,34 @@ export function ResearchChainStageMaterialRow({
             )
           )}
         </span>
+      )}
+
+      {editable && !ready && supportsTextMaterial && (
+        <div className="mt-2 rounded-md border border-subtle bg-surface-1 p-2">
+          <label className="flex min-h-0 flex-col gap-1.5">
+            <span className="text-11 text-secondary">{t("research.chains.stage_approval.material_text_label")}</span>
+            <textarea
+              value={textContent}
+              onChange={(event) => setTextContent(event.target.value)}
+              rows={3}
+              maxLength={50000}
+              aria-label={`${material.title} · ${t("research.chains.stage_approval.material_text_label")}`}
+              placeholder={t(textPlaceholderKey)}
+              className="w-full resize-y rounded-md border border-subtle bg-surface-2 px-2 py-1.5 text-12 leading-5 text-primary placeholder:text-tertiary"
+            />
+          </label>
+          <div className="mt-1.5 flex justify-end">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={actionBusy || !textContent.trim()}
+              onClick={() => void saveTextMaterial()}
+            >
+              {t("research.chains.stage_approval.material_text_save")}
+            </Button>
+          </div>
+        </div>
       )}
 
       {editable && !ready && (

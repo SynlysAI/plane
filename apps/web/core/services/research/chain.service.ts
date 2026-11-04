@@ -35,7 +35,9 @@ type TResearchChainNodeDetail = {
 
 type TResearchChainStageMaterialCreatePayload = {
   requirement_code: string;
-  upload_id: string;
+  upload_id?: string;
+  content?: string;
+  title?: string;
 };
 
 function request_id() {
@@ -80,6 +82,8 @@ export type TResearchChainUpload = {
   preview_url?: string | null;
   download_url?: string | null;
   error_code: string;
+  source_node_title: string;
+  created_at: string;
 };
 
 export class ResearchChainService extends APIService {
@@ -440,12 +444,18 @@ export class ResearchChainService extends APIService {
       });
   }
 
-  async getKnowledgeUploads(workspaceSlug: string, chainId: string, nodeId: string) {
-    return this.get(researchEndpoints.chainUploads(workspaceSlug, chainId), { params: { node_id: nodeId } })
+  async getKnowledgeUploads(workspaceSlug: string, chainId: string) {
+    return this.get(researchEndpoints.chainUploads(workspaceSlug, chainId))
       .then((res) => res?.data as { data: TResearchChainUpload[] })
       .catch((err) => {
         throw err?.response?.data ?? err;
       });
+  }
+
+  async deleteKnowledgeUpload(workspaceSlug: string, chainId: string, uploadId: string): Promise<void> {
+    await this.delete(researchEndpoints.chainUploadDetail(workspaceSlug, chainId, uploadId)).catch((err) => {
+      throw err?.response?.data ?? err;
+    });
   }
 
   async confirmKnowledgeReference(

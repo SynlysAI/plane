@@ -17,6 +17,7 @@ import {
   researchChainUploadStatusKey,
   type TResearchChainKnowledgeController,
 } from "@/components/research/chains/use-research-chain-knowledge";
+import { ResearchDeleteButton } from "@/components/research/common/research-delete-button";
 
 const KNOWLEDGE_MATERIAL_ACCEPT = {
   "application/pdf": [".pdf"],
@@ -64,6 +65,7 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
     uploadFiles,
     refreshUpload,
     confirmUpload,
+    deleteUpload,
     maxUploadSizeBytes,
     uploadLimits,
   } = knowledge;
@@ -74,6 +76,12 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
   const [now, setNow] = useState(() => Date.now());
   const processingSeconds = (uploadId: string) =>
     Math.max(0, Math.round((now - (processingMeta[uploadId]?.since ?? now)) / 1000));
+  const processingStatusText = (uploadId: string) => {
+    const seconds = processingSeconds(uploadId);
+    if (seconds >= 300) return t("research.knowledge.processing_timeout", { seconds });
+    if (seconds >= 30) return t("research.knowledge.processing_elapsed", { seconds });
+    return t("research.knowledge.status_processing");
+  };
   const readinessNotice = (() => {
     if (["loading", "idle", "forbidden"].includes(state)) return null;
     if (knowledgeState === "UNASSIGNED") return { key: "research.knowledge.unassigned", boxed: true };
@@ -128,7 +136,7 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
     <section className="border-t border-subtle px-4 py-3" aria-label={t("research.knowledge.materials_title")}>
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="flex items-baseline gap-2 text-13 font-semibold text-primary">
-          {t("research.knowledge.materials_title")}
+          {t("research.knowledge.materials_chain_title")}
           {state !== "loading" && state !== "idle" && (
             <span className="font-normal text-11 text-tertiary">{uploads.length}</span>
           )}
@@ -169,7 +177,9 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
                   <FileText className="size-4 shrink-0 text-tertiary" aria-hidden="true" />
                   {uploadRecord.preview_url || uploadRecord.download_url ? (
                     <AttachmentPreviewLink
-                      name={`${uploadRecord.file_name} · ${formatResearchChainFileSize(uploadRecord.file_size)}`}
+                      name={`${uploadRecord.file_name} · ${formatResearchChainFileSize(uploadRecord.file_size)}${
+                        uploadRecord.source_node_title ? ` · 来源：${uploadRecord.source_node_title}` : ""
+                      }`}
                       title={uploadRecord.file_name}
                       previewUrl={uploadRecord.preview_url}
                       downloadUrl={uploadRecord.download_url ?? ""}
@@ -181,13 +191,12 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
                       title={uploadRecord.file_name}
                     >
                       {uploadRecord.file_name} · {formatResearchChainFileSize(uploadRecord.file_size)}
+                      {uploadRecord.source_node_title ? ` · 来源：${uploadRecord.source_node_title}` : ""}
                     </p>
                   )}
                   <span className="text-11 text-secondary" role="status">
                     {uploadRecord.status === "PENDING" || uploadRecord.status === "PROCESSING"
-                      ? processingSeconds(uploadRecord.id) >= 300
-                        ? t("research.knowledge.processing_timeout", { seconds: processingSeconds(uploadRecord.id) })
-                        : t("research.knowledge.processing_elapsed", { seconds: processingSeconds(uploadRecord.id) })
+                      ? processingStatusText(uploadRecord.id)
                       : uploadRecord.status === "DEGRADED"
                         ? t("research.knowledge.upstream_degraded")
                         : uploadRecord.status === "FAILED"
@@ -216,6 +225,12 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
                   >
                     <RefreshCw className="size-3.5" aria-hidden="true" />
                   </button>
+                  <ResearchDeleteButton
+                    name={uploadRecord.file_name}
+                    onDelete={() => deleteUpload(uploadRecord.id).then(() => undefined)}
+                    disabled={uploading}
+                    confirmMessage={t("research.knowledge.delete_confirm", { name: uploadRecord.file_name })}
+                  />
                   {(uploadRecord.status === "FAILED" || uploadRecord.status === "DEGRADED") && (
                     <AttachmentUploadZone
                       onFiles={(files) => void uploadFiles(files.slice(0, 1))}

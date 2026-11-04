@@ -32,6 +32,8 @@ const upload = {
   preview_url: "",
   download_url: "",
   error_code: "",
+  source_node_title: "文献调研",
+  created_at: new Date().toISOString(),
 };
 
 let container: HTMLDivElement;
@@ -78,6 +80,24 @@ it("polls a processing upload and reports convergence without a page reload", as
     expect.objectContaining({ id: "upload-1", status: "SUCCESS" }),
     "PROCESSING"
   );
+});
+
+it("keeps polling an old processing upload instead of stopping after five minutes", async () => {
+  mocks.getKnowledgeUploads.mockResolvedValueOnce({
+    data: [{ ...upload, created_at: new Date(Date.now() - 6 * 60_000).toISOString() }],
+  });
+  mocks.getKnowledgeUpload.mockResolvedValue({ data: { ...upload }, degraded: false });
+  await act(async () => {
+    root.render(
+      <KnowledgeHarness workspaceSlug="lab" chainId="chain-1" nodeId="node-1" onChanged={mocks.onUploadStatusChanged} />
+    );
+  });
+  await act(async () => await vi.advanceTimersByTimeAsync(0));
+  expect(mocks.getKnowledgeUploads).toHaveBeenCalledWith("lab", "chain-1");
+
+  await act(async () => await vi.advanceTimersByTimeAsync(5_000));
+
+  expect(mocks.getKnowledgeUpload).toHaveBeenCalledWith("lab", "chain-1", "upload-1");
 });
 
 function KnowledgeHarness(props: {

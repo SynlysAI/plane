@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   uploadKnowledgeFile: vi.fn(),
   getKnowledgeUpload: vi.fn(),
   confirmKnowledgeReference: vi.fn(),
+  deleteKnowledgeUpload: vi.fn(),
 }));
 
 vi.mock("@plane/i18n", () => ({
@@ -31,6 +32,7 @@ vi.mock("@/services/research/chain.service", () => ({
     uploadKnowledgeFile = mocks.uploadKnowledgeFile;
     getKnowledgeUpload = mocks.getKnowledgeUpload;
     confirmKnowledgeReference = mocks.confirmKnowledgeReference;
+    deleteKnowledgeUpload = mocks.deleteKnowledgeUpload;
   },
 }));
 
@@ -60,6 +62,8 @@ beforeEach(() => {
       preview_url: "/preview/upload-1/",
       download_url: "/download/upload-1/",
       error_code: "",
+      source_node_title: "文献调研",
+      created_at: new Date().toISOString(),
     },
   });
 });
@@ -113,6 +117,7 @@ it("uploads a selected file to the bound group library without a library selecto
   await act(async () => undefined);
 
   expect(container.querySelector("h3")?.textContent).toContain("课题资料");
+  expect(container.textContent).toContain("全流程共用");
   expect(container.querySelector("select")).toBeNull();
   expect(container.textContent).toContain("选择资料");
   expect(container.textContent).toContain("PDF ≤ 500MB；Markdown/TXT ≤ 500MB；DOC/DOCX ≤ 500MB");
@@ -126,7 +131,7 @@ it("uploads a selected file to the bound group library without a library selecto
     expect.objectContaining({ name: "paper.md" })
   );
   expect(container.textContent).toContain("paper.md");
-  expect(container.textContent).toContain("处理中，预计 30 秒");
+  expect(container.textContent).toContain("解析中");
   expect(container.textContent).toContain("解析完成后才能确认引用。");
 });
 
@@ -157,15 +162,19 @@ it("restores processing uploads for the selected node after a page reload", asyn
         preview_url: "/preview/upload-restored/",
         download_url: "/download/upload-restored/",
         error_code: "",
+        source_node_title: "文献调研",
+        created_at: new Date(Date.now() - 400_000).toISOString(),
       },
     ],
   });
   await renderPanel();
   await act(async () => undefined);
 
-  expect(mocks.getKnowledgeUploads).toHaveBeenCalledWith("lab", "chain-1", "node-1");
+  expect(mocks.getKnowledgeUploads).toHaveBeenCalledWith("lab", "chain-1");
   expect(container.textContent).toContain("restored.md");
-  expect(container.textContent).toContain("处理中，预计 30 秒");
+  expect(container.textContent).toContain("来源：文献调研");
+  expect(container.textContent).toContain("解析时间异常，可刷新或重试；已等待 400 秒");
+  expect(container.querySelector('button[aria-label="删除 restored.md"]')).not.toBeNull();
   expect([...container.querySelectorAll("button")].find((button) => button.textContent === "确认引用")?.disabled).toBe(
     true
   );
