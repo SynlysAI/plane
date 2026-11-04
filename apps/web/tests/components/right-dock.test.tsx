@@ -10,7 +10,7 @@ let root: ReturnType<typeof createRoot>;
 
 beforeEach(() => {
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-    matches: query === "(min-width: 1440px)",
+    matches: query === "(min-width: 1024px)",
     media: query,
     onchange: null,
     addEventListener: vi.fn(),
@@ -43,6 +43,7 @@ it("renders detail and agent as sibling flow columns without a fixed overlay", a
         <RightDockShell
           agentOpen
           agentDocked
+          agentWidth={420}
           launcherVisible={false}
           onOpenAgent={() => undefined}
           agentPanel={<aside data-testid="agent" />}
@@ -69,11 +70,38 @@ it("renders detail and agent as sibling flow columns without a fixed overlay", a
   expect(detail).not.toBeNull();
   expect(agent).not.toBeNull();
   expect(document.querySelectorAll("[data-right-dock-workspace]")).toHaveLength(1);
-  expect(document.querySelector("[data-right-dock-rail]")).not.toBeNull();
+  expect(document.querySelector("[data-right-dock-rail]")).toBeNull();
   expect(detail?.classList.contains("fixed")).toBe(false);
+  expect(detail?.classList.contains("hidden")).toBe(false);
+  expect(detail?.style.flexBasis).toBe("min(34%, 520px)");
+  expect(detail?.style.minWidth).toBe("min(320px, 100%)");
+  const agentSlot = document.querySelector("[data-right-dock-agent]");
+  expect(agentSlot?.style.flexBasis).toBe("420px");
+  expect(agentSlot?.style.minWidth).toBe("min(320px, 100%)");
   expect(Boolean(main?.compareDocumentPosition(detail) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   expect(document.querySelector('[data-testid="detail-body"]')?.textContent).toBe("任务详情");
   expect(document.querySelector('[data-testid="focus"]')?.textContent).toBe("RESEARCH_TASK:task-1");
+});
+
+it("uses a wide detail column and keeps the agent rail available when the agent is not docked", async () => {
+  const { RightDockPortal, RightDockProvider, RightDockShell } = await import("@/components/right-dock");
+  await act(async () =>
+    root.render(
+      <RightDockProvider>
+        <RightDockShell agentOpen={false} onOpenAgent={() => undefined} agentPanel={<aside data-testid="agent" />}>
+          <main>workspace page</main>
+          <RightDockPortal id="issue-wide" title="行政任务" onClose={() => undefined}>
+            <div>任务详情</div>
+          </RightDockPortal>
+        </RightDockShell>
+      </RightDockProvider>
+    )
+  );
+
+  const detail = document.querySelector('[data-right-dock-detail="issue-wide"]') as HTMLElement;
+  expect(detail.style.flexBasis).toBe("min(45%, 720px)");
+  expect(document.querySelector("[data-right-dock-rail]")).not.toBeNull();
+  expect(document.querySelector("[data-right-dock-rail] button")).not.toBeNull();
 });
 
 it("escape closes the active detail before the persistent agent slot", async () => {

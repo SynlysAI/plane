@@ -37,6 +37,7 @@ import remarkGfm from "remark-gfm";
 import { useAssistantChat } from "./use-assistant-chat";
 import { groupRuntimeEventsByRun, mergeRuntimeToolCalls } from "./lib/runtime-events";
 import { useWorkbenchChat } from "./use-workbench-chat";
+import { useAgentDockDesktop } from "@/hooks/use-agent-dock-desktop";
 import type { TAssistantStatus } from "@/services/assistant";
 import type { TAgentFocusRef } from "@/services/agent-dock";
 // store
@@ -121,7 +122,6 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
   const cloud = useAssistantChat(workspaceSlug, { enabled: cloudReady, focusRef });
   const local = useWorkbenchChat(workspaceSlug, assistantStore.contextNodeId);
   const [input, setInput] = useState("");
-  const [isDesktop, setIsDesktop] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
   const provider = assistantStore.activeProvider;
@@ -131,19 +131,8 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
       : local.busy;
   const disconnectCloud = cloud.disconnect;
   const localAvailable = Boolean(assistantStore.contextNodeId);
+  const isDesktop = useAgentDockDesktop();
   const effectiveDockMode = assistantStore.dockMode === "docked" && isDesktop;
-
-  useEffect(() => {
-    if (typeof window.matchMedia !== "function") {
-      setIsDesktop(false);
-      return;
-    }
-    const query = window.matchMedia("(min-width: 1024px)");
-    const update = () => setIsDesktop(query.matches);
-    update();
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, []);
 
   useEffect(() => {
     if (!assistantStore.isOpen) disconnectCloud();
@@ -888,8 +877,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
       <aside
         aria-label={t("aiAssistant.title")}
         data-agent-dock-mode="docked"
-        className="relative flex h-full shrink-0 flex-col border-l border-subtle bg-surface-1"
-        style={{ width: `${assistantStore.width}px` }}
+        className="relative flex h-full w-full min-w-0 flex-col border-l border-subtle bg-surface-1"
       >
         <div
           onPointerDown={startResize}
