@@ -13,11 +13,16 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import (
+    Issue,
     Project,
+    ProjectMember,
     ResearchChain,
     ResearchChainNode,
+    ResearchContextGrant,
     ResearchProjectProfile,
+    UnifiedMCPConnection,
 )
+from plane.research.services.agent_dock_mcp import AgentDockMcpCredential
 from plane.research.services.agent_dock import agent_context_v3_for_grant, resolve_agent_dock_context
 from plane.tests.research_fixtures import (
     enable_research,
@@ -34,7 +39,7 @@ def _hash(value):
 
 
 @pytest.fixture
-def env(db, settings):
+def env(db, settings, monkeypatch):
     settings.RESEARCH_MODULE_ENABLED = True
     owner = make_user(first_name="Dock owner")
     other = make_user(first_name="Dock other")
@@ -70,6 +75,38 @@ def env(db, settings):
     )
     client = APIClient()
     client.force_authenticate(user=owner)
+    from plane.research.services import agent_dock_sessions
+
+    def fake_issue_mcp(*, workspace, user):
+        connection = UnifiedMCPConnection.objects.create(
+            owner=user,
+            name="Agent Dock test",
+            token_hash=uuid4().hex,
+            token_encrypted="",
+            scope={
+                "version": 1,
+                "include_future_objects": True,
+                "workspaces": [
+                    {
+                        "workspace_id": str(workspace.id),
+                        "domains": {"administrative": "read_write", "research": "read_write"},
+                    }
+                ],
+            },
+            expires_at=timezone.now() + timedelta(hours=1),
+        )
+        return AgentDockMcpCredential(
+            connection=connection,
+            token=f"pum-{uuid4().hex}",
+            url="http://plane.test/api/mcp/",
+        )
+
+    monkeypatch.setattr(agent_dock_sessions, "issue_agent_dock_mcp_connection", fake_issue_mcp)
+    monkeypatch.setattr(
+        agent_dock_sessions,
+        "resolve_agent_dock_mcp_credentials",
+        lambda *, workspace, user, connection: fake_issue_mcp(workspace=workspace, user=user),
+    )
     return {
         "owner": owner,
         "other": other,
@@ -103,8 +140,8 @@ def test_node_route_issues_safe_v3_context_and_envelope(env, settings):
 
     assert response.status_code == 201, response.text
     envelope = response.json()
-    assert envelope["schema_version"] == "agent-context-envelope.v1"
-    assert envelope["target_type"] == "RESEARCH_CHAIN_NODE"
+    assert envelope["schema_version"] == "agent-context-envelope.v2"
+    assert envelope["target_type"] == "WORKSPACE"
     assert [item["type"] for item in envelope["target_hierarchy"]] == [
         "workspace",
         "project",
@@ -112,17 +149,18 @@ def test_node_route_issues_safe_v3_context_and_envelope(env, settings):
         "research_chain_node",
     ]
     assert envelope["capabilities"]["allowed_tools"]
-    assert "Current node: Dock node" in envelope["manifest_summary"]["summary"]
+    assert "Research node: Dock node" in envelope["manifest_summary"]["summary"]
+    assert envelope["page_context"]["focus"]["type"] == "RESEARCH_NODE"
     assert len(envelope["manifest_summary"]["resources"]) == envelope["resources_summary"]["total"]
-    assert envelope["session_binding"]["target_key"] == f"node:{env['node'].id}"
-    serialized = str(envelope)
-    assert "token" not in serialized.lower()
-    assert "用户选中的材料段落" not in serialized
+    assert envelope["session_binding"]["target_key"] == f"workspace:{env['workspace'].id}"
+    assert "token" not in str(envelope).lower()
+    assert envelope["page_context"]["selected_text"] == "用户选中的材料段落"
 
-    grant = env["node"].context_grants.first()
+    grant = ResearchContextGrant.objects.get(context_id=envelope["context_id"])
     metadata = agent_context_v3_for_grant(grant)
     assert metadata["schema_version"] == "agent-context.v3"
-    assert metadata["target"]["chain_node_id"] == str(env["node"].id)
+    assert metadata["target"]["type"] == "WORKSPACE"
+    assert metadata["target"]["chain_node_id"] is None
     assert metadata["policy"]["allowed_tools"] == envelope["capabilities"]["allowed_tools"]
     assert metadata["manifest"]["hash"] == grant.context_manifest["hash"]
 
@@ -132,9 +170,49 @@ def test_chain_home_falls_back_to_chain_context_without_inventing_node(env):
     response = _resolve(env, route)
     assert response.status_code == 201, response.text
     envelope = response.json()
-    assert envelope["target_type"] == "RESEARCH_CHAIN"
-    assert envelope["session_binding"]["target_key"] == f"chain:{env['chain'].id}"
+    assert envelope["target_type"] == "WORKSPACE"
+    assert envelope["session_binding"]["target_key"] == f"workspace:{env['workspace'].id}"
     assert all(item["type"] != "research_chain_node" for item in envelope["target_hierarchy"])
+    assert envelope["page_context"]["page_kind"] == "research_chain"
+    assert envelope["page_context"]["focus"]["id"] == str(env["chain"].id)
+
+
+def test_administrative_issue_focus_returns_bounded_page_seed(env):
+    """行政任务 Peek 也能获得当前任务种子，而不是空上下文。"""
+    suffix = uuid4().hex[:6]
+    administrative_project = Project.objects.create(
+        workspace=env["workspace"],
+        name=f"Administrative {suffix}",
+        identifier=f"AD{suffix}",
+        network=0,
+        created_by=env["owner"],
+    )
+    ProjectMember.objects.create(
+        workspace=env["workspace"],
+        project=administrative_project,
+        member=env["owner"],
+        role=20,
+        is_active=True,
+    )
+    issue = Issue.objects.create(
+        workspace=env["workspace"],
+        project=administrative_project,
+        name="整理行政任务材料",
+        description_html="<p>任务描述正文</p>",
+        created_by=env["owner"],
+    )
+    response = _resolve(
+        env,
+        f"/{env['workspace'].slug}/projects/{administrative_project.id}/issues/{issue.id}",
+    )
+    assert response.status_code == 201, response.text
+    context = response.json()
+    assert context["target_type"] == "WORKSPACE"
+    assert context["page_context"]["page_kind"] == "administrative_task"
+    assert context["page_context"]["focus"]["type"] == "ISSUE"
+    assert context["page_context"]["focus"]["id"] == str(issue.id)
+    assert "整理行政任务材料" in context["page_context"]["summary"]
+    assert "任务描述正文" in context["page_context"]["summary"]
 
 
 def test_unauthorized_node_hint_fails_closed(env):
@@ -195,7 +273,7 @@ def test_context_callback_accepts_workspace_and_project_tokens(env, project_scop
     response = client.get(url)
 
     assert response.status_code == 200, response.text
-    expected_project = str(env["project"].id) if project_scope else None
+    expected_project = None
     assert response.json()["scope"]["project_id"] == expected_project
     assert response.json()["context"]["context_id"] == str(grant.context_id)
     expected = agent_context_v3_for_grant(grant)
@@ -245,13 +323,23 @@ def test_agent_dock_session_is_target_bound_and_projects_durable_events(env, mon
         def __init__(self):
             self.pulled = False
 
-        def create_session(self, *, title, research_context, context_token):
+        def create_session(self, **kwargs):
+            research_context = kwargs["research_context"]
+            context_token = kwargs["context_token"]
             assert research_context["schema_version"] == "agent-context.v3"
-            assert research_context["target"]["type"] == "RESEARCH_CHAIN_NODE"
+            assert research_context["target"]["type"] == "WORKSPACE"
             assert context_token
             return "synlora-session-1"
 
-        def start_run(self, *, thread_id, content, request_id, research_context, context_token):
+        def start_run(self, **kwargs):
+            thread_id = kwargs["thread_id"]
+            content = kwargs["content"]
+            research_context = kwargs["research_context"]
+            context_token = kwargs["context_token"]
+            assert kwargs["plane_mcp"]["url"] == "http://plane.test/api/mcp/"
+            assert kwargs["mcp_token"]
+            assert kwargs["external_run_id"]
+            assert kwargs["page_context"]["focus"]["type"] == "RESEARCH_NODE"
             assert thread_id == "synlora-session-1"
             assert content == "总结当前节点"
             assert research_context["schema_version"] == "agent-context.v3"
@@ -302,8 +390,8 @@ def test_agent_dock_session_is_target_bound_and_projects_durable_events(env, mon
     )
     assert session_response.status_code == 201, session_response.text
     session = session_response.json()
-    assert session["target_type"] == "RESEARCH_CHAIN_NODE"
-    assert session["target_key"] == f"node:{env['node'].id}"
+    assert session["target_type"] == "WORKSPACE"
+    assert session["target_key"] == f"workspace:{env['workspace'].id}"
     assert "token" not in str(session).lower()
 
     message = env["client"].post(
@@ -359,7 +447,13 @@ def test_agent_dock_sse_replays_and_deduplicates_synlora_events(env, monkeypatch
             {
                 "seq": 6,
                 "type": "ask/user",
-                "payload": {"kind": "approval", "tool_call_id": "call-risk", "tool": "file.write", "query": "请求审批"},
+                "payload": {
+                    "kind": "approval",
+                    "tool_call_id": "call-risk",
+                    "tool": "file.write",
+                    "query": "请求审批",
+                    "args_preview": "{\"file_id\":\"file-2\"}",
+                },
             },
             {
                 "seq": 7,
@@ -374,7 +468,7 @@ def test_agent_dock_sse_replays_and_deduplicates_synlora_events(env, monkeypatch
             {"seq": 9, "type": "turn/end", "payload": {}},
         ]
 
-        def create_session(self, *, title, research_context, context_token):
+        def create_session(self, **kwargs):
             return "synlora-session-sse"
 
         def start_run(self, **kwargs):
@@ -424,6 +518,8 @@ def test_agent_dock_sse_replays_and_deduplicates_synlora_events(env, monkeypatch
     assert "event: output.delta" in wire
     assert "event: approval.required" in wire
     assert "event: approval.resolved" in wire
+    assert "file.write" in wire
+    assert "file-2" in wire
     assert "event: run.completed" in wire
     assert "暂存" in wire
     assert '"resource_id": "file-1"' in wire
@@ -454,6 +550,8 @@ def test_agent_dock_sse_replays_and_deduplicates_synlora_events(env, monkeypatch
         session=session_record, payload__source_system="SYNLORA"
     )
     assert {item.payload["remote_seq"] for item in stored} == {1, 3, 4, 5, 6, 7, 8, 9}
+    assert stored.get(payload__remote_seq=6).payload["tool"] == "file.write"
+    assert "file-2" in str(stored.get(payload__remote_seq=6).payload["args_preview"])
     assert stored.filter(payload__remote_seq=4).count() == 1
     assert ResearchChainEvent.objects.filter(
         node=env["node"], source_system="SYNLORA"
@@ -538,7 +636,7 @@ def test_agent_dock_run_boundary_filters_old_events_and_prompt(env, monkeypatch)
             {"seq": 15, "type": "turn/end", "payload": {"run_id": "current-run"}},
         ]
 
-        def create_session(self, *, title, research_context, context_token):
+        def create_session(self, **kwargs):
             return "synlora-session-run-boundary"
 
         def start_run(self, **kwargs):
@@ -629,7 +727,7 @@ def test_agent_dock_cancel_is_idempotent_when_synlora_run_already_ended(env, mon
     from plane.research.services import agent_dock_sessions
 
     class FakeRuntime:
-        def create_session(self, *, title, research_context, context_token):
+        def create_session(self, **kwargs):
             return "synlora-session-cancel"
 
         def start_run(self, **kwargs):
@@ -683,7 +781,7 @@ def test_agent_dock_reuses_session_for_same_context_grant(env, monkeypatch):
     calls = {"create_session": 0}
 
     class FakeRuntime:
-        def create_session(self, *, title, research_context, context_token):
+        def create_session(self, **kwargs):
             calls["create_session"] += 1
             return f"synlora-session-{calls['create_session']}"
 
@@ -711,3 +809,156 @@ def test_agent_dock_reuses_session_for_same_context_grant(env, monkeypatch):
     assert second.status_code == 201, second.text
     assert second.json()["session_id"] == first.json()["session_id"]
     assert calls["create_session"] == 1
+
+
+def test_agent_dock_refreshes_context_without_forking_workspace_history(env, monkeypatch):
+    """context TTL 后换绑新 grant，但保留同一个 Synlora thread。"""
+    from plane.db.models import ResearchAgentRunEvent, ResearchAgentSession
+    from plane.research.services import agent_dock_sessions
+
+    class FakeRuntime:
+        def create_session(self, **kwargs):
+            return "synlora-session-refresh"
+
+    monkeypatch.setattr(
+        agent_dock_sessions,
+        "resolve_synlora_runtime",
+        lambda *args, **kwargs: FakeRuntime(),
+    )
+    first_context = _resolve(
+        env,
+        f"/{env['workspace'].slug}/research/chains/{env['chain'].id}/nodes/{env['node'].id}",
+    ).json()
+    created = env["client"].post(
+        f"/api/workspaces/{env['workspace'].slug}/agent-dock/sessions/",
+        {"request_id": f"session-{uuid4().hex}", "context_id": first_context["context_id"]},
+        format="json",
+    )
+    second_context = _resolve(env, f"/{env['workspace'].slug}").json()
+    refreshed = env["client"].post(
+        f"/api/workspaces/{env['workspace'].slug}/agent-dock/sessions/{created.json()['session_id']}/context/refresh/",
+        {"context_id": second_context["context_id"]},
+        format="json",
+    )
+
+    assert created.status_code == 201, created.text
+    assert refreshed.status_code == 200, refreshed.text
+    assert refreshed.json()["session_id"] == created.json()["session_id"]
+    assert refreshed.json()["context"]["context_id"] == second_context["context_id"]
+    record = ResearchAgentSession.objects.get(session_id=created.json()["session_id"])
+    assert ResearchAgentRunEvent.objects.filter(session=record, payload__refreshed=True).exists()
+
+
+def test_agent_dock_rotates_admin_only_connection_when_research_mcp_enabled(env, settings, monkeypatch):
+    """research MCP 开启后，旧 admin-only Agent 连接不能继续限制会话。"""
+    from plane.research.services import agent_dock_mcp
+
+    settings.RESEARCH_MCP_ENABLED = True
+    old = UnifiedMCPConnection.objects.create(
+        owner=env["owner"],
+        name="Old Agent Dock",
+        token_hash=uuid4().hex,
+        token_encrypted="encrypted",
+        scope={
+            "version": 1,
+            "include_future_objects": True,
+            "workspaces": [
+                {"workspace_id": str(env["workspace"].id), "domains": {"administrative": "read_write"}}
+            ],
+        },
+        expires_at=timezone.now() + timedelta(hours=1),
+    )
+    new = UnifiedMCPConnection.objects.create(
+        owner=env["owner"],
+        name="New Agent Dock",
+        token_hash=uuid4().hex,
+        token_encrypted="",
+        scope={
+            "version": 1,
+            "include_future_objects": True,
+            "workspaces": [
+                {
+                    "workspace_id": str(env["workspace"].id),
+                    "domains": {"administrative": "read_write", "research": "read"},
+                }
+            ],
+        },
+        expires_at=timezone.now() + timedelta(hours=1),
+    )
+    credential = AgentDockMcpCredential(
+        connection=new,
+        token=f"pum-{uuid4().hex}",
+        url="http://plane.test/api/mcp/",
+    )
+    monkeypatch.setattr(agent_dock_mcp, "recover_credential", lambda _connection: "healthy-old-token")
+    monkeypatch.setattr(
+        agent_dock_mcp,
+        "issue_agent_dock_mcp_connection",
+        lambda **kwargs: credential,
+    )
+
+    resolved = agent_dock_mcp.resolve_agent_dock_mcp_credentials(
+        workspace=env["workspace"],
+        user=env["owner"],
+        connection=old,
+    )
+
+    assert resolved.connection.pk == new.pk
+    old.refresh_from_db()
+    assert old.revoked_at is not None
+    assert old.token_encrypted == ""
+
+
+def test_agent_dock_upgrades_read_connection_when_workspace_enables_writes(env, settings, monkeypatch):
+    """工作区打开研究写入后，已有 read 连接会轮换为 read_write。"""
+    from plane.db.models import WorkspaceResearchSetting
+    from plane.research.services import agent_dock_mcp
+
+    settings.RESEARCH_MCP_ENABLED = True
+    settings.RESEARCH_MCP_WRITE_ENABLED = True
+    WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).update(
+        module_enabled=True, research_chain_enabled=True, research_mcp_write_enabled=True
+    )
+    old = UnifiedMCPConnection.objects.create(
+        owner=env["owner"],
+        name="Read Agent Dock",
+        token_hash=uuid4().hex,
+        token_encrypted="encrypted",
+        scope={
+            "version": 1,
+            "include_future_objects": True,
+            "workspaces": [
+                {"workspace_id": str(env["workspace"].id), "domains": {"research": "read"}}
+            ],
+        },
+        expires_at=timezone.now() + timedelta(hours=1),
+    )
+    new = UnifiedMCPConnection.objects.create(
+        owner=env["owner"],
+        name="Read-write Agent Dock",
+        token_hash=uuid4().hex,
+        token_encrypted="",
+        scope={
+            "version": 1,
+            "include_future_objects": True,
+            "workspaces": [
+                {"workspace_id": str(env["workspace"].id), "domains": {"research": "read_write"}}
+            ],
+        },
+        expires_at=timezone.now() + timedelta(hours=1),
+    )
+    credential = AgentDockMcpCredential(
+        connection=new,
+        token=f"pum-{uuid4().hex}",
+        url="http://plane.test/api/mcp/",
+    )
+    monkeypatch.setattr(agent_dock_mcp, "recover_credential", lambda _connection: "healthy-old-token")
+    monkeypatch.setattr(agent_dock_mcp, "issue_agent_dock_mcp_connection", lambda **kwargs: credential)
+
+    resolved = agent_dock_mcp.resolve_agent_dock_mcp_credentials(
+        workspace=env["workspace"], user=env["owner"], connection=old
+    )
+
+    assert resolved.connection.pk == new.pk
+    old.refresh_from_db()
+    assert old.revoked_at is not None

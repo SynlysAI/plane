@@ -10,7 +10,9 @@ from plane.app.views.agent_dock import (
     AgentDockRunCancelEndpoint,
     AgentDockRunEventEndpoint,
     AgentDockRunEventStreamEndpoint,
+    AgentDockRunAnswerEndpoint,
     AgentDockSessionCollectionEndpoint,
+    AgentDockSessionContextRefreshEndpoint,
     AgentDockSessionDetailEndpoint,
     AgentDockSessionMessageEndpoint,
 )
@@ -37,6 +39,11 @@ urlpatterns = [
         name="agent-dock-session-detail",
     ),
     path(
+        "workspaces/<str:slug>/agent-dock/sessions/<uuid:session_id>/context/refresh/",
+        AgentDockSessionContextRefreshEndpoint.as_view(),
+        name="agent-dock-session-context-refresh",
+    ),
+    path(
         "workspaces/<str:slug>/agent-dock/sessions/<uuid:session_id>/messages/",
         AgentDockSessionMessageEndpoint.as_view(),
         name="agent-dock-session-message",
@@ -55,5 +62,10 @@ urlpatterns = [
         "workspaces/<str:slug>/agent-dock/runs/<uuid:run_id>/cancel/",
         AgentDockRunCancelEndpoint.as_view(),
         name="agent-dock-run-cancel",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-dock/runs/<uuid:run_id>/answer/",
+        AgentDockRunAnswerEndpoint.as_view(),
+        name="agent-dock-run-answer",
     ),
 ]

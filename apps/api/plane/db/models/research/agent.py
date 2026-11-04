@@ -68,6 +68,13 @@ class ResearchAgentSession(BaseModel):
         on_delete=models.PROTECT,
         related_name="agent_session",
     )
+    unified_mcp_connection = models.OneToOneField(
+        "UnifiedMCPConnection",
+        on_delete=models.SET_NULL,
+        related_name="agent_dock_session",
+        null=True,
+        blank=True,
+    )
     # Encrypted server-side Research Context token. It is never serialized to
     # the browser and is only decrypted immediately before a Synlora call.
     context_token_encrypted = models.TextField(blank=True, default="")

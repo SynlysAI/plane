@@ -3,6 +3,8 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "@plane/i18n";
 import { cn } from "@plane/utils";
+import { RightDockPortal } from "@/components/right-dock";
+import type { TAgentFocusRef } from "@/services/agent-dock";
 
 export type TWorkbenchRecordPeek = "evidence" | "snapshots" | "trace" | "empty";
 
@@ -56,6 +58,7 @@ type Props = {
   mode?: TWorkbenchPeekMode;
   header?: ReactNode;
   bodyClassName?: string;
+  focusRef?: TAgentFocusRef | null;
 };
 
 /**
@@ -78,6 +81,7 @@ export function ResearchChainWorkbenchPeek({
   mode = "side",
   header,
   bodyClassName,
+  focusRef = null,
 }: Props) {
   const { t } = useTranslation();
   const panelRef = useRef<HTMLElement | null>(null);
@@ -91,7 +95,9 @@ export function ResearchChainWorkbenchPeek({
       if (!(target instanceof Node) || panelRef.current?.contains(target)) return;
       if (
         target instanceof Element &&
-        target.closest("[data-peek-trigger], [data-reason-dialog], [data-prevent-outside-click]")
+        target.closest(
+          "[data-peek-trigger], [data-reason-dialog], [data-prevent-outside-click], [data-right-dock-agent], [data-right-dock-rail]"
+        )
       )
         return;
       onClose();
@@ -105,10 +111,37 @@ export function ResearchChainWorkbenchPeek({
   }, [onClose]);
 
   const wide = size === "wide";
+  if (mode === "side") {
+    return (
+      <RightDockPortal
+        id={focusRef ? `${focusRef.type.toLowerCase()}:${focusRef.id}` : `research:${title}`}
+        title={title}
+        focusRef={focusRef}
+        onClose={onClose}
+        fallbackClassName={
+          wide
+            ? "fixed inset-y-0 right-0 z-30 flex w-full flex-col border-l border-subtle bg-surface-1 md:w-1/2"
+            : "fixed inset-y-0 right-0 z-30 flex w-full flex-col border-l border-subtle bg-surface-1 md:w-[420px]"
+        }
+      >
+        <aside ref={panelRef} role="dialog" aria-modal="false" aria-label={title} className="flex h-full flex-col">
+          {header ?? (
+            <header className="flex items-center justify-between gap-3 border-b border-subtle px-4 py-3">
+              <h3 className="truncate text-14 font-semibold text-primary">{title}</h3>
+              <button type="button" className="text-12 text-secondary hover:text-primary" onClick={onClose}>
+                {t("research.chains.workflow.close_peek")}
+              </button>
+            </header>
+          )}
+          <div className={bodyClassName ?? "min-h-0 flex-1 overflow-y-auto px-4 py-4"}>{children}</div>
+        </aside>
+      </RightDockPortal>
+    );
+  }
+
   const frameClass = wide
     ? cn(
         "fixed z-30 flex flex-col overflow-hidden border border-subtle bg-surface-1 shadow-[0_8px_24px_rgba(37,37,34,0.08)]",
-        mode === "side" && "inset-y-0 right-0 w-full border-y-0 border-r-0 md:w-1/2",
         mode === "modal" && "top-[8.33%] left-[8.33%] h-5/6 w-5/6 rounded-sm",
         mode === "full" && "inset-4 rounded-sm"
       )
@@ -116,11 +149,7 @@ export function ResearchChainWorkbenchPeek({
 
   return (
     <>
-      {mode === "side" ? (
-        <div className="fixed inset-0 z-30 bg-backdrop md:hidden" />
-      ) : (
-        <div className="fixed inset-0 z-20 bg-backdrop" />
-      )}
+      <div className="fixed inset-0 z-20 bg-backdrop" />
       <aside ref={panelRef} role="dialog" aria-modal="false" aria-label={title} className={frameClass}>
         {header ?? (
           <header className="flex items-center justify-between gap-3 border-b border-subtle px-4 py-3">

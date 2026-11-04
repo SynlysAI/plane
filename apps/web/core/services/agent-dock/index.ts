@@ -8,7 +8,7 @@ import { API_BASE_URL } from "@plane/constants";
 import { APIService } from "@/services/api.service";
 
 export type TAgentContextEnvelope = {
-  schema_version: "agent-context-envelope.v1";
+  schema_version: "agent-context-envelope.v2";
   context_id: string;
   context_version: number;
   status: "unlinked" | "loading" | "linked" | "refreshed" | "expired" | "failed" | "forbidden";
@@ -27,6 +27,18 @@ export type TAgentContextEnvelope = {
     }>;
   };
   manifest_hash: string;
+  page_context?: {
+    schema_version: string;
+    route: string;
+    page_kind: string;
+    depth: string;
+    generated_at: string;
+    focus: { type: string; id: string; title: string; status?: string };
+    summary: string;
+    hash: string;
+    resources: Array<Record<string, unknown>>;
+    suggested_tools: Array<Record<string, unknown>>;
+  };
   capabilities: {
     agent: string;
     allowed_tools: string[];
@@ -67,6 +79,11 @@ export type TAgentDockEvent = {
   created_at: string;
 };
 
+export type TAgentFocusRef = {
+  type: "RESEARCH_TASK" | "RESEARCH_NODE" | "RESEARCH_CHAIN" | "ISSUE";
+  id: string;
+};
+
 function requestId(prefix: string) {
   return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -77,11 +94,12 @@ export class AgentDockService extends APIService {
   }
 
   /** Resolve current route context on the server; the browser never supplies privileges. */
-  async resolveContext(workspaceSlug: string, route: string, selectedText = "") {
+  async resolveContext(workspaceSlug: string, route: string, selectedText = "", focusRef?: TAgentFocusRef) {
     return this.post(`/api/workspaces/${workspaceSlug}/agent-dock/context/resolve/`, {
       request_id: requestId("context"),
       route,
       selected_text: selectedText.slice(0, 4000),
+      ...(focusRef ? { focus_ref: focusRef } : {}),
     })
       .then((response) => response?.data as TAgentContextEnvelope)
       .catch((error) => {
@@ -99,6 +117,16 @@ export class AgentDockService extends APIService {
 
   async getSession(workspaceSlug: string, sessionId: string) {
     return this.get(`/api/workspaces/${workspaceSlug}/agent-dock/sessions/${sessionId}/`)
+      .then((response) => response?.data as TAgentDockSession)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  async refreshSessionContext(workspaceSlug: string, sessionId: string, contextId: string) {
+    return this.post(`/api/workspaces/${workspaceSlug}/agent-dock/sessions/${sessionId}/context/refresh/`, {
+      context_id: contextId,
+    })
       .then((response) => response?.data as TAgentDockSession)
       .catch((error) => {
         throw error?.response?.data ?? error;
@@ -124,10 +152,18 @@ export class AgentDockService extends APIService {
       });
   }
 
-  async sendMessage(workspaceSlug: string, sessionId: string, content: string) {
+  async sendMessage(
+    workspaceSlug: string,
+    sessionId: string,
+    content: string,
+    options: { route?: string; focusRef?: TAgentFocusRef; selectedText?: string } = {}
+  ) {
     return this.post(`/api/workspaces/${workspaceSlug}/agent-dock/sessions/${sessionId}/messages/`, {
       request_id: requestId("message"),
       content,
+      route: options.route ?? "",
+      ...(options.focusRef ? { focus_ref: options.focusRef } : {}),
+      selected_text: options.selectedText?.slice(0, 4000) ?? "",
     })
       .then((response) => response?.data as TAgentDockSession)
       .catch((error) => {
@@ -183,6 +219,16 @@ export class AgentDockService extends APIService {
 
   async cancelRun(workspaceSlug: string, runId: string) {
     return this.post(`/api/workspaces/${workspaceSlug}/agent-dock/runs/${runId}/cancel/`)
+      .then((response) => response?.data as TAgentDockSession)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  async answerRun(workspaceSlug: string, runId: string, approved: boolean) {
+    return this.post(`/api/workspaces/${workspaceSlug}/agent-dock/runs/${runId}/answer/`, {
+      approved,
+    })
       .then((response) => response?.data as TAgentDockSession)
       .catch((error) => {
         throw error?.response?.data ?? error;

@@ -248,7 +248,12 @@ describe("AIAssistantPanel", () => {
     await waitForText("你好，世界");
     expect(document.body.textContent).toContain("介绍这个项目");
     expect(mocks.createSession).toHaveBeenCalledWith("lab", "context-1");
-    expect(mocks.sendMessage).toHaveBeenCalledWith("lab", "session-1", "介绍这个项目");
+    expect(mocks.sendMessage).toHaveBeenCalledWith(
+      "lab",
+      "session-1",
+      "介绍这个项目",
+      expect.objectContaining({ route: expect.any(String), selectedText: "" })
+    );
     expect(window.localStorage.getItem("PLANE_AI_ASSISTANT_THREAD_lab")).toBe("session-1");
   });
 
@@ -417,7 +422,7 @@ describe("AIAssistantPanel", () => {
     renderPanel(store);
     await waitForText("你好，世界");
     expect(mocks.getSession).toHaveBeenCalledWith("lab", "session-1");
-    expect(mocks.getContext).toHaveBeenCalledWith("lab", "context-1");
+    expect(mocks.getContext).not.toHaveBeenCalled();
     expect(mocks.createSession).not.toHaveBeenCalled();
     expect(mocks.streamEvents).not.toHaveBeenCalled();
   });
@@ -615,9 +620,7 @@ describe("AIAssistantPanel", () => {
   });
 
   it("resets a stale cross-account session without showing unavailable", async () => {
-    mocks.getSession.mockRejectedValueOnce(
-      Object.assign(new Error("not found"), { error: "agent_session_not_found" })
-    );
+    mocks.getSession.mockRejectedValueOnce(Object.assign(new Error("not found"), { error: "agent_session_not_found" }));
     window.localStorage.setItem("PLANE_AI_ASSISTANT_THREAD_lab", "session-1");
     const store = new AIAssistantStore();
     store.hydrate("lab");

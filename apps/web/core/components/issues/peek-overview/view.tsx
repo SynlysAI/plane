@@ -16,6 +16,7 @@ import { cn } from "@plane/utils";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import useKeypress from "@/hooks/use-keypress";
 import usePeekOverviewOutsideClickDetector from "@/hooks/use-peek-overview-outside-click";
+import { RightDockPortal } from "@/components/right-dock";
 // local imports
 import type { TIssueOperations } from "../issue-detail";
 import { IssueActivity } from "../issue-detail/issue-activity";
@@ -136,7 +137,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
       ? "absolute z-[25] flex flex-col overflow-hidden rounded-sm border border-subtle bg-surface-1 transition-all duration-300"
       : `h-full w-full`,
     !embedIssue && {
-      "top-0 right-0 bottom-0 w-full border-0 border-l md:w-[50%]": peekMode === "side-peek",
+      "h-full w-full border-0": peekMode === "side-peek",
       "top-[8.33%] left-[8.33%] size-5/6": peekMode === "modal",
       "absolute inset-0 m-4": peekMode === "full-screen",
     }
@@ -288,5 +289,17 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
     </div>
   );
 
+  if (!embedIssue && peekMode === "side-peek") {
+    return (
+      <RightDockPortal
+        id={`issue:${issueId}`}
+        title={issue?.name || "任务详情"}
+        focusRef={{ type: "ISSUE", id: issueId }}
+        onClose={removeRoutePeekId}
+      >
+        {content}
+      </RightDockPortal>
+    );
+  }
   return <>{shouldUsePortal && portalContainer ? createPortal(content, portalContainer) : content}</>;
 });

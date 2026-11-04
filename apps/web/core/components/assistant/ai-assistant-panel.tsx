@@ -35,9 +35,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 // components
 import { useAssistantChat } from "./use-assistant-chat";
-import { mergeRuntimeToolCalls } from "./lib/runtime-events";
+import { groupRuntimeEventsByRun, mergeRuntimeToolCalls } from "./lib/runtime-events";
 import { useWorkbenchChat } from "./use-workbench-chat";
 import type { TAssistantStatus } from "@/services/assistant";
+import type { TAgentFocusRef } from "@/services/agent-dock";
 // store
 import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
 
@@ -45,6 +46,7 @@ type Props = {
   workspaceSlug: string;
   statusState: TAssistantStatus["state"] | "loading";
   onRetryStatus?: () => void;
+  focusRef?: TAgentFocusRef | null;
 };
 
 /** Render assistant markdown with restrained Plane surface and typography tokens. */
@@ -111,11 +113,12 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
   workspaceSlug,
   statusState,
   onRetryStatus,
+  focusRef = null,
 }: Props) {
   const { t } = useTranslation();
   const assistantStore = useAIAssistant();
   const cloudReady = statusState === "ready";
-  const cloud = useAssistantChat(workspaceSlug, { enabled: cloudReady });
+  const cloud = useAssistantChat(workspaceSlug, { enabled: cloudReady, focusRef });
   const local = useWorkbenchChat(workspaceSlug, assistantStore.contextNodeId);
   const [input, setInput] = useState("");
   const [isDesktop, setIsDesktop] = useState(false);
@@ -165,7 +168,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
     if (!trimmed || busy) return;
     setInput("");
     if (provider === "local" && localAvailable) void local.send(trimmed);
-    else void cloud.send(trimmed);
+    else void cloud.send(trimmed, focusRef ?? undefined);
   };
 
   /** Start a clean conversation, explicitly cancelling a still-running turn first. */
@@ -313,6 +316,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
   );
 
   const runtimeTools = useMemo(() => mergeRuntimeToolCalls(cloud.runtimeEvents), [cloud.runtimeEvents]);
+  const runtimeRuns = useMemo(() => groupRuntimeEventsByRun(cloud.runtimeEvents), [cloud.runtimeEvents]);
   const approvalEvents = useMemo(
     () => cloud.runtimeEvents.filter((event) => event.event_type === "APPROVAL"),
     [cloud.runtimeEvents]
@@ -349,6 +353,22 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
     <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 text-11">
       <section className="pb-4">
         <h3 className="mb-2 text-12 font-semibold text-primary">已注入摘要</h3>
+        {cloud.contextEnvelope?.page_context && (
+          <div className="mb-3 border-l border-subtle pl-3">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="min-w-0 truncate font-medium text-primary">
+                {cloud.contextEnvelope.page_context.focus?.title || "Workspace"}
+              </p>
+              <span className="shrink-0 text-10 text-tertiary">{cloud.contextEnvelope.page_context.page_kind}</span>
+            </div>
+            <p className="mt-0.5 text-10 break-all text-tertiary">
+              {cloud.contextEnvelope.page_context.route || "/"} · {cloud.contextEnvelope.page_context.generated_at}
+            </p>
+            <p className="mt-0.5 text-10 text-tertiary">
+              Snapshot {cloud.contextEnvelope.page_context.hash?.slice(0, 12) || "—"}
+            </p>
+          </div>
+        )}
         <p className="leading-relaxed break-words text-secondary">
           {cloud.contextEnvelope?.target_hierarchy.map((item) => item.title).join(" / ") ||
             t("aiAssistant.context_workspace_only")}
@@ -390,10 +410,22 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
 
       <section className="border-t border-subtle py-4">
         <h3 className="mb-2 text-12 font-semibold text-primary">已授权能力</h3>
-        <p className="text-tertiary">工具白名单</p>
-        <p className="mt-1 break-words text-secondary">
-          {cloud.contextEnvelope?.capabilities.allowed_tools.join(" · ") || "未授权工具"}
-        </p>
+        <p className="text-tertiary">Plane unified MCP</p>
+        <details className="mt-1">
+          <summary className="cursor-pointer text-secondary">
+            读取 / 写入工具（{cloud.contextEnvelope?.capabilities.allowed_tools.length ?? 0}）
+          </summary>
+          <ul className="mt-1 space-y-1">
+            {(cloud.contextEnvelope?.capabilities.allowed_tools ?? []).map((tool) => (
+              <li key={tool} className="flex items-baseline justify-between gap-2">
+                <span className="min-w-0 break-all text-secondary">{tool}</span>
+                <span className="shrink-0 text-10 text-tertiary">
+                  {tool.includes("create") || tool.includes("update") || tool.includes("delete") ? "需审批" : "读取"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
         <p className="mt-2 text-tertiary">插件 · MCP · 知识库 · 文件范围</p>
         <p className="mt-1 break-words text-secondary">
           {[
@@ -443,35 +475,43 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
       : [];
 
   const runtimeView = (
-    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
+    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 text-12">
       <section>
-        <h3 className="mb-2 text-12 font-semibold text-primary">实时事件</h3>
-        {cloud.runtimeEvents.length ? (
-          <ol className="space-y-2">
-            {cloud.runtimeEvents.map((event) => {
-              const summary =
-                event.payload.summary ??
-                event.payload.error ??
-                event.payload.content ??
-                event.payload.status ??
-                event.payload.name;
+        <div className="mb-2 flex items-baseline justify-between gap-3">
+          <h3 className="text-12 font-semibold text-primary">运行时间线</h3>
+          <span className="text-10 text-tertiary">{runtimeRuns.length} 个 run</span>
+        </div>
+        {runtimeRuns.length ? (
+          <ol className="space-y-3">
+            {runtimeRuns.map((run) => {
+              const meaningful = run.events.filter((event) => event.event_type !== "output.delta");
               return (
-                <li key={`${event.run_id}-${event.source_seq ?? event.seq}`} className="border-l border-subtle pl-3">
+                <li key={run.runId} className="border-l border-subtle pl-3">
                   <div className="flex items-baseline justify-between gap-3">
-                    <span className="min-w-0 truncate font-medium text-primary">
-                      {String(event.raw_event_type ?? event.event_type)}
-                    </span>
+                    <p className="min-w-0 truncate font-medium text-primary">Run {run.runId.slice(0, 8)}</p>
                     <time className="shrink-0 text-10 text-tertiary">
-                      {event.created_at
-                        ? new Intl.DateTimeFormat(undefined, {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            second: "2-digit",
-                          }).format(new Date(event.created_at))
-                        : ""}
+                      {run.startedAt ? new Date(run.startedAt).toLocaleTimeString() : ""}
                     </time>
                   </div>
-                  {summary !== undefined && <p className="mt-0.5 break-words text-secondary">{String(summary)}</p>}
+                  <p className="mt-0.5 text-10 text-tertiary">
+                    {run.events.length} 个事件 · {meaningful.length} 个关键节点
+                  </p>
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-11 text-secondary">事件明细</summary>
+                    <ol className="mt-1 space-y-1">
+                      {meaningful.map((event) => (
+                        <li key={`${event.run_id}-${event.source_seq ?? event.seq}`} className="text-11">
+                          <span className="text-secondary">{event.raw_event_type ?? event.event_type}</span>
+                          {event.payload.name ? (
+                            <span className="text-tertiary"> · {String(event.payload.name)}</span>
+                          ) : null}
+                          {event.payload.status ? (
+                            <span className="text-tertiary"> · {String(event.payload.status)}</span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ol>
+                  </details>
                 </li>
               );
             })}
@@ -482,35 +522,41 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
       </section>
 
       <section className="border-t border-subtle pt-4">
-        <h3 className="mb-2 text-12 font-semibold text-primary">{t("aiAssistant.runtime_events")}</h3>
+        <h3 className="mb-2 text-12 font-semibold text-primary">工具执行</h3>
         {provider === "cloud" && runtimeTools.length ? (
-          runtimeTools.map((tool) => (
-            <details key={tool.id} className="border-b border-subtle last:border-b-0">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-11">
-                <span className="min-w-0 flex-1 truncate font-medium text-primary">{tool.name}</span>
-                <span className="shrink-0 text-tertiary">{tool.status}</span>
-              </summary>
-              <div className="space-y-2 bg-surface-2/60 px-4 py-3 text-10 text-secondary">
-                <div>
-                  <p className="mb-1 font-medium text-primary">{t("aiAssistant.runtime_arguments")}</p>
-                  <pre className="max-h-40 overflow-auto rounded-md border border-subtle bg-surface-1 p-2 whitespace-pre-wrap">
-                    {tool.arguments}
-                  </pre>
-                </div>
-                {tool.result && (
+          <div className="divide-y divide-subtle border-t border-b border-subtle">
+            {runtimeTools.map((tool) => (
+              <details key={tool.id}>
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-12">
+                  <span className="min-w-0 flex-1 truncate font-medium text-primary">{tool.name}</span>
+                  <span className="shrink-0 text-10 text-tertiary">{tool.status}</span>
+                </summary>
+                <div className="space-y-2 bg-surface-2/60 px-3 py-3 text-11 text-secondary">
                   <div>
-                    <p className="mb-1 font-medium text-primary">{t("aiAssistant.runtime_result")}</p>
-                    <p className="break-words">{tool.result}</p>
+                    <p className="mb-1 font-medium text-primary">{t("aiAssistant.runtime_arguments")}</p>
+                    <pre className="font-mono max-h-40 overflow-auto rounded-md border border-subtle bg-surface-1 p-2 text-11 whitespace-pre-wrap">
+                      {tool.arguments}
+                    </pre>
                   </div>
-                )}
-                {tool.duration_ms !== null && <p>{t("aiAssistant.runtime_duration", { count: tool.duration_ms })}</p>}
-              </div>
-            </details>
-          ))
+                  {tool.result && (
+                    <div>
+                      <p className="mb-1 font-medium text-primary">{t("aiAssistant.runtime_result")}</p>
+                      <p className="break-words">{tool.result}</p>
+                    </div>
+                  )}
+                  {tool.duration_ms !== null && (
+                    <p className="text-10 text-tertiary">
+                      {t("aiAssistant.runtime_duration", { count: tool.duration_ms })}
+                    </p>
+                  )}
+                </div>
+              </details>
+            ))}
+          </div>
         ) : provider === "local" && localRuntimeFacts.length ? (
           localRuntimeFacts.map((fact) => <ToolLine key={`${fact.name}-${fact.status}`} {...fact} />)
         ) : (
-          <p className="px-4 py-3 text-11 text-tertiary">{t("aiAssistant.runtime_empty")}</p>
+          <p className="py-3 text-11 text-tertiary">{t("aiAssistant.runtime_empty")}</p>
         )}
       </section>
 
@@ -531,7 +577,6 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
       )}
     </div>
   );
-
   const panelBody = (
     <div className="flex h-full min-h-0 flex-col bg-surface-1">
       <header className="h-14 shrink-0 border-b border-subtle px-4">
@@ -706,7 +751,29 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
               )}
 
             {provider === "cloud" && cloud.streamState.phase === "waiting_approval" && (
-              <p className="rounded-lg bg-layer-1 px-3 py-2 text-11 text-secondary">正在等待审批，批准后会继续执行。</p>
+              <div className="mx-4 mb-2 rounded-lg border border-subtle bg-layer-1 px-3 py-2">
+                {(() => {
+                  const approval = approvalEvents.at(-1)?.payload ?? {};
+                  return (
+                    <>
+                      <p className="text-12 font-medium text-primary">{String(approval.tool ?? "工具执行请求")}</p>
+                      {Boolean(approval.args_preview) && (
+                        <pre className="font-mono mt-1 max-h-24 overflow-auto rounded-md border border-subtle bg-surface-1 p-2 text-11 whitespace-pre-wrap text-secondary">
+                          {String(approval.args_preview)}
+                        </pre>
+                      )}
+                      <div className="mt-2 flex items-center justify-end gap-2">
+                        <Button variant="secondary" size="sm" onClick={() => void cloud.answerApproval(false)}>
+                          {t("aiAssistant.reject")}
+                        </Button>
+                        <Button variant="primary" size="sm" onClick={() => void cloud.answerApproval(true)}>
+                          {t("aiAssistant.approve")}
+                        </Button>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
             )}
             {provider === "cloud" && cloud.streamState.phase === "disconnected" && (
               <p className="px-3 py-2 text-11 text-secondary">连接已断开，正在从最近事件位置恢复。</p>
@@ -722,7 +789,12 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => void cloud.send(input || cloud.messages[cloud.messages.length - 1]?.content || "")}
+                    onClick={() =>
+                      void cloud.send(
+                        input || cloud.messages[cloud.messages.length - 1]?.content || "",
+                        focusRef ?? undefined
+                      )
+                    }
                   >
                     <RefreshCw className="size-3" />
                     {t("aiAssistant.retry")}

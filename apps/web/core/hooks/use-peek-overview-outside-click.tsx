@@ -16,6 +16,7 @@ const usePeekOverviewOutsideClickDetector = (
   const handleClick = useCallback(
     (event: MouseEvent) => {
       if (!(event.target instanceof HTMLElement)) return;
+      if (event.target.closest("[data-right-dock-agent], [data-right-dock-rail]")) return;
       if (ref.current && !ref.current.contains(event.target)) {
         // check for the closest element with attribute name data-prevent-outside-click
         const preventOutsideClickElement = event.target.closest("[data-prevent-outside-click]");
