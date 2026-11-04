@@ -57,7 +57,8 @@ export function unifiedConfiguration(value: UnifiedIssued) {
       Object.keys(workbuddyServers).length !== 1 ||
       !workbuddyServer.url ||
       new URL(workbuddyServer.url).href !== workbuddyUrl.href ||
-      Object.keys(workbuddyServer).toSorted().join() !== "headers,url" ||
+      // oxlint-disable-next-line unicorn/no-array-sort -- Object.keys returns a disposable array; toSorted is outside the current TS lib.
+      Object.keys(workbuddyServer).sort().join() !== "headers,url" ||
       Object.keys(workbuddyServer.headers ?? {}).join() !== "Authorization" ||
       workbuddyServer.headers?.Authorization !== `Bearer ${value.secret}`
     )
