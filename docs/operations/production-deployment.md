@@ -193,11 +193,13 @@ curl -fsS -o /dev/null -w 'api=%{http_code}\n' \
 | `/api/email-actions/assignment-transfer/?token=x&candidate=x` | `401`、`application/json` |
 | `/static/logos/Logo.png`                                      | `200`、`image/png`        |
 
-`9.16.2` 发布时，确认 `/api/instances/` 的 `current_version` 为 `9.16.2`，六个后端服务的创建和启动时间均晚于发布开始时间，专用 Worker 注册日志包含 `send_email_notification`、`send_research_notification_email`、`process_notification_generation_outbox`。
+`9.16.3` 发布时，确认 `/api/instances/` 的 `instance.current_version` 为 `9.16.3`，六个后端服务的创建和启动时间均晚于发布开始时间，专用 Worker 注册日志包含 `send_email_notification`、`send_research_notification_email`、`process_notification_generation_outbox`。
 
 最后新触发一条科研指派和一条行政指派，核对中文标准模板、「选择下一位负责人」、「转派给 <候选人>」及对应「查看工作项」按钮，并查询 `notification_events`、`notification_email_deliveries`。新投递应达到 `accepted`；失败时记录明确的 `last_error_code`。已经发出的旧邮件不会随发布改变。
 
-`9.16.2` 还须在真实确认页检查 GET 预览请求携带 `token` 和 `candidate_id`，且预览不修改负责人；显式确认后才提交 POST。重复确认不重复生成通知。HTML 邮件保留操作按钮，不重复显示完整网址；纯文本版本保留对应操作地址。请求日志不应包含转派令牌。生产转派验收只使用事先指定的测试工作项和收件人，临时会话在验收结束后失效处理，SMTP `accepted` 仅表示邮件服务器接受。
+`9.16.3` 还须在真实确认页检查 GET 预览请求携带 `token` 和 `candidate_id`，且预览不修改负责人；显式确认后才提交 POST。重复确认不重复生成通知。HTML 邮件保留操作按钮，不重复显示完整网址；纯文本版本保留对应操作地址。请求日志不应包含转派令牌。生产转派验收只使用事先指定的测试工作项和收件人，临时会话在验收结束后失效处理，SMTP `accepted` 仅表示邮件服务器接受。
+
+行政邮件转派的通知验收必须完整消费 `NotificationGenerationOutbox`，确认生成活动、站内通知和邮件投递记录，不能仅检查负责人已变化。`email_assignment_transfer` 作为 outbox 审计标记保留，消费时不传入原生活动任务。若已提交的转派因此失败，只恢复原有待处理记录，不重新转派或创建重复通知。
 
 检查内部转换服务：
 
