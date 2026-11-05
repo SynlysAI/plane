@@ -150,7 +150,7 @@ function baseStage(seed: Partial<TResearchChainStageApproval>): TResearchChainSt
   };
 }
 
-/** 生成阶段 03 已完成的 DeepSeek 评估夹具。 */
+/** 生成阶段 03 已完成的 Agent 评估夹具。 */
 function readyEvaluation() {
   return {
     schema_version: "research-chain-stage-evaluation.v1" as const,
@@ -176,9 +176,9 @@ function readyEvaluation() {
     },
     material_version: "fixture-version",
     is_current: true,
-    prompt_version: "topic-evaluation-deepseek.v1",
+    prompt_version: "topic-evaluation-agent.v1",
     provider: "SCIENCE_DISCOVERY" as const,
-    model_version: "deepseek-fixture",
+    model_version: "agent-model-fixture",
     error_code: "",
     request_id: "evaluation-fixture",
     created_at: "2026-11-05T01:00:00Z",
@@ -266,7 +266,7 @@ const scenarios: Record<string, { label: string; stage: TResearchChainStageAppro
     nodes: [fixtureNode("fixture-node", "TOPIC_EVALUATION", "选题评估")],
   },
   "evaluation-ready": {
-    label: "阶段 03 DeepSeek 评估通过",
+    label: "阶段 03 Agent 评估通过",
     stage: baseStage({
       id: "stage-topic-evaluation",
       stage_code: "TOPIC_EVALUATION",

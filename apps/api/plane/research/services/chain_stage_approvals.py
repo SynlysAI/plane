@@ -932,7 +932,7 @@ def _validate_submission(stage, node, requires_pi, escalation_reason):
         if latest_evaluation is None:
             raise ChainStageRuleError(
                 ResearchErrorCode.CHAIN_STAGE_EVALUATION_REQUIRED,
-                "Generate a current DeepSeek stage evaluation before submitting this stage.",
+                "Generate a current Agent stage evaluation before submitting this stage.",
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
         if not evaluation_allows_submission(latest_evaluation, stage_material_version(stage)):

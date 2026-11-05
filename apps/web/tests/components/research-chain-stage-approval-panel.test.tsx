@@ -128,9 +128,9 @@ function evaluation(seed: Record<string, unknown>) {
     },
     material_version: "version-1",
     is_current: true,
-    prompt_version: "topic-evaluation-deepseek.v1",
+    prompt_version: "topic-evaluation-agent.v1",
     provider: "SCIENCE_DISCOVERY",
-    model_version: "deepseek-test",
+    model_version: "agent-model-test",
     error_code: "",
     request_id: "evaluation-1",
     created_at: "2026-11-05T01:00:00Z",
@@ -504,7 +504,7 @@ it("requires a current stage-three evaluation and blocks submission", async () =
     result: {},
     material_version: "new-version",
     is_current: true,
-    prompt_version: "topic-evaluation-deepseek.v1",
+    prompt_version: "topic-evaluation-agent.v1",
     provider: "SCIENCE_DISCOVERY",
     model_version: "",
     error_code: "",
@@ -514,7 +514,7 @@ it("requires a current stage-three evaluation and blocks submission", async () =
   });
   await renderPanel({ stage: outdated, expanded: true });
 
-  expect(container.textContent).toContain("待生成 DeepSeek 评估");
+  expect(container.textContent).toContain("待生成 Agent 评估");
   expect(button("提交阶段审核")?.disabled).toBe(true);
   await act(async () => button("生成阶段检查")?.click());
   expect(mocks.createChainStageEvaluation).toHaveBeenCalledWith("lab", "chain-1", "TOPIC_EVALUATION", "BASIC");
@@ -540,7 +540,7 @@ it("embeds the reusable pre-opening template guide", async () => {
   expect(container.textContent).toContain("比较 5 项研究");
 });
 
-it("shows a compact ready DeepSeek evaluation and permits submission", async () => {
+it("shows a compact ready Agent evaluation and permits submission", async () => {
   const readyMaterial = {
     ...stage({}).materials[0],
     submitted_count: 1,

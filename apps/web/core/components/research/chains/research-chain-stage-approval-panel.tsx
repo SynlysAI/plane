@@ -278,7 +278,7 @@ export function ResearchChainStageApprovalPanel({
     }
   };
 
-  /** Run the single stage-three material + DeepSeek check through the Agent channel. */
+  /** Run the single stage-three material and Agent evaluation check. */
   const runStageCheck = async () => {
     if (busy) return;
     if (missingMaterials.length > 0) {

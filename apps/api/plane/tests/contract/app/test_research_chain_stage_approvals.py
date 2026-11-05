@@ -32,7 +32,11 @@ from plane.research.services.chain_stage_approvals import (
     initialize_chain_stages,
     precheck_material_version,
 )
-from plane.research.services.stage_evaluations import refresh_stage_evaluation
+from plane.research.services.stage_evaluations import (
+    EVALUATION_PROMPT_VERSION,
+    build_evaluation_prompt,
+    refresh_stage_evaluation,
+)
 from plane.research.services import stage_evaluations
 from plane.research.utils.templates import ensure_default_preopening_template
 from plane.tests.research_fixtures import add_workspace_member, enable_research, make_user, make_workspace
@@ -932,6 +936,17 @@ def test_stage_evaluation_does_not_call_agent_when_material_is_incomplete(env, m
     assert not ResearchChainStageEvaluation.objects.exists()
 
 
+def test_stage_evaluation_prompt_is_model_agnostic():
+    """The stage gate depends on the Agent runtime, never a named model."""
+    prompt = build_evaluation_prompt("BASIC", {"requirements": []})
+
+    assert EVALUATION_PROMPT_VERSION == "topic-evaluation-agent.v1"
+    assert "deepseek" not in prompt.lower()
+    for provider_term in ("deepseek", "science discovery", "synlora"):
+        assert provider_term not in prompt.lower()
+    assert "subjournal_probability" in prompt
+
+
 def test_stage_evaluation_pins_the_science_discovery_provider(env, monkeypatch):
     node = ResearchChainNode.objects.create(
         chain=env["chain"],
@@ -1040,9 +1055,9 @@ def test_stage_evaluation_converges_from_existing_agent_events(env):
         status="RUNNING",
         input_snapshot={"materials": []},
         material_version=precheck_material_version(precheck),
-        prompt_version="topic-evaluation-deepseek.v1",
+        prompt_version="topic-evaluation-agent.v1",
         provider="SCIENCE_DISCOVERY",
-        model_version="deepseek-test",
+        model_version="agent-model-test",
         request_id=f"evaluation-{uuid4().hex}",
         created_by=env["owner"],
     )
@@ -1075,9 +1090,9 @@ def test_basic_stage_evaluation_below_threshold_blocks_submission(env):
         input_snapshot={},
         result={"decision": "RETURN", "conservative_probability": 45},
         material_version=precheck_material_version(precheck),
-        prompt_version="topic-evaluation-deepseek.v1",
+        prompt_version="topic-evaluation-agent.v1",
         provider="SCIENCE_DISCOVERY",
-        model_version="deepseek-test",
+        model_version="agent-model-test",
         request_id=f"evaluation-{uuid4().hex}",
         created_by=env["owner"],
     )
@@ -1112,9 +1127,9 @@ def test_applied_stage_evaluation_does_not_block_submission(env):
         input_snapshot={},
         result={"decision": "ADVISORY", "conservative_probability": 20},
         material_version=precheck_material_version(precheck),
-        prompt_version="topic-evaluation-deepseek.v1",
+        prompt_version="topic-evaluation-agent.v1",
         provider="SCIENCE_DISCOVERY",
-        model_version="deepseek-test",
+        model_version="agent-model-test",
         request_id=f"evaluation-{uuid4().hex}",
         created_by=env["owner"],
     )

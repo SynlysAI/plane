@@ -34,7 +34,7 @@ from plane.research.services.sciencediscovery import ScienceDiscoveryClient, Sci
 from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
 from plane.research.utils.errors import ResearchErrorCode
 
-EVALUATION_PROMPT_VERSION = "topic-evaluation-deepseek.v1"
+EVALUATION_PROMPT_VERSION = "topic-evaluation-agent.v1"
 EVALUATION_TIMEOUT_MINUTES = 10
 CRITERIA_CODES = ("intelligence", "moat", "uniqueness", "positioning", "irreplaceability")
 CRITERIA_TITLES = {
@@ -88,7 +88,7 @@ def evaluation_material_snapshot(stage):
 
 
 def build_evaluation_prompt(track, snapshot):
-    """Build the strict DeepSeek evaluation prompt for stage three.
+    """Build the strict model-agnostic Agent evaluation prompt.
 
     Args:
         track: ``BASIC`` or ``APPLIED`` research track.
