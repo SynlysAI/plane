@@ -22,7 +22,8 @@ from plane.db.models import (
     Workspace,
 )
 from plane.license.utils.encryption import decrypt_data
-from plane.research.services.agent_dock import agent_context_v3_for_grant, context_status
+from plane.research.services.agent_dock import agent_context_v3_for_grant, context_status, grant_provider
+from plane.research.services.sciencediscovery import ScienceDiscoveryError
 from plane.research.services.agent_dock_mcp import (
     issue_agent_dock_mcp_connection,
     resolve_agent_dock_mcp_credentials,
@@ -131,7 +132,9 @@ def serialize_agent_dock_session(session: ResearchAgentSession) -> dict:
         "research_chain": str(session.research_chain_id) if session.research_chain_id else None,
         "chain_node": str(session.chain_node_id) if session.chain_node_id else None,
         "target_key": (
-            f"node:{session.chain_node_id}"
+            f"workspace:{session.workspace_id}"
+            if session.target_type == ResearchAgentSession.TargetType.WORKSPACE
+            else f"node:{session.chain_node_id}"
             if session.chain_node_id
             else f"chain:{session.research_chain_id}"
             if session.research_chain_id
@@ -184,8 +187,13 @@ def create_agent_dock_session(
     context_id: str,
     request_id: str,
     runtime: SynloraRuntimeClient | None = None,
+    provider: str = ResearchAgentSession.Provider.SYNLORA,
 ):
     """Create a Synlora v1 session and bind it to one authorized target."""
+    if provider not in ResearchAgentSession.Provider.values:
+        raise AgentDockSessionError("Invalid provider", 400)
+    if not request_id:
+        raise AgentDockSessionError("request_id is required", 400)
     grant = (
         ResearchContextGrant.objects.select_related("workspace", "user", "project", "research_chain", "chain_node")
         .filter(context_id=context_id, workspace=workspace, user=user, deleted_at__isnull=True)
@@ -193,11 +201,13 @@ def create_agent_dock_session(
     )
     if grant is None:
         raise AgentDockSessionError("Context not found", 404, "agent_context_not_found")
+    if grant_provider(grant) != provider:
+        raise AgentDockSessionError("Context provider does not match", 409, "agent_context_provider_mismatch")
     if grant.revoked_at is not None or grant.expires_at <= timezone.now():
         raise AgentDockSessionError("Context expired", 403, "agent_context_expired")
     existing = ResearchAgentSession.objects.filter(request_id=request_id).first()
     if existing is not None:
-        if existing.workspace_id != workspace.id or existing.user_id != user.id:
+        if existing.workspace_id != workspace.id or existing.user_id != user.id or existing.provider != provider:
             raise AgentDockSessionError("request_id was already used", 409)
         return existing
     bound_session = (
@@ -214,6 +224,14 @@ def create_agent_dock_session(
     )
     if bound_session is not None:
         return bound_session
+
+    if provider == ResearchAgentSession.Provider.SCIENCE_DISCOVERY:
+        from plane.research.services.agent_dock_science_discovery import create_sd_dock_session
+
+        try:
+            return create_sd_dock_session(workspace=workspace, user=user, grant=grant, request_id=request_id)
+        except ScienceDiscoveryError as exc:
+            raise AgentDockSessionError(exc.message, exc.status_code, exc.code) from exc
 
     runtime = runtime or resolve_synlora_runtime(workspace, user=user)
     if runtime is None:
@@ -351,12 +369,22 @@ def refresh_agent_dock_session_context(
     )
     if grant is None:
         raise AgentDockSessionError("Context not found", 404, "agent_context_not_found")
+    if grant_provider(grant) != session.provider:
+        raise AgentDockSessionError("Context provider does not match", 409, "agent_context_provider_mismatch")
     if grant.revoked_at is not None or grant.expires_at <= timezone.now():
         raise AgentDockSessionError("Context expired", 403, "agent_context_expired")
     if getattr(grant, "agent_session_id", None) is not None and grant.agent_session_id != session.pk:
         raise AgentDockSessionError("Context already bound", 409, "agent_session_conflict")
     if session.target_type != ResearchAgentSession.TargetType.WORKSPACE:
         raise AgentDockSessionError("Session is not workspace-stable", 409, "agent_context_target_changed")
+
+    if session.provider == ResearchAgentSession.Provider.SCIENCE_DISCOVERY:
+        from plane.research.services.agent_dock_science_discovery import refresh_sd_dock_context
+
+        try:
+            return refresh_sd_dock_context(session=session, grant=grant)
+        except ScienceDiscoveryError as exc:
+            raise AgentDockSessionError(exc.message, exc.status_code, exc.code) from exc
 
     with transaction.atomic():
         locked = ResearchAgentSession.objects.select_for_update().get(pk=session.pk)
@@ -405,6 +433,17 @@ def start_agent_dock_message(
         session.last_error = "context_expired"
         session.save(update_fields=["status", "last_error", "updated_at"])
         raise AgentDockSessionError("Context expired", 403, "agent_context_expired")
+
+    if session.provider == ResearchAgentSession.Provider.SCIENCE_DISCOVERY:
+        from plane.research.services.agent_dock_science_discovery import start_sd_dock_message
+
+        try:
+            return start_sd_dock_message(
+                session=session, content=content, request_id=request_id, route=route,
+                focus_ref=focus_ref, selected_text=selected_text,
+            )
+        except ScienceDiscoveryError as exc:
+            raise AgentDockSessionError(exc.message, exc.status_code, exc.code) from exc
 
     existing = ResearchAgentRunEvent.objects.filter(request_id=request_id).first()
     if existing is not None:
@@ -705,8 +744,24 @@ def sync_agent_dock_events(
     workspace: Workspace,
     session: ResearchAgentSession,
     runtime: SynloraRuntimeClient | None = None,
+    raise_sync_errors: bool = False,
 ):
     """Pull durable Synlora events and project them into Plane's append-only log."""
+    if session.provider == ResearchAgentSession.Provider.SCIENCE_DISCOVERY:
+        from plane.research.services.agent_dock_science_discovery import sync_sd_dock_events
+
+        try:
+            return sync_sd_dock_events(session=session)
+        except ScienceDiscoveryError as exc:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "SD event sync failed session=%s run=%s code=%s", session.pk, session.run_id, exc.code,
+            )
+            if raise_sync_errors:
+                raise
+            # 已持久化的历史仍可读；连接恢复后浏览器或后台任务继续补拉。
+            return session
     if session.provider != ResearchAgentSession.Provider.SYNLORA or not session.synlora_session_id:
         return session
     runtime = runtime or resolve_synlora_runtime(workspace, user=session.user)

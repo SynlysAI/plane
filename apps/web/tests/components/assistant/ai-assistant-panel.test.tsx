@@ -17,8 +17,10 @@ const mocks = vi.hoisted(() => ({
   createSession: vi.fn(),
   sendMessage: vi.fn(),
   getEvents: vi.fn(),
+  getSessionEvents: vi.fn(),
   streamEvents: vi.fn(),
   cancelRun: vi.fn(),
+  answerRun: vi.fn(),
   toggleProfileSettingsModal: vi.fn(),
 }));
 
@@ -33,8 +35,10 @@ vi.mock("@/services/agent-dock", () => ({
     createSession = mocks.createSession;
     sendMessage = mocks.sendMessage;
     getEvents = mocks.getEvents;
+    getSessionEvents = mocks.getSessionEvents;
     streamEvents = mocks.streamEvents;
     cancelRun = mocks.cancelRun;
+    answerRun = mocks.answerRun;
   },
 }));
 
@@ -62,6 +66,7 @@ vi.mock("@/hooks/store/use-command-palette", () => ({
 const { AIAssistantPanel } = await import("@/components/assistant/ai-assistant-panel");
 const { AIAssistantStore } = await import("@/store/ai-assistant");
 const { StoreContext } = await import("@/lib/store-context");
+const { invalidateBackendAvailability } = await import("@/components/assistant/lib/backend-availability");
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -182,6 +187,7 @@ beforeEach(() => {
     latest_seq: 2,
     session,
   });
+  mocks.getSessionEvents.mockReset().mockImplementation(() => mocks.getEvents("lab", "run-1", 0));
   mocks.streamEvents
     .mockReset()
     .mockImplementation((_workspace: string, _run: string, _cursor: number, signal: AbortSignal) =>
@@ -197,6 +203,7 @@ beforeEach(() => {
       )
     );
   mocks.cancelRun.mockReset().mockResolvedValue({ ...session, status: "CLOSED" });
+  mocks.answerRun.mockReset().mockResolvedValue({ ...session, status: "STREAMING" });
 });
 
 afterEach(async () => {
@@ -251,6 +258,470 @@ function typeAndSend(text = "介绍这个项目") {
   act(() => sendButton.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 }
 
+describe("AIAssistantPanel providers", () => {
+  beforeEach(() => {
+    mocks.resolveContext.mockImplementation(async (_workspace, _route, _text, _focus, provider = "SYNLORA") => ({
+      ...envelope,
+      provider,
+      science_discovery: { available: true, reason: "" },
+    }));
+  });
+
+  it("ignores a session creation response after switching providers", async () => {
+    let complete: ((value: typeof session) => void) | undefined;
+    mocks.createSession.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        })
+    );
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+    typeAndSend("启动云端研究");
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mocks.createSession).toHaveBeenCalled();
+    await act(async () => {
+      store.setProvider("local");
+    });
+    await act(async () => {
+      complete?.(session);
+    });
+    expect(store.activeProvider).toBe("local");
+    expect(store.threadId).toBeNull();
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toContain("启动云端研究");
+  });
+
+  it("uses local BFF on an ordinary page while cloud credentials are unavailable", async () => {
+    const localSession = { ...session, provider: "SCIENCE_DISCOVERY" };
+    mocks.createSession.mockResolvedValue(localSession);
+    mocks.sendMessage.mockResolvedValue({ ...localSession, status: "STREAMING" });
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.setStatus({ enabled: true, ready: false, state: "personal_credential_required" });
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+    const select = document.querySelector('[aria-label="aiAssistant.provider"]') as HTMLSelectElement;
+    expect(select.options[1].disabled).toBe(false);
+    await act(async () => {
+      select.value = "local";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(document.querySelector("textarea")).not.toBeNull();
+    expect(store.contextNodeId).toBeNull();
+    typeAndSend("读取工作区资料");
+    await waitForText("你好，世界");
+    expect(mocks.createSession).toHaveBeenCalledWith("lab", "context-1", "SCIENCE_DISCOVERY");
+    expect(mocks.sendMessage.mock.calls[0][3].provider).toBe("SCIENCE_DISCOVERY");
+  });
+
+  it("disables an unconfigured local backend and links to backend settings", async () => {
+    mocks.resolveContext.mockResolvedValue({
+      ...envelope,
+      provider: "SYNLORA",
+      science_discovery: { available: false, reason: "science_discovery_not_configured" },
+    });
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+    const select = document.querySelector('[aria-label="aiAssistant.provider"]') as HTMLSelectElement;
+    expect(select.options[1].disabled).toBe(true);
+    const button = [...document.querySelectorAll("button")].find((item) =>
+      item.textContent?.includes("aiAssistant.configure_local")
+    );
+    expect(button).toBeDefined();
+    act(() => button?.click());
+    expect(mocks.toggleProfileSettingsModal).toHaveBeenCalledWith({ activeTab: "agent-configuration", isOpen: true });
+    expect(store.activeProvider).toBe("cloud");
+  });
+
+  it("restores SD history from another provider with deltas and snapshots merged once", async () => {
+    const localSession = {
+      ...session,
+      provider: "SCIENCE_DISCOVERY",
+      session_id: "local-history",
+      target_title: "工作区科研助手",
+      updated_at: "2026-11-05T00:00:00Z",
+    };
+    globalThis.sessionStorage.setItem(
+      "PLANE_AGENT_DOCK_LAUNCH_HISTORY_lab:anonymous",
+      JSON.stringify({ launchId: "launch", sessionIds: [localSession.session_id] })
+    );
+    mocks.listSessions.mockResolvedValue({ results: [localSession], count: 1 });
+    mocks.getSession.mockResolvedValue(localSession);
+    mocks.getEvents.mockResolvedValue({
+      results: [
+        event(1, "USER_MESSAGE", { content: "历史研究问题" }),
+        event(2, "OUTPUT", { content: "草稿", remote_type: "assistant.delta", remote_seq: 1 }),
+        event(3, "OUTPUT", { content: "补充", remote_type: "assistant.delta", remote_seq: 2 }),
+        event(4, "OUTPUT", { content: "完整研究回答", remote_type: "assistant.snapshot", remote_seq: 3 }),
+        event(5, "OUTPUT", { content: "完整研究回答", remote_type: "run.completed", remote_seq: 4 }),
+      ],
+      session: localSession,
+    });
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+    await act(async () => {
+      document
+        .querySelector('[aria-label="aiAssistant.launch_history"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await waitForText("aiAssistant.provider_badge_local");
+    await act(async () => {
+      [...document.querySelectorAll("button")]
+        .find((button) => button.textContent?.includes("工作区科研助手"))
+        ?.click();
+    });
+    await waitForText("完整研究回答");
+    expect(store.activeProvider).toBe("local");
+    expect(store.threadId).toBe("local-history");
+    expect(document.body.textContent?.match(/完整研究回答/g)).toHaveLength(1);
+    expect(document.body.textContent).not.toContain("草稿补充");
+  });
+
+  it("resumes a running SD session after refresh and replays permission requests", async () => {
+    const localSession = { ...session, provider: "SCIENCE_DISCOVERY", status: "WAITING_APPROVAL", run_start_cursor: 0 };
+    mocks.getSession.mockResolvedValue(localSession);
+    mocks.getEvents.mockResolvedValue({
+      results: [
+        event(1, "USER_MESSAGE", { content: "继续实验" }),
+        event(2, "OUTPUT", { content: "进行中", remote_type: "assistant.delta", remote_seq: 1 }),
+        event(3, "APPROVAL", {
+          remote_type: "permission.required",
+          remote_seq: 2,
+          request: { id: "permission-1", summary: "运行分析" },
+        }),
+      ],
+      session: localSession,
+    });
+    mocks.streamEvents.mockImplementation((_workspace, _run, _cursor, signal) =>
+      Promise.resolve(sseResponse([], signal))
+    );
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.setProvider("local");
+    store.setThreadId("lab", "session-1");
+    store.open();
+    renderPanel(store);
+    await waitForText("aiAssistant.approval_pending");
+    expect(mocks.streamEvents).toHaveBeenCalledWith("lab", "run-1", 2, expect.any(AbortSignal));
+    expect(document.body.textContent).toContain("进行中");
+    expect(mocks.createSession).not.toHaveBeenCalled();
+  });
+
+  it("replays paginated rounds with independent source sequences and resumes only the current run", async () => {
+    const localSession = {
+      ...session,
+      provider: "SCIENCE_DISCOVERY",
+      run_id: "run-2",
+      status: "STREAMING",
+      run_start_cursor: 0,
+    };
+    mocks.getSession.mockResolvedValue({ ...localSession, run_id: "run-1" });
+    const firstRound = [
+      event(1, "USER_MESSAGE", { content: "第一轮问题" }),
+      event(2, "OUTPUT", { content: "第一轮回答", remote_type: "assistant.snapshot", remote_seq: 1 }),
+      event(3, "OUTPUT", { remote_type: "run.completed", remote_seq: 2 }),
+    ];
+    const secondRound = [
+      { ...event(4, "USER_MESSAGE", { content: "第二轮问题" }), run_id: "run-2" },
+      {
+        ...event(5, "OUTPUT", { content: "第二轮进行中", remote_type: "assistant.delta", remote_seq: 1 }),
+        run_id: "run-2",
+      },
+    ];
+    mocks.getSessionEvents.mockImplementation(async (_workspace, _session, cursor) => ({
+      results: cursor ? [...firstRound.slice(-1), ...secondRound] : firstRound,
+      next_cursor: cursor ? null : "page-2",
+      session: localSession,
+    }));
+    mocks.streamEvents.mockImplementation((_workspace, runId, _cursor, signal) =>
+      Promise.resolve(sseResponse([], signal, runId))
+    );
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.setProvider("local");
+    store.setThreadId("lab", "session-1");
+    store.open();
+    renderPanel(store);
+    await waitForText("第二轮进行中");
+    expect(document.body.textContent?.match(/第一轮回答/g)).toHaveLength(1);
+    expect(document.body.textContent).toContain("第一轮问题");
+    expect(document.body.textContent).toContain("第二轮问题");
+    expect(document.querySelector('[aria-label="aiAssistant.stop"]')).not.toBeNull();
+    expect(mocks.streamEvents).toHaveBeenLastCalledWith("lab", "run-2", 1, expect.any(AbortSignal));
+  });
+
+  it("keeps saved SD history readable when the backend is unavailable", async () => {
+    const localSession = { ...session, provider: "SCIENCE_DISCOVERY", status: "STREAMING" };
+    mocks.resolveContext.mockResolvedValue({ ...envelope, science_discovery: { available: false, reason: "offline" } });
+    mocks.getSession.mockResolvedValue(localSession);
+    mocks.getSessionEvents.mockResolvedValue({
+      results: [
+        event(1, "USER_MESSAGE", { content: "离线历史问题" }),
+        event(2, "OUTPUT", {
+          content: "已保存的科研回答",
+          remote_type: "assistant.snapshot",
+          remote_seq: 1,
+        }),
+      ],
+      session: localSession,
+    });
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.setProvider("local");
+    store.setThreadId("lab", "session-1");
+    store.open();
+    renderPanel(store);
+    await waitForText("aiAssistant.history_read_only");
+    await waitForText("已保存的科研回答");
+    expect(document.body.textContent).toContain("离线历史问题");
+    expect((document.querySelector("textarea") as HTMLTextAreaElement).disabled).toBe(true);
+    expect(mocks.streamEvents).not.toHaveBeenCalled();
+    expect(store.threadId).toBe("session-1");
+  });
+
+  it("revalidates backend availability after settings change and while a run is active", async () => {
+    mocks.resolveContext.mockResolvedValue({ ...envelope, science_discovery: { available: false, reason: "missing" } });
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+    expect(
+      (document.querySelector('[aria-label="aiAssistant.provider"]') as HTMLSelectElement).options[1].disabled
+    ).toBe(true);
+    mocks.resolveContext.mockResolvedValue({ ...envelope, science_discovery: { available: true, reason: "" } });
+    await act(async () => invalidateBackendAvailability("lab"));
+    expect(
+      (document.querySelector('[aria-label="aiAssistant.provider"]') as HTMLSelectElement).options[1].disabled
+    ).toBe(false);
+    mocks.streamEvents.mockImplementation((_workspace, runId, _cursor, signal) =>
+      Promise.resolve(sseResponse([], signal, runId))
+    );
+    typeAndSend("运行期间重验");
+    await act(async () => {
+      await Promise.resolve();
+    });
+    mocks.resolveContext.mockResolvedValue({ ...envelope, science_discovery: { available: false, reason: "deleted" } });
+    await act(async () => invalidateBackendAvailability("lab"));
+    expect(
+      (document.querySelector('[aria-label="aiAssistant.provider"]') as HTMLSelectElement).options[1].disabled
+    ).toBe(true);
+    expect(document.querySelector('[aria-label="aiAssistant.stop"]')).not.toBeNull();
+  });
+
+  it("submits the displayed permission identity and ignores a late approval failure after provider change", async () => {
+    const localSession = { ...session, provider: "SCIENCE_DISCOVERY", status: "WAITING_APPROVAL" };
+    mocks.getSession.mockResolvedValue(localSession);
+    mocks.getSessionEvents.mockResolvedValue({
+      results: [1, 2].map((index) =>
+        event(index, "APPROVAL", {
+          remote_type: "permission.required",
+          remote_seq: index,
+          request: {
+            id: `permission-${index}`,
+            toolCallId: `tool-${index}`,
+            summary: `写入结果 ${index}`,
+            action: "write",
+            resource: `/workspace/result-${index}.txt`,
+          },
+        })
+      ),
+      session: localSession,
+    });
+    mocks.streamEvents.mockImplementation((_workspace, runId, _cursor, signal) =>
+      Promise.resolve(sseResponse([], signal, runId))
+    );
+    let rejectApproval: ((reason?: unknown) => void) | undefined;
+    mocks.answerRun.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectApproval = reject;
+        })
+    );
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.setProvider("local");
+    store.setThreadId("lab", "session-1");
+    store.open();
+    renderPanel(store);
+    await waitForText("写入结果 2");
+    expect(document.body.textContent).toContain("/workspace/result-1.txt");
+    const allow = [...document.querySelectorAll("button")].filter((item) =>
+      item.textContent?.includes("aiAssistant.approve")
+    );
+    expect(allow).toHaveLength(2);
+    await act(async () => allow[0].click());
+    expect(mocks.answerRun).toHaveBeenCalledWith("lab", "run-1", true, "permission-1");
+    await act(async () => store.setProvider("cloud"));
+    await act(async () => rejectApproval?.(new Error("late approval failure")));
+    expect(document.body.textContent).not.toContain("aiAssistant.error_approval_answer_failed");
+    expect(document.body.textContent).not.toContain("写入结果 1");
+  });
+
+  it("shows approval summary, action and resource in persisted runtime history", async () => {
+    const localSession = { ...session, provider: "SCIENCE_DISCOVERY" };
+    mocks.getSession.mockResolvedValue(localSession);
+    mocks.getSessionEvents.mockResolvedValue({
+      results: [
+        event(1, "APPROVAL", {
+          remote_type: "permission.required",
+          remote_seq: 1,
+          request: {
+            id: "permission-1",
+            toolCallId: "tool-1",
+            summary: "保存核验报告",
+            action: "write",
+            resource: "/workspace/reports/confirmed.txt",
+          },
+        }),
+        event(2, "HUMAN_DECISION", {
+          remote_type: "permission.resolved",
+          remote_seq: 2,
+          requestId: "permission-1",
+        }),
+      ],
+      session: localSession,
+    });
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.setProvider("local");
+    store.setThreadId("lab", "session-1");
+    store.setActiveView("runtime");
+    store.open();
+    renderPanel(store);
+    await waitForText("保存核验报告");
+    expect(document.body.textContent).toContain("write");
+    expect(document.body.textContent).toContain("/workspace/reports/confirmed.txt");
+    expect(document.body.textContent).toContain("aiAssistant.approval_resolved");
+    expect(
+      [...document.querySelectorAll("button")].some((button) => button.textContent?.includes("aiAssistant.approve"))
+    ).toBe(false);
+  });
+
+  it("discards a late SSE connection response after switching provider", async () => {
+    let resolveStream: ((response: Response) => void) | undefined;
+    mocks.streamEvents.mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveStream = resolve;
+        })
+    );
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+    typeAndSend("等待云端连接");
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mocks.streamEvents).toHaveBeenCalledOnce();
+    await waitForText("正在连接…");
+    const localSession = { ...session, provider: "SCIENCE_DISCOVERY" };
+    mocks.getSession.mockResolvedValue(localSession);
+    mocks.getSessionEvents.mockResolvedValue({
+      results: [event(2, "OUTPUT", { content: "你好，世界" })],
+      session: localSession,
+    });
+    await act(async () => {
+      store.setThreadId("lab", "local-session", "local");
+      store.setProvider("local");
+    });
+    await waitForText("你好，世界");
+    const cancelBody = vi.fn();
+    await act(async () => {
+      resolveStream?.(
+        new Response(new ReadableStream<Uint8Array>({ cancel: cancelBody }), {
+          headers: { "Content-Type": "text/event-stream" },
+        })
+      );
+      await Promise.resolve();
+    });
+    expect(cancelBody).toHaveBeenCalledOnce();
+    expect(document.querySelector('[aria-label="aiAssistant.stop"]')).toBeNull();
+    expect(document.querySelector('[aria-label="aiAssistant.send"]')).not.toBeNull();
+  });
+
+  it("ignores a late cancellation after another provider has started its run", async () => {
+    mocks.streamEvents.mockImplementation((_workspace, runId, _cursor, signal) =>
+      Promise.resolve(sseResponse([], signal, runId))
+    );
+    let finishCancel: ((value: typeof session) => void) | undefined;
+    mocks.cancelRun.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishCancel = resolve;
+        })
+    );
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+    typeAndSend("云端任务");
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => (document.querySelector('[aria-label="aiAssistant.stop"]') as HTMLButtonElement).click());
+    expect(mocks.cancelRun).toHaveBeenCalledWith("lab", "run-1");
+    const localSession = { ...session, provider: "SCIENCE_DISCOVERY", session_id: "sd-session", run_id: "sd-run" };
+    mocks.createSession.mockResolvedValue(localSession);
+    mocks.sendMessage.mockResolvedValue({ ...localSession, status: "STREAMING" });
+    await act(async () => store.setProvider("local"));
+    typeAndSend("本地任务");
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => finishCancel?.(session));
+    expect(document.querySelector('[aria-label="aiAssistant.stop"]')).not.toBeNull();
+    await act(async () => (document.querySelector('[aria-label="aiAssistant.stop"]') as HTMLButtonElement).click());
+    expect(mocks.cancelRun).toHaveBeenLastCalledWith("lab", "sd-run");
+  });
+
+  it("ignores an older history load after a newer snapshot has completed", async () => {
+    let finishOldHistory: ((value: unknown) => void) | undefined;
+    mocks.getSessionEvents.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishOldHistory = resolve;
+        })
+    );
+    mocks.getSessionEvents.mockResolvedValue({
+      results: [event(2, "OUTPUT", { content: "最新历史快照" })],
+      session,
+    });
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.setThreadId("lab", "session-1");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+    await act(async () => invalidateBackendAvailability("lab"));
+    await waitForText("最新历史快照");
+    await act(async () =>
+      finishOldHistory?.({
+        results: [event(2, "OUTPUT", { content: "迟到的旧历史快照" })],
+        session,
+      })
+    );
+    expect(document.body.textContent).toContain("最新历史快照");
+    expect(document.body.textContent).not.toContain("迟到的旧历史快照");
+  });
+});
+
 describe("AIAssistantPanel", () => {
   it("creates a target-bound session and renders durable output", async () => {
     const store = new AIAssistantStore();
@@ -262,7 +733,7 @@ describe("AIAssistantPanel", () => {
     typeAndSend();
     await waitForText("你好，世界");
     expect(document.body.textContent).toContain("介绍这个项目");
-    expect(mocks.createSession).toHaveBeenCalledWith("lab", "context-1");
+    expect(mocks.createSession).toHaveBeenCalledWith("lab", "context-1", "SYNLORA");
     expect(mocks.sendMessage).toHaveBeenCalledWith(
       "lab",
       "session-1",
@@ -297,7 +768,8 @@ describe("AIAssistantPanel", () => {
       isOpen: true,
     });
     expect((document.querySelector("textarea") as HTMLTextAreaElement).disabled).toBe(true);
-    expect(mocks.resolveContext).not.toHaveBeenCalled();
+    expect(mocks.resolveContext).toHaveBeenCalledWith("lab", currentPath, "", undefined, "SYNLORA");
+    expect(mocks.createSession).not.toHaveBeenCalled();
   });
 
   it("renders floating mode as a non-modal panel that does not capture page events", async () => {
@@ -514,6 +986,16 @@ describe("AIAssistantPanel", () => {
     expect(timeline?.classList.contains("pl-3")).toBe(true);
     expect(timeline?.classList.contains("ml-auto")).toBe(false);
     expect(timeline?.classList.contains("max-w-[85%]")).toBe(false);
+
+    const timelineMetadata = timeline?.firstElementChild;
+    const latestEventTime = timelineMetadata?.querySelector("time");
+    const toolStatus = [...timeline.querySelectorAll("details summary span")].at(-1);
+    expect(timelineMetadata?.classList.contains("text-10")).toBe(true);
+    expect(latestEventTime?.getAttribute("datetime")).toBe("2026-11-02T00:00:00Z");
+    expect(latestEventTime?.className).toContain("ml-auto");
+    expect(latestEventTime?.className).toContain("whitespace-nowrap");
+    expect(latestEventTime?.className).toContain("tabular-nums");
+    expect(toolStatus?.className).toContain("whitespace-nowrap");
   });
 
   it("keeps a completed replay answer below its runtime timeline", async () => {

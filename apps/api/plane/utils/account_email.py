@@ -6,6 +6,8 @@ import socket
 
 from celery import current_task
 
+from plane.utils.email import filter_email_recipients
+from plane.utils.email_recipient_filters import EmailRecipientFilterConfigurationError
 from plane.utils.exception_logger import log_exception
 
 logger = logging.getLogger("plane.worker")
@@ -27,14 +29,22 @@ class AccountEmailDeliveryError(Exception):
 
 
 def send_account_email(message):
-    """Send one account email and classify SMTP errors by submission certainty.
+    """过滤账号邮件收件人，并按 SMTP 提交结果分类发送错误。
 
     Args:
-        message: A configured Django ``EmailMessage`` instance.
+        message: 已配置连接及收件人的 Django 邮件对象。
 
     Returns:
-        The number of messages accepted by the configured SMTP backend.
+        SMTP 后端接受的邮件数量；全部收件人被屏蔽时返回零。
     """
+    try:
+        removed = filter_email_recipients(message)
+    except EmailRecipientFilterConfigurationError as error:
+        raise AccountEmailDeliveryError("email_recipient_filters_unavailable", retryable=True) from error
+    if removed and not message.recipients():
+        logger.info("Account email suppressed: recipient_email_blocked")
+        return 0
+
     connection = message.connection
     try:
         try:

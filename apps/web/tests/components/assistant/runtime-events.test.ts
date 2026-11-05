@@ -49,4 +49,16 @@ describe("runtime event display", () => {
     expect(calls[1].status).toBe("failed");
     expect(calls[1].arguments).toContain("token: [REDACTED]");
   });
+
+  it("preserves tool details on trace-free output and isolates reused ids across runs", () => {
+    const calls = mergeRuntimeToolCalls([
+      event(1, { tool_call_id: "same-id", name: "read", arguments: { path: "report.txt" } }),
+      event(2, { tool_call_id: "same-id", result: "读取中", status: "RUNNING" }),
+      { ...event(3, { tool_call_id: "same-id", name: "write", status: "WAITING_APPROVAL" }), run_id: "run-2" },
+    ]);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toMatchObject({ runId: "run-1", name: "read", result: "读取中", status: "running" });
+    expect(calls[0].arguments).toContain("report.txt");
+    expect(calls[1]).toMatchObject({ runId: "run-2", name: "write", status: "waiting_approval" });
+  });
 });

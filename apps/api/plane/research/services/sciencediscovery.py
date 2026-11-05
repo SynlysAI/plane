@@ -27,11 +27,20 @@ class ScienceDiscoveryErrorCode:
 class ScienceDiscoveryError(Exception):
     """A fail-closed ScienceDiscovery orchestration error."""
 
-    def __init__(self, code, message, status_code=503):
+    def __init__(self, code, message, status_code=503, *, upstream_status=None):
+        """保留 BFF 状态，并可携带上游状态供提交恢复判断。
+
+        Args:
+            code: 稳定错误码。
+            message: 服务端错误说明。
+            status_code: 对浏览器返回的兼容 HTTP 状态。
+            upstream_status: 已收到的上游 HTTP 状态，网络错误时为空。
+        """
         super().__init__(message)
         self.code = code
         self.message = message
         self.status_code = status_code
+        self.upstream_status = upstream_status
 
 
 class ScienceDiscoveryClient:
@@ -99,6 +108,7 @@ class ScienceDiscoveryClient:
                 ScienceDiscoveryErrorCode.SESSION_FAILED,
                 message,
                 502 if response.status_code < 500 else 503,
+                upstream_status=response.status_code,
             )
         return {} if response.status_code == 204 else response.json()
 
@@ -155,6 +165,43 @@ class ScienceDiscoveryClient:
             )
         return project_id
 
+    def ensure_project(self, *, name):
+        """按名称幂等复用工作区 Dock 项目。
+
+        Args:
+            name: 包含工作区名称的项目名。
+
+        Returns:
+            已存在或新建的 SD 项目 ID。
+        """
+        projects = self._request("GET", "/api/projects")
+        if not isinstance(projects, list):
+            raise ScienceDiscoveryError(ScienceDiscoveryErrorCode.PROJECT_FAILED, "Invalid project list.", 502)
+        for project in projects:
+            if isinstance(project, dict) and project.get("name") == name and project.get("id"):
+                return str(project["id"])
+        return self.create_project(name=name)
+
+    def set_session_connectors(self, *, session_id, connector_ids):
+        """轮换 Dock 授权时更新会话的专属连接器。
+
+        Args:
+            session_id: 已有 SD 会话 ID。
+            connector_ids: 当前授权允许的连接器 ID 列表。
+
+        Returns:
+            SD 更新后的会话设置。
+        """
+        path = f"/api/sessions/{session_id}/settings"
+        current = self._request("GET", path)
+        overrides = current.get("overrides") if isinstance(current, dict) else None
+        if not isinstance(overrides, dict):
+            raise ScienceDiscoveryError("science_discovery_session_failed", "Invalid session settings.", 502)
+        return self._request(
+            "PUT", path,
+            json_payload={**overrides, "enabledConnectorIds": list(connector_ids)},
+        )
+
     def create_session(self, *, project_id, title, specialist_id=None, connector_ids=None):
         """Create one SD session mapped to one Plane Agent session."""
         payload = {"title": title}
@@ -176,18 +223,21 @@ class ScienceDiscoveryClient:
             )
         return session_id
 
-    def create_research_connector(self, *, workspace, user, grant, token, url):
+    def create_research_connector(self, *, workspace, user, grant, token, url, expected_tools=None):
         """One encrypted SD server/transport identity per grant, never overwrite a shared header.
 
         Existing SD custom connectors disable result caching and key transport
         sessions by server id. A fresh id therefore also isolates concurrent
         node credentials without a new cross-repository transport protocol.
         """
+        expected_tools = set(grant.allowed_tools if expected_tools is None else expected_tools)
         namespace = hashlib.sha256(f"{workspace.id}:{user.id}".encode()).hexdigest()[:12]
         prefix = f"plane-research-{namespace}-"
         existing = self._request("GET", "/api/mcp/servers")
         if not isinstance(existing, list):
-            raise ScienceDiscoveryError("research_mcp_binding_failed", "Invalid ScienceDiscovery connector response.", 502)
+            raise ScienceDiscoveryError(
+                "research_mcp_binding_failed", "Invalid ScienceDiscovery connector response.", 502
+            )
         for item in existing:
             if not isinstance(item, dict) or not str(item.get("name", "")).startswith(prefix):
                 continue
@@ -206,7 +256,9 @@ class ScienceDiscoveryClient:
         })
         identity = created.get("id", "") if isinstance(created, dict) else ""
         if not re.fullmatch(r"custom-[a-f0-9]{12}", identity):
-            raise ScienceDiscoveryError("research_mcp_binding_failed", "ScienceDiscovery did not return a connector id.", 502)
+            raise ScienceDiscoveryError(
+                "research_mcp_binding_failed", "ScienceDiscovery did not return a connector id.", 502
+            )
         try:
             checked = self._request("POST", f"/api/mcp/servers/{identity}/test")
             discovered = checked.get("tools") if isinstance(checked, dict) else None
@@ -214,8 +266,10 @@ class ScienceDiscoveryClient:
                     or checked.get("sourceId") != identity
                     or not isinstance(discovered, list)
                     or not all(isinstance(tool, dict) and isinstance(tool.get("name"), str) for tool in discovered)
-                    or {tool["name"] for tool in discovered} != set(grant.allowed_tools)):
-                raise ScienceDiscoveryError("research_mcp_binding_failed", "Scoped research tools could not be discovered.", 502)
+                    or {tool["name"] for tool in discovered} != expected_tools):
+                raise ScienceDiscoveryError(
+                    "research_mcp_binding_failed", "Scoped research tools could not be discovered.", 502
+                )
         except ScienceDiscoveryError:
             try:
                 self.remove_research_connector(identity)
@@ -261,6 +315,20 @@ class ScienceDiscoveryClient:
                 "ScienceDiscovery returned a malformed event page.",
                 502,
             )
+        return payload
+
+    def list_runs(self, *, session_id):
+        """读取固定会话的 run 列表，用于确认超时提交的实际结果。
+
+        Args:
+            session_id: 已绑定的 SD 会话 ID。
+
+        Returns:
+            包含原始 prompt 和状态的远端 run 列表。
+        """
+        payload = self._request("GET", f"/api/sessions/{session_id}/runs")
+        if not isinstance(payload, list) or any(not isinstance(run, dict) for run in payload):
+            raise ScienceDiscoveryError("science_discovery_submission_pending", "Invalid run list.", 502)
         return payload
 
     def cancel(self, *, session_id, run_id):

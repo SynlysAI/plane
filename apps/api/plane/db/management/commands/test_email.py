@@ -9,6 +9,7 @@ from django.utils.html import strip_tags
 
 # Module imports
 from plane.license.utils.instance_value import get_email_configuration
+from plane.utils.email import is_email_recipient_blocked
 
 
 class Command(BaseCommand):
@@ -23,6 +24,10 @@ class Command(BaseCommand):
 
         if not receiver_email:
             raise CommandError("Receiver email is required")
+
+        if is_email_recipient_blocked(receiver_email):
+            self.stdout.write(self.style.WARNING("收件人已屏蔽，跳过发送"))
+            return
 
         (
             EMAIL_HOST,

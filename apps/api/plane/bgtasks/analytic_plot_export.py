@@ -22,7 +22,7 @@ from plane.db.models import Issue, User
 from plane.utils.administrative_projects import visible_administrative_projects
 from plane.license.utils.instance_value import get_email_configuration
 from plane.utils.analytics_plot import build_graph_plot
-from plane.utils.email import generate_plain_text_from_html
+from plane.utils.email import generate_plain_text_from_html, is_email_recipient_blocked
 from plane.utils.exception_logger import log_exception
 from plane.utils.issue_filters import issue_filters
 from plane.utils.csv_utils import sanitize_csv_row
@@ -52,6 +52,10 @@ MODULE_ID = "issue_module__module_id"
 
 def send_export_email(email, slug, csv_buffer, rows):
     """Helper function to send export email."""
+    if is_email_recipient_blocked(email):
+        logging.getLogger("plane.worker").info("Export email suppressed: recipient_email_blocked")
+        return
+
     subject = "Your Export is ready"
     html_content = render_to_string("emails/exports/analytics.html", {})
     text_content = generate_plain_text_from_html(html_content)

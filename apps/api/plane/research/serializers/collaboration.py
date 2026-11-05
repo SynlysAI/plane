@@ -18,6 +18,7 @@ from plane.db.models import (
 from plane.research.services.chain_tasks import (
     actor_can_cancel_task,
     actor_can_complete_task,
+    actor_can_delete_task,
     actor_can_reopen_task,
     chain_writer,
     chain_assignable_user_ids,
@@ -30,7 +31,7 @@ from plane.research.services.paper_review import (
 from plane.research.utils.action_capabilities import capability_map
 from plane.utils.content_validator import validate_html_content
 
-TASK_ACTIONS = ("view", "edit", "assign", "complete", "reopen", "cancel")
+TASK_ACTIONS = ("view", "edit", "assign", "complete", "reopen", "cancel", "delete")
 PAPER_REVIEW_ACTIONS = ("view", "submit", "return", "accept", "withdraw")
 EDITABLE_STATUSES = (
     ResearchChainNodeTask.Status.DRAFT,
@@ -79,6 +80,7 @@ def _capabilities(serializer, task):
                 actor,
                 assignee_is_valid=serializer.get_assignee_is_valid(task),
             ),
+            "deleter": actor_can_delete_task(workspace, task, actor),
         }
     roles = cache[cache_key]
     editable = task.status in EDITABLE_STATUSES
@@ -90,6 +92,7 @@ def _capabilities(serializer, task):
         "complete": roles["completer"],
         "reopen": roles["reopener"],
         "cancel": roles["manager"] and task.status != ResearchChainNodeTask.Status.CANCELLED,
+        "delete": roles["deleter"],
     }
     return capability_map(TASK_ACTIONS, decisions)
 

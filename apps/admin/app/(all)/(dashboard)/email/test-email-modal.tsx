@@ -55,9 +55,16 @@ export function SendTestEmailModal(props: Props) {
       .sendTestEmail(receiverEmail)
       .then(() => {
         setSendEmailStep(ESendEmailSteps.SUCCESS);
+        return null;
       })
-      .catch((error) => {
-        setError(error?.error || "Failed to send email");
+      .catch((sendError) => {
+        setError(
+          sendError?.error === "recipient_email_blocked"
+            ? "该收件人已被邮箱过滤规则屏蔽，未发送测试邮件。请在「邮箱过滤」中检查规则。"
+            : sendError?.error === "email_recipient_filters_unavailable"
+              ? "邮箱过滤配置暂时无法读取，已停止发送。请稍后重试。"
+              : sendError?.error || "邮件发送失败，请检查 SMTP 设置。"
+        );
         setSendEmailStep(ESendEmailSteps.FAILED);
       })
       .finally(() => {

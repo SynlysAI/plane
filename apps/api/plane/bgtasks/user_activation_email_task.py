@@ -61,7 +61,8 @@ def user_activation_email(current_site, user_id):
         )
 
         msg.attach_alternative(html_content, "text/html")
-        send_account_email(msg)
+        if not send_account_email(msg):
+            return
         logging.getLogger("plane.worker").info("Email sent successfully.")
         return
     except Exception as e:

@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const calls = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), fetch: vi.fn() }));
+const calls = vi.hoisted(() => ({
+  get: vi.fn(),
+  post: vi.fn(),
+  put: vi.fn(),
+  delete: vi.fn(),
+  fetch: vi.fn(),
+  notifyWorkspaceTodosUpdated: vi.fn(),
+}));
 
 vi.mock("@plane/constants", () => ({
   API_BASE_URL: "https://plane.test",
@@ -16,6 +23,9 @@ vi.mock("@/services/api.service", () => ({
     put = calls.put;
     delete = calls.delete;
   },
+}));
+vi.mock("@/helpers/workspace-todos.helper", () => ({
+  notifyWorkspaceTodosUpdated: calls.notifyWorkspaceTodosUpdated,
 }));
 
 const { ResearchChainTaskService } = await import("@/services/research/chain-task.service");
@@ -94,6 +104,15 @@ it("normalizes the confirm asset_id into a comment attachment id", async () => {
   });
   expect(calls.post).toHaveBeenCalledTimes(2);
   expect(calls.delete).not.toHaveBeenCalled();
+});
+
+it("deletes a research task and refreshes workspace todos", async () => {
+  calls.delete.mockResolvedValueOnce({ data: null });
+
+  await new ResearchChainTaskService().deleteNodeTask("lab", "chain-1", "node-1", "task-1");
+
+  expect(calls.delete).toHaveBeenCalledWith(BASE_URL);
+  expect(calls.notifyWorkspaceTodosUpdated).toHaveBeenCalledTimes(1);
 });
 
 it("rejects and discards a slot when confirm has no asset_id", async () => {

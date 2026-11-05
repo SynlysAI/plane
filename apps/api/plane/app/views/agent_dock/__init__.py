@@ -12,6 +12,7 @@ from .views import (
     AgentDockSessionCollectionEndpoint,
     AgentDockSessionContextRefreshEndpoint,
     AgentDockSessionDetailEndpoint,
+    AgentDockSessionEventEndpoint,
     AgentDockSessionMessageEndpoint,
 )
 
@@ -25,5 +26,6 @@ __all__ = [
     "AgentDockSessionCollectionEndpoint",
     "AgentDockSessionContextRefreshEndpoint",
     "AgentDockSessionDetailEndpoint",
+    "AgentDockSessionEventEndpoint",
     "AgentDockSessionMessageEndpoint",
 ]

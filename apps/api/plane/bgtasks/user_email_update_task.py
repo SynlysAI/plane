@@ -55,7 +55,8 @@ def send_email_update_magic_code(email, token):
             connection=connection,
         )
         msg.attach_alternative(html_content, "text/html")
-        send_account_email(msg)
+        if not send_account_email(msg):
+            return
         logging.getLogger("plane.worker").info("Email sent successfully.")
         return
     except Exception as e:
@@ -106,7 +107,8 @@ def send_email_update_confirmation(email):
             connection=connection,
         )
         msg.attach_alternative(html_content, "text/html")
-        send_account_email(msg)
+        if not send_account_email(msg):
+            return
         logging.getLogger("plane.worker").info(f"Email update confirmation sent successfully to {email}.")
         return
     except Exception as e:

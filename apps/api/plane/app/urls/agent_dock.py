@@ -14,6 +14,7 @@ from plane.app.views.agent_dock import (
     AgentDockSessionCollectionEndpoint,
     AgentDockSessionContextRefreshEndpoint,
     AgentDockSessionDetailEndpoint,
+    AgentDockSessionEventEndpoint,
     AgentDockSessionMessageEndpoint,
 )
 
@@ -42,6 +43,11 @@ urlpatterns = [
         "workspaces/<str:slug>/agent-dock/sessions/<uuid:session_id>/context/refresh/",
         AgentDockSessionContextRefreshEndpoint.as_view(),
         name="agent-dock-session-context-refresh",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-dock/sessions/<uuid:session_id>/events/",
+        AgentDockSessionEventEndpoint.as_view(),
+        name="agent-dock-session-events",
     ),
     path(
         "workspaces/<str:slug>/agent-dock/sessions/<uuid:session_id>/messages/",

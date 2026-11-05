@@ -37,7 +37,8 @@ from plane.db.models import (
 from plane.db.models.research.task import ResearchChainNodeTask
 from plane.license.utils.instance_value import get_email_configuration
 from plane.utils.administrative_projects import project_member_roster
-from plane.utils.email import generate_plain_text_from_html
+from plane.utils.email import generate_plain_text_from_html, is_email_recipient_blocked
+from plane.utils.email_recipient_filters import EmailRecipientFilterConfigurationError
 from plane.utils.notification_outbox import issue_notification_category
 from plane.utils.assignment_transfer import assignment_transfer_email_context
 
@@ -803,6 +804,25 @@ def _send_email_notification(issue_id, notification_data, receiver_id, email_not
         )
         return False
 
+    try:
+        blocked = is_email_recipient_blocked(receiver.email)
+    except EmailRecipientFilterConfigurationError:
+        _retry_email_batch(
+            notification_ids,
+            "email_recipient_filters_unavailable",
+            lease_token=lease_token,
+            retry_after=timedelta(minutes=15),
+        )
+        return False
+    if blocked:
+        _update_email_log_state(
+            notification_ids,
+            EmailNotificationLog.DeliveryStatus.SUPPRESSED,
+            lease_token=lease_token,
+            error_code="recipient_email_blocked",
+        )
+        return False
+
     allowed_ids = {str(row["member"]) for row in project_member_roster(issue.project)}
     if str(receiver.id) not in allowed_ids:
         _update_email_log_state(
@@ -1462,6 +1482,25 @@ def send_research_notification_email(delivery_ids, lease_token):
             NotificationEmailDelivery.Status.SUPPRESSED,
             lease_token=lease_token,
             error_code="recipient_inactive" if receiver is None else "recipient_email_missing",
+        )
+        return False
+
+    try:
+        blocked = is_email_recipient_blocked(receiver.email)
+    except EmailRecipientFilterConfigurationError:
+        _retry_research_delivery_batch(
+            delivery_ids,
+            "email_recipient_filters_unavailable",
+            lease_token=lease_token,
+            retry_after=timedelta(minutes=15),
+        )
+        return False
+    if blocked:
+        _update_research_delivery_state(
+            delivery_ids,
+            NotificationEmailDelivery.Status.SUPPRESSED,
+            lease_token=lease_token,
+            error_code="recipient_email_blocked",
         )
         return False
 

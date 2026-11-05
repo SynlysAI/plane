@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from plane.db.models import ResearchAgentRunEvent, ResearchAgentSession, ResearchChainEvent
 from plane.research.services.idempotency import payload_hash
+from plane.research.services.agent_dock_events import pending_sd_permissions
 
 # ScienceDiscovery -> Plane 事件映射（§7 对照表）。agent/chain 两层仅在 run.cancelled 有差异：
 # Agent 侧展示为 DEGRADED（回答被中止），Chain 侧留痕为 HUMAN_DECISION（用户主动取消）。
@@ -83,12 +84,16 @@ def _science_discovery_payload(remote_type, event):
     return payload
 
 
-def project_science_discovery_events(session, remote_events, *, source_system="SCIENCE_DISCOVERY"):
+def project_science_discovery_events(
+    session, remote_events, *, source_system="SCIENCE_DISCOVERY", expected_run_id=None,
+):
     """Deduplicate SD events by cursor and append local immutable facts.
 
     Args:
         session: The visible Plane Agent session pinned to the SD provider.
         remote_events: SD events in ``[{sequence, event: {type, ...}}]`` shape.
+        source_system: 审计事件的来源。
+        expected_run_id: Dock 补拉时绑定的 run，防止迟到响应串入下一轮。
 
     Returns:
         Newly created or existing local Agent run events in cursor order.
@@ -96,12 +101,25 @@ def project_science_discovery_events(session, remote_events, *, source_system="S
     projected = []
     with transaction.atomic():
         locked_session = ResearchAgentSession.objects.select_for_update().get(pk=session.pk)
-        for remote in remote_events:
+        if expected_run_id is not None and locked_session.run_id != expected_run_id:
+            return []
+        is_dock = expected_run_id is not None
+        if is_dock and locked_session.status not in {"STREAMING", "WAITING_APPROVAL"}:
+            return []
+        cursor = int((locked_session.assembly or {}).get("source_cursor", 0)) if is_dock else 0
+        ordered_events = (
+            sorted(remote_events, key=lambda item: int(item.get("sequence") or 0)) if is_dock else remote_events
+        )
+        for remote in ordered_events:
             remote_seq = int(remote.get("sequence") or 0)
+            if is_dock and remote_seq <= cursor:
+                continue
             event = remote.get("event") if isinstance(remote.get("event"), dict) else {}
             remote_type = str(event.get("type") or "")
             remote_key = locked_session.sd_session_id or locked_session.synlora_session_id or str(locked_session.id)
             request_id = f"run:{remote_key}:{remote_seq}"
+            if is_dock:
+                request_id = f"dock-sd:{locked_session.id}:{locked_session.run_id}:{remote_seq}"
             local = ResearchAgentRunEvent.objects.filter(request_id=request_id).first()
             if local is None:
                 next_seq = (
@@ -126,20 +144,21 @@ def project_science_discovery_events(session, remote_events, *, source_system="S
                 )
                 chain_type = SCIENCE_DISCOVERY_CHAIN_EVENT_TYPE_MAP.get(remote_type, "AI_ACTION")
                 chain_request_id = f"chain:{request_id}"
-                ResearchChainEvent.objects.create(
-                    chain=locked_session.chain_node.chain,
-                    node=locked_session.chain_node,
-                    event_id=payload_hash({"request_id": chain_request_id}),
-                    request_id=chain_request_id,
-                    actor=locked_session.user,
-                    actor_type="USER",
-                    source_system=source_system,
-                    event_type=chain_type,
-                    occurred_at=timezone.now(),
-                    refs=[{"kind": "agent_event", "id": str(local.id), "seq": remote_seq}],
-                    summary=remote_type or chain_type,
-                    content_hash=payload_hash(remote),
-                )
+                if locked_session.chain_node_id is not None:
+                    ResearchChainEvent.objects.create(
+                        chain=locked_session.chain_node.chain,
+                        node=locked_session.chain_node,
+                        event_id=payload_hash({"request_id": chain_request_id}),
+                        request_id=chain_request_id,
+                        actor=locked_session.user,
+                        actor_type="USER",
+                        source_system=source_system,
+                        event_type=chain_type,
+                        occurred_at=timezone.now(),
+                        refs=[{"kind": "agent_event", "id": str(local.id), "seq": remote_seq}],
+                        summary=remote_type or chain_type,
+                        content_hash=payload_hash(remote),
+                    )
             projected.append(local)
             terminal = SCIENCE_DISCOVERY_TERMINAL_SESSION_STATUS.get(remote_type)
             if terminal is not None and locked_session.status not in (
@@ -158,9 +177,29 @@ def project_science_discovery_events(session, remote_events, *, source_system="S
                 locked_session.status = ResearchAgentSession.Status.STREAMING
                 locked_session.last_error = ""
                 locked_session.save(update_fields=["status", "last_error", "updated_at"])
+            elif is_dock and remote_type == "permission.required" and locked_session.status in {
+                "STREAMING", "WAITING_APPROVAL",
+            }:
+                locked_session.status = ResearchAgentSession.Status.WAITING_APPROVAL
+                locked_session.save(update_fields=["status", "updated_at"])
+            if is_dock:
+                cursor = max(cursor, remote_seq)
+                locked_session.latest_seq = local.seq
+                locked_session.assembly = {**(locked_session.assembly or {}), "source_cursor": cursor}
+                locked_session.save(update_fields=["latest_seq", "assembly", "updated_at"])
+                if terminal is not None:
+                    break
         # 审批等待是唯一非终态的暂停点：置为 WAITING_APPROVAL 以驱动前端审批交互。
-        if projected and str(projected[-1].payload.get("remote_type") or "") == "permission.required":
+        if not is_dock and projected and str(projected[-1].payload.get("remote_type") or "") == "permission.required":
             locked_session.status = ResearchAgentSession.Status.WAITING_APPROVAL
             locked_session.last_error = ""
             locked_session.save(update_fields=["status", "last_error", "updated_at"])
+        if is_dock and locked_session.status in {"STREAMING", "WAITING_APPROVAL"} and any(
+            str(item.payload.get("remote_type") or "").startswith("permission.") for item in projected
+        ):
+            pending = pending_sd_permissions(
+                locked_session.run_events.filter(run_id=locked_session.run_id).order_by("seq")
+            )
+            locked_session.status = "WAITING_APPROVAL" if pending else "STREAMING"
+            locked_session.save(update_fields=["status", "updated_at"])
     return projected

@@ -29,6 +29,7 @@ vi.mock("@/services/research/agent.service", () => ({
   },
 }));
 const { AgentBackendSettings } = await import("@/components/research/settings/system/agent-backend-settings");
+const { BACKEND_AVAILABILITY_CHANGED } = await import("@/components/assistant/lib/backend-availability");
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 const connection = {
   id: "one",
@@ -183,6 +184,22 @@ it("reloads once after save, test, and delete without starting a load loop", asy
   expect(service.saveBackendConnection).toHaveBeenCalledTimes(1);
   expect(service.testBackendConnection).toHaveBeenCalledTimes(1);
   expect(service.deleteBackendConnection).toHaveBeenCalledTimes(1);
+});
+
+it("invalidates workspace availability after save, failed testing, and deletion", async () => {
+  const listener = vi.fn();
+  window.addEventListener(BACKEND_AVAILABILITY_CHANGED, listener);
+  try {
+    await renderForm();
+    await act(async () => button("保存连接").click());
+    service.testBackendConnection.mockRejectedValue({ error: "offline" });
+    await act(async () => button("测试连接").click());
+    await act(async () => button("删除").click());
+    expect(listener).toHaveBeenCalledTimes(3);
+    expect(listener.mock.calls.map(([event]) => event.detail.workspaceSlug)).toEqual(["public", "public", "public"]);
+  } finally {
+    window.removeEventListener(BACKEND_AVAILABILITY_CHANGED, listener);
+  }
 });
 
 it("uses a generic service URL placeholder and deployment forwarding hint", async () => {

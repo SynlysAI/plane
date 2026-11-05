@@ -35,6 +35,7 @@ from plane.research.utils.collaboration_notifications import (
     notify_task_assigned,
     notify_task_cancelled,
     notify_task_completed,
+    notify_task_deleted,
     notify_task_reopened,
     notify_task_updated,
 )
@@ -473,6 +474,22 @@ def actor_can_cancel_task(workspace, task, actor) -> bool:
     if actor is None or not getattr(actor, "is_authenticated", False):
         return False
     return chain_manager(workspace, actor, task.chain)
+
+
+def actor_can_delete_task(workspace, task, actor) -> bool:
+    """Return whether an actor may soft-delete a task.
+
+    Args:
+        workspace: Workspace that owns the task.
+        task: Research Chain node task to delete.
+        actor: User requesting deletion.
+
+    Returns:
+        True when the actor created the task or manages its chain.
+    """
+    if actor is None or not getattr(actor, "is_authenticated", False):
+        return False
+    return task.created_by_id == actor.id or chain_manager(workspace, actor, task.chain)
 
 
 def _request_id(payload) -> str:
@@ -930,8 +947,7 @@ def transfer_task_by_current_assignee(*, task, actor, assignee_id, request=None)
             actor is None
             or not getattr(actor, "is_authenticated", False)
             or locked_task.assignee_id != actor.id
-            or locked_task.status
-            not in (ResearchChainNodeTask.Status.DRAFT, ResearchChainNodeTask.Status.ASSIGNED)
+            or locked_task.status not in (ResearchChainNodeTask.Status.DRAFT, ResearchChainNodeTask.Status.ASSIGNED)
         ):
             raise ChainTaskPermissionError("Only the current assignee can transfer this task.")
         if not validate_assignable_user(locked_task.workspace, locked_chain, assignee_id):
@@ -1185,3 +1201,61 @@ def _require_cancel_permission(task, actor):
     """Recheck management authority while the task row is locked."""
     if not chain_manager(task.workspace, actor, task.chain):
         raise ChainTaskPermissionError("Only chain managers can cancel tasks.")
+
+
+def delete_task(*, task, actor, request=None):
+    """Soft-delete one action-item task while preserving its audit trail.
+
+    Args:
+        task: Research Chain node task to delete.
+        actor: Task creator or chain manager requesting deletion.
+        request: Optional HTTP request used for audit client metadata.
+
+    Returns:
+        The soft-deleted task instance.
+
+    Raises:
+        ChainTaskPermissionError: When the actor did not create or manage the task.
+        ChainTaskStateError: When the parent chain or node is read-only.
+    """
+    if not actor_can_delete_task(task.workspace, task, actor):
+        raise ChainTaskPermissionError("Only the task creator or chain managers can delete this task.")
+
+    request_id = f"task-delete-{task.id}-{uuid4().hex[:12]}"[:128]
+    metadata = {
+        "title": task.title[:500],
+        "status": task.status,
+        "resource_type": task.resource_type,
+        "resource_id": str(task.resource_id) if task.resource_id else None,
+    }
+    content_hash = payload_hash({"task_id": str(task.id), **metadata})
+
+    with transaction.atomic():
+        locked_chain = ResearchChain.objects.select_for_update().get(pk=task.chain_id)
+        locked_node = ResearchChainNode.objects.select_for_update().get(pk=task.node_id)
+        _ensure_task_parent_writable(locked_chain, locked_node)
+        locked_task = ResearchChainNodeTask.objects.select_for_update().get(pk=task.pk)
+        if not actor_can_delete_task(locked_task.workspace, locked_task, actor):
+            raise ChainTaskPermissionError("Only the task creator or chain managers can delete this task.")
+
+        _write_task_event(
+            task=locked_task,
+            actor=actor,
+            request_id=request_id,
+            event_type="TASK_DELETED",
+            summary=f"Deleted task: {locked_task.title}",
+            metadata=metadata,
+            content_hash=content_hash,
+        )
+        _write_task_audit(
+            task=locked_task,
+            actor=actor,
+            action=ResearchAuditAction.TASK_DELETE,
+            metadata=metadata,
+            request=request,
+        )
+        notify_task_deleted(locked_task, actor)
+        locked_task.deleted_at = timezone.now()
+        locked_task.updated_by = actor
+        locked_task.save(update_fields=["deleted_at", "updated_by", "updated_at"])
+        return locked_task

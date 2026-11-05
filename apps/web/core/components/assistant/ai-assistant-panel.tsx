@@ -19,6 +19,7 @@ import {
   Activity,
   ArrowUp,
   ChevronDown,
+  Check,
   Cloud,
   FileSearch,
   HardDrive,
@@ -43,7 +44,6 @@ import remarkGfm from "remark-gfm";
 // components
 import { useAssistantChat, type TAssistantMessage } from "./use-assistant-chat";
 import { groupRuntimeEventsByRun, mergeRuntimeToolCalls } from "./lib/runtime-events";
-import { useWorkbenchChat } from "./use-workbench-chat";
 import { useAgentDockDesktop } from "@/hooks/use-agent-dock-desktop";
 import type { TAssistantStatus } from "@/services/assistant";
 import type { TAgentDockEvent, TAgentFocusRef } from "@/services/agent-dock";
@@ -60,7 +60,7 @@ type Props = {
   focusRef?: TAgentFocusRef | null;
 };
 
-const ACTIVE_CLOUD_PHASES = new Set(["connecting", "running", "waiting_approval", "cancelling", "disconnected"]);
+const ACTIVE_PHASES = new Set(["connecting", "running", "waiting_approval", "cancelling", "disconnected"]);
 
 /** Render assistant markdown with restrained Plane surface and typography tokens. */
 const AnswerMarkdown = observer(function AnswerMarkdown({ content }: { content: string }) {
@@ -122,6 +122,25 @@ function ToolLine({ name, status }: { name: string; status?: string }) {
   );
 }
 
+/** 统一展示当前审批与历史审批的摘要、动作和资源。 */
+function ApprovalDetails({ payload }: { payload: Record<string, unknown> }) {
+  const { t } = useTranslation();
+  const resource = payload.resource || payload.args_preview;
+  return (
+    <div className="min-w-0">
+      <p className="text-12 font-medium break-words text-primary">
+        {String(payload.summary || payload.tool || t("aiAssistant.approval_request"))}
+      </p>
+      {Boolean(payload.tool) && <p className="mt-1 text-11 break-words text-secondary">{String(payload.tool)}</p>}
+      {Boolean(resource) && (
+        <pre className="font-mono mt-1 max-h-24 overflow-auto bg-surface-1 p-2 text-11 break-all whitespace-pre-wrap text-secondary">
+          {String(resource)}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 /** Show a compact, conversation-inline execution timeline without chain-of-thought content. */
 function InlineRunTimeline({
   active,
@@ -157,8 +176,8 @@ function InlineRunTimeline({
       ? Math.max(0, (active ? Date.now() : lastEventAt) - firstEventAt)
       : 0;
   return (
-    <section aria-label={t("aiAssistant.runtime_inline")} className="ml-7 w-full border-l border-subtle pl-3">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-11 text-secondary">
+    <section aria-label={t("aiAssistant.runtime_inline")} className="ml-7 min-w-0 border-l border-subtle pl-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-10 text-secondary">
         <span className="font-medium text-primary">{phaseLabel}</span>
         {active && <Loader2 className="size-3 animate-spin text-accent-primary" />}
         {events.length > 0 && (
@@ -167,12 +186,17 @@ function InlineRunTimeline({
           </span>
         )}
         {events.length > 0 && (
-          <span className="text-tertiary">{t("aiAssistant.runtime_latest_event", { label: latestEventLabel })}</span>
+          <time
+            dateTime={events.at(-1)?.created_at}
+            className="ml-auto shrink-0 whitespace-nowrap text-tertiary tabular-nums"
+          >
+            {t("aiAssistant.runtime_latest_event", { label: latestEventLabel })}
+          </time>
         )}
       </div>
       <ol className="mt-2 space-y-1.5" role="list">
         {contextEvents.slice(-1).map((event) => (
-          <li key={`context-${event.seq}`} className="flex min-w-0 items-center gap-2 text-11 text-secondary">
+          <li key={`context-${event.seq}`} className="flex min-w-0 items-center gap-2 text-10 text-secondary">
             <span className="size-1 shrink-0 rounded-full bg-current opacity-40" aria-hidden="true" />
             <span className="min-w-0 truncate">{t("aiAssistant.runtime_context_bound")}</span>
           </li>
@@ -181,17 +205,17 @@ function InlineRunTimeline({
           .filter((event) => event.event_type === "RUN_EVENT" && String(event.payload.phase ?? "") === "thinking")
           .slice(-1)
           .map((event) => (
-            <li key={`thinking-${event.seq}`} className="flex min-w-0 items-center gap-2 text-11 text-secondary">
+            <li key={`thinking-${event.seq}`} className="flex min-w-0 items-center gap-2 text-10 text-secondary">
               <span className="size-1 shrink-0 rounded-full bg-current opacity-40" aria-hidden="true" />
               <span className="min-w-0 truncate">{t("aiAssistant.runtime_thinking")}</span>
             </li>
           ))}
         {visibleTools.map((tool) => (
-          <li key={tool.id} className="min-w-0 text-11">
+          <li key={`${tool.runId}:${tool.id}`} className="min-w-0 text-10">
             <details>
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
                 <span className="min-w-0 truncate text-secondary">{tool.name}</span>
-                <span className="shrink-0 text-tertiary">
+                <span className="shrink-0 whitespace-nowrap text-tertiary tabular-nums">
                   {toolStatusLabel[tool.status] ?? tool.status}
                   {tool.duration_ms !== null ? ` · ${tool.duration_ms}ms` : ""}
                 </span>
@@ -208,19 +232,19 @@ function InlineRunTimeline({
           </li>
         ))}
         {approvalEvents.slice(-1).map((event) => (
-          <li key={`approval-${event.seq}`} className="flex min-w-0 items-center gap-2 text-11 text-secondary">
+          <li key={`approval-${event.seq}`} className="flex min-w-0 items-center gap-2 text-10 text-secondary">
             <span className="size-1 shrink-0 rounded-full bg-current opacity-40" aria-hidden="true" />
             <span className="min-w-0 truncate">{t("aiAssistant.approval_pending")}</span>
           </li>
         ))}
         {generating && (
-          <li className="flex min-w-0 items-center gap-2 text-11 text-secondary">
+          <li className="flex min-w-0 items-center gap-2 text-10 text-secondary">
             <span className="size-1 shrink-0 rounded-full bg-current opacity-40" aria-hidden="true" />
             <span className="min-w-0 truncate">{t("aiAssistant.runtime_generating")}</span>
           </li>
         )}
         {!active && events.length > 0 && (
-          <li className="flex min-w-0 items-center gap-2 text-11 text-secondary">
+          <li className="flex min-w-0 items-center gap-2 text-10 text-secondary">
             <span className="size-1 shrink-0 rounded-full bg-current opacity-40" aria-hidden="true" />
             <span className="min-w-0 truncate">{phaseLabel}</span>
           </li>
@@ -232,7 +256,7 @@ function InlineRunTimeline({
 }
 
 /** Render one durable cloud conversation message with its stable conversation identity. */
-function renderCloudMessage(message: TAssistantMessage) {
+function renderMessage(message: TAssistantMessage) {
   return message.role === "user" ? (
     <div key={message.id} className="flex justify-end">
       <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent-primary px-3.5 py-2 text-13 leading-relaxed break-words whitespace-pre-wrap text-on-color">
@@ -262,56 +286,49 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
   const assistantStore = useAIAssistant();
   const { toggleProfileSettingsModal } = useCommandPalette();
   const cloudReady = statusState === "ready";
-  const cloud = useAssistantChat(workspaceSlug, { enabled: cloudReady, focusRef });
-  const local = useWorkbenchChat(workspaceSlug, assistantStore.contextNodeId);
+  const provider = assistantStore.activeProvider;
+  const chat = useAssistantChat(workspaceSlug, {
+    enabled: provider === "local" || cloudReady,
+    provider: provider === "local" ? "SCIENCE_DISCOVERY" : "SYNLORA",
+    focusRef,
+  });
   const [input, setInput] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const operationScope = `${workspaceSlug}:${assistantStore.threadOwnerKey ?? ""}:${provider}`;
+  const operationScopeRef = useRef(operationScope);
+  operationScopeRef.current = operationScope;
 
-  const provider = assistantStore.activeProvider;
-  const busy =
-    provider === "cloud"
-      ? ["connecting", "running", "waiting_approval", "cancelling", "disconnected"].includes(cloud.streamState.phase)
-      : local.busy;
-  const disconnectCloud = cloud.disconnect;
-  const localAvailable = Boolean(assistantStore.contextNodeId);
+  const busy = ACTIVE_PHASES.has(chat.streamState.phase);
+  const disconnectChat = chat.disconnect;
+  const localAvailable = chat.scienceDiscovery?.available === true;
+  const providerReady = provider === "cloud" ? cloudReady : localAvailable;
   const isDesktop = useAgentDockDesktop();
   const effectiveDockMode = assistantStore.dockMode === "docked" && isDesktop;
 
   useEffect(() => {
-    if (!assistantStore.isOpen) disconnectCloud();
-  }, [assistantStore.isOpen, disconnectCloud]);
-
-  useEffect(() => {
-    if (
-      assistantStore.activeProvider === "local" &&
-      cloud.contextEnvelope &&
-      cloud.contextEnvelope.target_type !== "RESEARCH_CHAIN_NODE"
-    ) {
-      assistantStore.setProvider("cloud");
-    }
-  }, [assistantStore, cloud.contextEnvelope]);
+    if (!assistantStore.isOpen) disconnectChat();
+  }, [assistantStore.isOpen, disconnectChat]);
 
   useEffect(() => {
     listRef.current?.scrollTo?.({ top: listRef.current.scrollHeight, behavior: "smooth" });
-  }, [cloud.messages.length, cloud.streamingAnswer, local.sections]);
+  }, [chat.messages.length, chat.streamingAnswer]);
 
   const send = (query: string) => {
     const trimmed = query.trim();
-    if (!trimmed || busy) return;
+    if (!trimmed || busy || !providerReady) return;
     setInput("");
-    if (provider === "local" && localAvailable) void local.send(trimmed);
-    else void cloud.send(trimmed, focusRef ?? undefined);
+    void chat.send(trimmed, focusRef ?? undefined);
   };
 
   /** Start a clean conversation, explicitly cancelling a still-running turn first. */
   const startNewConversation = async () => {
+    const requestScope = operationScope;
     if (busy) {
-      if (provider === "local") await local.stop();
-      else await cloud.stop();
+      await chat.stop();
     }
-    if (provider === "local") local.reset();
-    else cloud.reset();
+    if (operationScopeRef.current !== requestScope) return;
+    chat.reset();
     setHistoryOpen(false);
     assistantStore.setActiveView("conversation");
   };
@@ -354,7 +371,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
   };
 
   const providerSelect = (
-    <label className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-11 text-secondary transition hover:bg-surface-2">
+    <label className="flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-11 text-secondary transition hover:bg-surface-2">
       {provider === "cloud" ? (
         <Cloud className="size-3.5 text-accent-primary" />
       ) : (
@@ -363,7 +380,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
       <select
         value={provider}
         onChange={(event) => assistantStore.setProvider(event.target.value as "cloud" | "local")}
-        className="cursor-pointer appearance-none bg-transparent pr-0.5 outline-none"
+        className="max-w-48 min-w-0 cursor-pointer appearance-none truncate bg-transparent pr-0.5 outline-none"
         aria-label={t("aiAssistant.provider")}
       >
         <option value="cloud">{t("aiAssistant.provider_cloud")}</option>
@@ -413,6 +430,25 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
     </div>
   );
 
+  const localGuidance = (
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+      <p className="text-12 leading-relaxed text-secondary">
+        {t(
+          chat.scienceDiscovery?.reason === "science_discovery_service_unavailable"
+            ? "aiAssistant.error_science_discovery_service_unavailable"
+            : "aiAssistant.local_unavailable"
+        )}
+      </p>
+      <button
+        type="button"
+        className="rounded-md border border-subtle px-3 py-1.5 text-12 text-primary hover:bg-surface-2"
+        onClick={() => toggleProfileSettingsModal({ activeTab: "agent-configuration", isOpen: true })}
+      >
+        {t("aiAssistant.configure_local")}
+      </button>
+    </div>
+  );
+
   const conversationComposer = (
     <>
       <div className="focus-within:border-accent-primary mx-4 mb-2 shrink-0 rounded-xl border border-subtle bg-layer-1 p-2.5 transition">
@@ -422,7 +458,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
           placeholder={t("aiAssistant.placeholder")}
           aria-label={t("aiAssistant.placeholder")}
           className="max-h-32 min-h-6 w-full resize-none bg-transparent text-13 text-primary outline-none placeholder:text-tertiary"
-          disabled={provider === "cloud" && !cloudReady}
+          disabled={!providerReady}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
@@ -434,10 +470,10 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
         <div className="flex items-center justify-between gap-2 pt-1.5">
           <div className="flex min-w-0 items-center gap-1">
             {providerSelect}
-            {cloud.contextEnvelope && (
+            {chat.contextEnvelope && (
               <span
                 className="flex min-w-0 items-center gap-1 text-10 text-tertiary"
-                title={cloud.contextEnvelope.target_hierarchy.map((item) => item.title).join(" / ")}
+                title={chat.contextEnvelope.target_hierarchy.map((item) => item.title).join(" / ")}
               >
                 <Link2 className="size-3 shrink-0 text-accent-primary" />
                 <span className="truncate">{t("aiAssistant.context_linked")}</span>
@@ -447,7 +483,8 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
           {busy ? (
             <button
               type="button"
-              onClick={() => (provider === "cloud" ? void cloud.stop() : void local.stop())}
+              onClick={() => void chat.stop()}
+              disabled={!providerReady}
               aria-label={t("aiAssistant.stop")}
               className="hover:bg-surface-2-hover flex size-7 items-center justify-center rounded-lg bg-surface-2 text-danger-primary transition"
             >
@@ -457,7 +494,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
             <button
               type="button"
               onClick={() => send(input)}
-              disabled={!input.trim() || (provider === "cloud" && !cloudReady)}
+              disabled={!input.trim() || !providerReady}
               aria-label={t("aiAssistant.send")}
               className="flex size-7 items-center justify-center rounded-lg bg-accent-primary text-on-color transition hover:opacity-90 disabled:opacity-40"
             >
@@ -466,27 +503,35 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
           )}
         </div>
       </div>
-      <p className="shrink-0 pb-3 text-center text-10 text-tertiary">{t("aiAssistant.disclaimer")}</p>
+      {!localAvailable && provider === "cloud" && chat.contextEnvelope && (
+        <button
+          type="button"
+          className="mx-4 mb-2 text-left text-10 text-secondary hover:underline"
+          onClick={() => toggleProfileSettingsModal({ activeTab: "agent-configuration", isOpen: true })}
+        >
+          {t("aiAssistant.configure_local")}
+        </button>
+      )}
     </>
   );
 
-  const runtimeTools = useMemo(() => mergeRuntimeToolCalls(cloud.runtimeEvents), [cloud.runtimeEvents]);
-  const runtimeRuns = useMemo(() => groupRuntimeEventsByRun(cloud.runtimeEvents), [cloud.runtimeEvents]);
+  const runtimeTools = useMemo(() => mergeRuntimeToolCalls(chat.runtimeEvents), [chat.runtimeEvents]);
+  const runtimeRuns = useMemo(() => groupRuntimeEventsByRun(chat.runtimeEvents), [chat.runtimeEvents]);
   const approvalEvents = useMemo(
-    () => cloud.runtimeEvents.filter((event) => event.event_type === "APPROVAL"),
-    [cloud.runtimeEvents]
+    () => chat.runtimeEvents.filter((event) => event.event_type === "APPROVAL"),
+    [chat.runtimeEvents]
   );
   const contextSnapshots = useMemo(
-    () => cloud.runtimeEvents.filter((event) => event.event_type === "CONTEXT_ASSEMBLED"),
-    [cloud.runtimeEvents]
+    () => chat.runtimeEvents.filter((event) => event.event_type === "CONTEXT_ASSEMBLED"),
+    [chat.runtimeEvents]
   );
   const contextAccessEvents = useMemo(
-    () => cloud.runtimeEvents.filter((event) => event.event_type === "CONTEXT_ACCESSED"),
-    [cloud.runtimeEvents]
+    () => chat.runtimeEvents.filter((event) => event.event_type === "CONTEXT_ACCESSED"),
+    [chat.runtimeEvents]
   );
   const inlineRuntimeEvents = useMemo(
-    () => cloud.runtimeEvents.filter((event) => event.run_id === cloud.inlineRunId),
-    [cloud.inlineRunId, cloud.runtimeEvents]
+    () => chat.runtimeEvents.filter((event) => event.run_id === chat.inlineRunId),
+    [chat.inlineRunId, chat.runtimeEvents]
   );
   const inlineRuntimeTools = useMemo(() => mergeRuntimeToolCalls(inlineRuntimeEvents), [inlineRuntimeEvents]);
   const inlineApprovalEvents = useMemo(
@@ -497,6 +542,21 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
     () => inlineRuntimeEvents.filter((event) => event.event_type === "CONTEXT_ASSEMBLED"),
     [inlineRuntimeEvents]
   );
+  const artifacts = chat.runtimeEvents.filter((event) => event.event_type === "INTERMEDIATE_ARTIFACT");
+  const errorLabels: Record<string, string> = {
+    science_discovery_not_configured: t("aiAssistant.error_science_discovery_not_configured"),
+    science_discovery_service_unavailable: t("aiAssistant.error_science_discovery_service_unavailable"),
+    science_discovery_session_failed: t("aiAssistant.error_science_discovery_session_failed"),
+    science_discovery_project_failed: t("aiAssistant.error_science_discovery_session_failed"),
+    science_discovery_run_failed: t("aiAssistant.error_science_discovery_run_failed"),
+    science_discovery_event_cursor_failed: t("aiAssistant.error_science_discovery_events_failed"),
+    science_discovery_submission_pending: t("aiAssistant.error_science_discovery_submission_pending"),
+    science_discovery_submission_failed: t("aiAssistant.error_science_discovery_submission_failed"),
+    science_discovery_submission_rejected: t("aiAssistant.error_science_discovery_submission_failed"),
+    research_mcp_not_configured: t("aiAssistant.error_research_mcp_not_configured"),
+    research_mcp_binding_failed: t("aiAssistant.error_research_mcp_not_configured"),
+    agent_context_provider_mismatch: t("aiAssistant.error_provider_mismatch"),
+  };
   const phaseLabels: Record<string, string> = {
     idle: "空闲",
     connecting: "连接中",
@@ -509,71 +569,70 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
     disconnected: "连接中断，正在重连",
     expired: "上下文已过期",
   };
-  const phaseLabel = phaseLabels[cloud.streamState.phase] ?? cloud.streamState.phase;
+  const phaseLabel = phaseLabels[chat.streamState.phase] ?? chat.streamState.phase;
   const inlineLatestEventAt = inlineRuntimeEvents.at(-1)?.created_at ?? null;
   const latestEventLabel = inlineLatestEventAt
     ? new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(
         new Date(inlineLatestEventAt)
       )
     : "暂无事件";
-  const lastUserMessageIndex = cloud.messages.reduce(
+  const lastUserMessageIndex = chat.messages.reduce(
     (lastIndex, message, index) => (message.role === "user" ? index : lastIndex),
     -1
   );
-  const cloudMessagesBeforeRun = lastUserMessageIndex >= 0 ? cloud.messages.slice(0, lastUserMessageIndex + 1) : [];
-  const cloudMessagesAfterRun =
-    lastUserMessageIndex >= 0 ? cloud.messages.slice(lastUserMessageIndex + 1) : cloud.messages;
+  const messagesBeforeRun = lastUserMessageIndex >= 0 ? chat.messages.slice(0, lastUserMessageIndex + 1) : [];
+  const messagesAfterRun = lastUserMessageIndex >= 0 ? chat.messages.slice(lastUserMessageIndex + 1) : chat.messages;
   const inlineTimelineVisible =
     inlineRuntimeTools.length > 0 ||
-    ACTIVE_CLOUD_PHASES.has(cloud.streamState.phase) ||
-    ["completed", "failed", "cancelled", "expired"].includes(cloud.streamState.phase);
+    ACTIVE_PHASES.has(chat.streamState.phase) ||
+    ["completed", "failed", "cancelled", "expired"].includes(chat.streamState.phase);
 
   const contextView = (
     <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 text-11">
       <section className="pb-4">
         <h3 className="mb-2 text-12 font-semibold text-primary">已注入摘要</h3>
-        {cloud.contextEnvelope?.page_context && (
+        {chat.contextEnvelope?.page_context && (
           <div className="mb-3 border-l border-subtle pl-3">
             <div className="flex items-baseline justify-between gap-3">
               <p className="min-w-0 truncate font-medium text-primary">
-                {cloud.contextEnvelope.page_context.focus?.title || "Workspace"}
+                {chat.contextEnvelope.page_context.focus?.title || "Workspace"}
               </p>
-              <span className="shrink-0 text-10 text-tertiary">{cloud.contextEnvelope.page_context.page_kind}</span>
+              <span className="shrink-0 text-10 text-tertiary">{chat.contextEnvelope.page_context.page_kind}</span>
             </div>
             <p className="mt-0.5 text-10 break-all text-tertiary">
-              {cloud.contextEnvelope.page_context.route || "/"} · {cloud.contextEnvelope.page_context.generated_at}
+              {chat.contextEnvelope.page_context.route || "/"} · {chat.contextEnvelope.page_context.generated_at}
             </p>
             <p className="mt-0.5 text-10 text-tertiary">
-              Snapshot {cloud.contextEnvelope.page_context.hash?.slice(0, 12) || "—"}
+              Snapshot {chat.contextEnvelope.page_context.hash?.slice(0, 12) || "—"}
             </p>
           </div>
         )}
         <p className="leading-relaxed break-words text-secondary">
-          {cloud.contextEnvelope?.target_hierarchy.map((item) => item.title).join(" / ") ||
+          {chat.contextEnvelope?.target_hierarchy.map((item) => item.title).join(" / ") ||
             t("aiAssistant.context_workspace_only")}
         </p>
         <p className="mt-2 text-tertiary">
-          资源 {cloud.contextEnvelope?.resources_summary.total ?? 0} 项 · 授权版本 v
-          {cloud.contextEnvelope?.context_version ?? "—"}
+          资源 {chat.contextEnvelope?.resources_summary.total ?? 0} 项 · 授权版本 v
+          {chat.contextEnvelope?.context_version ?? "—"}
         </p>
         <ul className="mt-1 space-y-1 text-secondary">
-          {Object.entries(cloud.contextEnvelope?.resources_summary.by_kind ?? {}).map(([kind, count]) => (
+          {Object.entries(chat.contextEnvelope?.resources_summary.by_kind ?? {}).map(([kind, count]) => (
             <li key={kind}>
               {kind}: {count}
             </li>
           ))}
         </ul>
-        <p className="mt-1 text-10 break-all text-tertiary">Manifest {cloud.contextEnvelope?.manifest_hash || "—"}</p>
+        <p className="mt-1 text-10 break-all text-tertiary">Manifest {chat.contextEnvelope?.manifest_hash || "—"}</p>
         <p className="mt-2 leading-relaxed break-words whitespace-pre-wrap text-secondary">
-          {cloud.contextEnvelope?.manifest_summary?.summary || "暂无摘要"}
+          {chat.contextEnvelope?.manifest_summary?.summary || "暂无摘要"}
         </p>
-        {Boolean(cloud.contextEnvelope?.manifest_summary?.resources.length) && (
+        {Boolean(chat.contextEnvelope?.manifest_summary?.resources.length) && (
           <details className="mt-2">
             <summary className="cursor-pointer text-secondary">
-              资源清单（{cloud.contextEnvelope?.manifest_summary?.resources.length ?? 0}）
+              资源清单（{chat.contextEnvelope?.manifest_summary?.resources.length ?? 0}）
             </summary>
             <ul className="mt-2 divide-y divide-subtle">
-              {cloud.contextEnvelope?.manifest_summary?.resources.map((resource) => (
+              {chat.contextEnvelope?.manifest_summary?.resources.map((resource) => (
                 <li key={`${resource.kind}-${resource.id}`} className="py-1.5">
                   <p className="break-words text-primary">{resource.title || resource.id}</p>
                   <p className="text-tertiary">
@@ -589,13 +648,14 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
 
       <section className="border-t border-subtle py-4">
         <h3 className="mb-2 text-12 font-semibold text-primary">已授权能力</h3>
-        <p className="text-tertiary">Plane unified MCP</p>
+        <p className="text-tertiary">{provider === "local" ? "Plane research MCP" : "Plane unified MCP"}</p>
         <details className="mt-1">
           <summary className="cursor-pointer text-secondary">
-            读取 / 写入工具（{cloud.contextEnvelope?.capabilities.allowed_tools.length ?? 0}）
+            {t(provider === "local" ? "aiAssistant.research_tools" : "aiAssistant.workspace_tools")}（
+            {chat.contextEnvelope?.capabilities.allowed_tools.length ?? 0}）
           </summary>
           <ul className="mt-1 space-y-1">
-            {(cloud.contextEnvelope?.capabilities.allowed_tools ?? []).map((tool) => (
+            {(chat.contextEnvelope?.capabilities.allowed_tools ?? []).map((tool) => (
               <li key={tool} className="flex items-baseline justify-between gap-2">
                 <span className="min-w-0 break-all text-secondary">{tool}</span>
                 <span className="shrink-0 text-10 text-tertiary">
@@ -608,13 +668,13 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
         <p className="mt-2 text-tertiary">插件 · MCP · 知识库 · 文件范围</p>
         <p className="mt-1 break-words text-secondary">
           {[
-            ...(cloud.contextEnvelope?.capabilities.allowed_plugins ?? []),
-            ...(cloud.contextEnvelope?.capabilities.allowed_mcp_ids ?? []),
-            ...(cloud.contextEnvelope?.capabilities.allowed_knowledge_base_ids ?? []),
-            ...(cloud.contextEnvelope?.capabilities.allowed_file_ids ?? []),
+            ...(chat.contextEnvelope?.capabilities.allowed_plugins ?? []),
+            ...(chat.contextEnvelope?.capabilities.allowed_mcp_ids ?? []),
+            ...(chat.contextEnvelope?.capabilities.allowed_knowledge_base_ids ?? []),
+            ...(chat.contextEnvelope?.capabilities.allowed_file_ids ?? []),
           ].join(" · ") || "无额外授权范围"}
         </p>
-        <p className="mt-2 text-tertiary">有效期至 {cloud.contextEnvelope?.expiry ?? "—"}</p>
+        <p className="mt-2 text-tertiary">有效期至 {chat.contextEnvelope?.expiry ?? "—"}</p>
       </section>
 
       <section className="border-t border-subtle pt-4">
@@ -641,18 +701,6 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
       </section>
     </div>
   );
-  const localRuntimeFacts =
-    provider === "local"
-      ? local.sections.flatMap((section) =>
-          section.items
-            .filter((item) => item.kind === "tool" || item.kind === "approval")
-            .map((item) => ({
-              name: item.kind === "tool" ? item.name : t("aiAssistant.approval_pending"),
-              status: item.kind === "tool" ? item.status : t("aiAssistant.view_runtime"),
-            }))
-        )
-      : [];
-
   const runtimeView = (
     <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 text-12">
       <section>
@@ -702,10 +750,10 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
 
       <section className="border-t border-subtle pt-4">
         <h3 className="mb-2 text-12 font-semibold text-primary">工具执行</h3>
-        {provider === "cloud" && runtimeTools.length ? (
+        {runtimeTools.length ? (
           <div className="divide-y divide-subtle border-t border-b border-subtle">
             {runtimeTools.map((tool) => (
-              <details key={tool.id}>
+              <details key={`${tool.runId}:${tool.id}`}>
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-12">
                   <span className="min-w-0 flex-1 truncate font-medium text-primary">{tool.name}</span>
                   <span className="shrink-0 text-10 text-tertiary">{tool.status}</span>
@@ -732,8 +780,6 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
               </details>
             ))}
           </div>
-        ) : provider === "local" && localRuntimeFacts.length ? (
-          localRuntimeFacts.map((fact) => <ToolLine key={`${fact.name}-${fact.status}`} {...fact} />)
         ) : (
           <p className="py-3 text-11 text-tertiary">{t("aiAssistant.runtime_empty")}</p>
         )}
@@ -743,7 +789,16 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
         <section className="border-t border-subtle pt-4">
           <h3 className="mb-2 text-12 font-semibold text-primary">{t("aiAssistant.runtime_trace")}</h3>
           {approvalEvents.map((event) => (
-            <ToolLine key={event.seq} name={t("aiAssistant.approval_pending")} status={event.event_type} />
+            <div key={`${event.run_id}:${event.seq}`} className="border-b border-subtle px-3 py-2.5 last:border-b-0">
+              <p className="mb-1 text-10 text-tertiary">
+                {t(
+                  event.payload.approval_status === "resolved"
+                    ? "aiAssistant.approval_resolved"
+                    : "aiAssistant.approval_request"
+                )}
+              </p>
+              <ApprovalDetails payload={event.payload} />
+            </div>
           ))}
           {contextSnapshots.map((event) => (
             <ToolLine
@@ -805,7 +860,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
               aria-label={t("aiAssistant.launch_history")}
               title={t("aiAssistant.launch_history")}
               aria-pressed={historyOpen}
-              disabled={provider !== "cloud" || busy}
+              disabled={busy}
             >
               <History className="size-3.5" />
             </Button>
@@ -853,24 +908,24 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
         ))}
       </nav>
 
-      {cloud.contextEnvelope && (
+      {chat.contextEnvelope && (
         <div className="shrink-0 border-b border-subtle bg-surface-2 px-4 py-2">
-          <p className="truncate text-10 text-secondary" title={cloud.contextEnvelope.session_binding.target_key}>
-            {cloud.contextEnvelope.target_hierarchy.map((item) => item.title).join(" / ")}
+          <p className="truncate text-10 text-secondary" title={chat.contextEnvelope.session_binding.target_key}>
+            {chat.contextEnvelope.target_hierarchy.map((item) => item.title).join(" / ")}
           </p>
         </div>
       )}
 
-      {provider === "cloud" && !cloudReady ? (
+      {!providerReady && !historyOpen && !assistantStore.threadId && chat.messages.length === 0 ? (
         <>
-          {statusGuidance}
+          {provider === "local" ? localGuidance : statusGuidance}
           {conversationComposer}
         </>
       ) : assistantStore.activeView === "context" ? (
         contextView
       ) : assistantStore.activeView === "runtime" ? (
         runtimeView
-      ) : provider === "cloud" && historyOpen ? (
+      ) : historyOpen ? (
         <section className="min-h-0 flex-1 overflow-y-auto px-4 py-4" aria-label={t("aiAssistant.launch_history")}>
           <header className="pb-3">
             <h3 className="text-12 font-semibold text-primary">{t("aiAssistant.launch_history")}</h3>
@@ -891,16 +946,16 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
               )}
             </p>
           </header>
-          {cloud.historyLoading ? (
+          {chat.historyLoading ? (
             <p className="py-3 text-11 text-tertiary">{t("common.loading")}</p>
-          ) : cloud.historySessions.length ? (
+          ) : chat.historySessions.length ? (
             <ol className="divide-y divide-subtle border-t border-subtle" role="list">
-              {cloud.historySessions.map((item) => (
+              {chat.historySessions.map((item) => (
                 <li key={item.session_id}>
                   <button
                     type="button"
                     onClick={() => {
-                      if (cloud.selectHistorySession(item)) setHistoryOpen(false);
+                      if (chat.selectHistorySession(item)) setHistoryOpen(false);
                     }}
                     disabled={busy}
                     aria-disabled={busy}
@@ -918,6 +973,13 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
                       </time>
                     </span>
                     <span className="truncate text-11 text-secondary">
+                      <span className="mr-2 text-10 text-tertiary">
+                        {t(
+                          item.provider === "SCIENCE_DISCOVERY"
+                            ? "aiAssistant.provider_badge_local"
+                            : "aiAssistant.provider_badge_cloud"
+                        )}
+                      </span>
                       {item.target_metadata?.page?.focus_title ||
                         item.target_metadata?.page?.page_kind ||
                         t("aiAssistant.launch_history_page")}
@@ -937,7 +999,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
       ) : (
         <>
           <div ref={listRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
-            {provider === "cloud" && cloud.messages.length === 0 && !cloud.streamingAnswer && (
+            {chat.messages.length === 0 && !chat.streamingAnswer && (
               <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
                 <span className="flex size-10 items-center justify-center rounded-xl bg-accent-primary/10 text-accent-primary">
                   <Sparkles className="size-5" />
@@ -949,88 +1011,108 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
               </div>
             )}
 
-            {provider === "cloud" && cloudMessagesBeforeRun.map((message) => renderCloudMessage(message))}
+            {messagesBeforeRun.map((message) => renderMessage(message))}
 
-            {provider === "cloud" && inlineTimelineVisible && (
+            {inlineTimelineVisible && (
               <InlineRunTimeline
-                active={ACTIVE_CLOUD_PHASES.has(cloud.streamState.phase)}
+                active={ACTIVE_PHASES.has(chat.streamState.phase)}
                 approvalEvents={inlineApprovalEvents}
                 contextEvents={inlineContextSnapshots}
                 events={inlineRuntimeEvents}
-                generating={Boolean(cloud.streamingAnswer)}
+                generating={Boolean(chat.streamingAnswer)}
                 phaseLabel={phaseLabel}
                 latestEventLabel={latestEventLabel}
                 tools={inlineRuntimeTools}
               />
             )}
 
-            {provider === "cloud" && cloudMessagesAfterRun.map((message) => renderCloudMessage(message))}
+            {messagesAfterRun.map((message) => renderMessage(message))}
 
-            {provider === "cloud" &&
-              (cloud.streamingAnswer ||
-                ["connecting", "running", "waiting_approval", "cancelling"].includes(cloud.streamState.phase)) && (
-                <div className="flex gap-3">
-                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-accent-primary/10 text-accent-primary">
-                    <Sparkles className="size-3.5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    {cloud.streamingAnswer ? (
-                      <>
-                        <AnswerMarkdown content={cloud.streamingAnswer} />
-                        <span className="ml-0.5 inline-block animate-pulse text-accent-primary">▍</span>
-                      </>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 text-11 text-tertiary">
-                        <Loader2 className="size-3 animate-spin" />
-                        {cloud.streamState.phase === "connecting" ? "正在连接…" : "正在处理…"}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
+            {artifacts.map((event) => {
+              const artifact = (event.payload.artifact ?? {}) as Record<string, unknown>;
+              return (
+                <section key={`${event.run_id}:${event.seq}`} className="ml-7 border-l border-subtle pl-3">
+                  <p className="text-11 font-medium text-primary">
+                    {String(artifact.title ?? artifact.name ?? event.payload.title ?? t("aiAssistant.artifact"))}
+                  </p>
+                  <p className="mt-1 text-11 break-words text-secondary">
+                    {String(event.payload.summary ?? artifact.description ?? "")}
+                  </p>
+                </section>
+              );
+            })}
 
-            {provider === "cloud" && cloud.streamState.phase === "waiting_approval" && (
-              <div className="mx-4 mb-2 rounded-lg border border-subtle bg-layer-1 px-3 py-2">
-                {(() => {
-                  const approval = inlineApprovalEvents.at(-1)?.payload ?? {};
-                  return (
+            {(chat.streamingAnswer ||
+              ["connecting", "running", "waiting_approval", "cancelling"].includes(chat.streamState.phase)) && (
+              <div className="flex gap-3">
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-accent-primary/10 text-accent-primary">
+                  <Sparkles className="size-3.5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  {chat.streamingAnswer ? (
                     <>
-                      <p className="text-12 font-medium text-primary">{String(approval.tool ?? "工具执行请求")}</p>
-                      {Boolean(approval.args_preview) && (
-                        <pre className="font-mono mt-1 max-h-24 overflow-auto rounded-md border border-subtle bg-surface-1 p-2 text-11 whitespace-pre-wrap text-secondary">
-                          {String(approval.args_preview)}
-                        </pre>
-                      )}
-                      <div className="mt-2 flex items-center justify-end gap-2">
-                        <Button variant="secondary" size="sm" onClick={() => void cloud.answerApproval(false)}>
-                          {t("aiAssistant.reject")}
-                        </Button>
-                        <Button variant="primary" size="sm" onClick={() => void cloud.answerApproval(true)}>
-                          {t("aiAssistant.approve")}
-                        </Button>
-                      </div>
+                      <AnswerMarkdown content={chat.streamingAnswer} />
+                      <span className="ml-0.5 inline-block animate-pulse text-accent-primary">▍</span>
                     </>
-                  );
-                })()}
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-11 text-tertiary">
+                      <Loader2 className="size-3 animate-spin" />
+                      {chat.streamState.phase === "connecting" ? "正在连接…" : "正在处理…"}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
-            {provider === "cloud" && cloud.streamState.phase === "disconnected" && (
+
+            {!providerReady && <p className="px-4 py-2 text-12 text-secondary">{t("aiAssistant.history_read_only")}</p>}
+            {chat.streamState.phase === "waiting_approval" &&
+              chat.pendingApprovals.map((approval) => {
+                const permissionId = String(approval.permission_request_id ?? "");
+                return (
+                  <div key={permissionId} className="mx-4 mb-2 rounded-lg border border-subtle bg-layer-1 px-3 py-2">
+                    <ApprovalDetails payload={approval} />
+                    <div className="mt-2 flex items-center justify-end gap-2">
+                      <Button
+                        disabled={!providerReady}
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void chat.answerApproval(false, permissionId)}
+                      >
+                        <X className="size-3" />
+                        {t("aiAssistant.reject")}
+                      </Button>
+                      <Button
+                        disabled={!providerReady}
+                        variant="primary"
+                        size="sm"
+                        onClick={() => void chat.answerApproval(true, permissionId)}
+                      >
+                        <Check className="size-3" />
+                        {t("aiAssistant.approve")}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            {chat.streamState.phase === "disconnected" && (
               <p className="px-3 py-2 text-11 text-secondary">连接已断开，正在从最近事件位置恢复。</p>
             )}
-            {provider === "cloud" && ["failed", "expired"].includes(cloud.streamState.phase) && (
+            {["failed", "expired"].includes(chat.streamState.phase) && (
               <div className="flex items-center justify-between gap-2 rounded-lg bg-danger-subtle/50 px-3 py-2 text-12 text-danger-primary">
                 <span>
-                  {cloud.streamState.phase === "expired"
+                  {chat.streamState.phase === "expired"
                     ? "上下文授权已过期，请刷新上下文后重试。"
-                    : (cloud.streamState.error ?? t("aiAssistant.error_generic"))}
+                    : (errorLabels[chat.streamState.error ?? ""] ??
+                      chat.streamState.error ??
+                      t("aiAssistant.error_generic"))}
                 </span>
-                {cloud.streamState.canRetry && (
+                {chat.streamState.canRetry && (
                   <Button
                     variant="secondary"
                     size="sm"
                     onClick={() =>
-                      void cloud.send(
-                        input || cloud.messages[cloud.messages.length - 1]?.content || "",
+                      void chat.send(
+                        input || chat.messages[chat.messages.length - 1]?.content || "",
                         focusRef ?? undefined
                       )
                     }
@@ -1041,80 +1123,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
                 )}
               </div>
             )}
-
-            {provider === "local" &&
-              local.sections.map((section) => (
-                <div key={section.userKey} className="space-y-4">
-                  <div className="flex justify-end">
-                    <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent-primary px-3.5 py-2 text-13 leading-relaxed whitespace-pre-wrap text-on-color">
-                      {section.text}
-                    </div>
-                  </div>
-                  {section.items.map((item) => {
-                    const key = item.key;
-                    if (item.kind === "assistant") {
-                      return (
-                        <div key={key} className="flex gap-3">
-                          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-accent-primary/10 text-accent-primary">
-                            <Sparkles className="size-3.5" />
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <AnswerMarkdown content={item.text} />
-                            {item.streaming && (
-                              <span className="ml-0.5 inline-block animate-pulse text-accent-primary">▍</span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    }
-                    if (item.kind === "tool") return <ToolLine key={key} name={item.name} status={item.status} />;
-                    if (item.kind === "approval")
-                      return (
-                        <p key={key} className="rounded-lg bg-layer-1 px-3 py-2 text-11 text-secondary">
-                          {t("aiAssistant.approval_pending")}
-                        </p>
-                      );
-                    if (item.kind === "notice")
-                      return (
-                        <p
-                          key={key}
-                          className={`rounded-lg px-3 py-2 text-11 ${
-                            item.tone === "error"
-                              ? "bg-danger-subtle/50 text-danger-primary"
-                              : "bg-layer-1 text-secondary"
-                          }`}
-                        >
-                          {item.label}
-                        </p>
-                      );
-                    return null;
-                  })}
-                </div>
-              ))}
-
-            {provider === "local" && !localAvailable && (
-              <div className="flex h-full items-center justify-center text-center text-12 text-tertiary">
-                {t("aiAssistant.local_unavailable")}
-              </div>
-            )}
-            {provider === "local" && local.error && (
-              <div className="rounded-lg bg-danger-subtle/50 px-3 py-2 text-12 text-danger-primary">{local.error}</div>
-            )}
           </div>
-
-          {provider === "local" && local.waitingApproval && (
-            <div className="mx-4 mb-2 flex shrink-0 items-center justify-between gap-2 rounded-lg border border-subtle bg-layer-1 px-3 py-2 text-12 text-secondary">
-              <span>{t("aiAssistant.approval_pending")}</span>
-              <div className="flex gap-1.5">
-                <Button variant="primary" size="sm" onClick={() => void local.decide(true)}>
-                  {t("aiAssistant.approve")}
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => void local.decide(false)}>
-                  {t("aiAssistant.reject")}
-                </Button>
-              </div>
-            </div>
-          )}
 
           {conversationComposer}
         </>

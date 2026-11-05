@@ -15,6 +15,7 @@ from django.utils import timezone
 
 from plane.db.models import (
     Project,
+    ResearchAgentSession,
     ResearchChain,
     ResearchChainNode,
     ResearchContextGrant,
@@ -23,6 +24,8 @@ from plane.db.models import (
 from plane.mcp.catalog import SCHEMAS as UNIFIED_MCP_SCHEMAS
 from plane.research.services.agent_page_context import build_page_context
 from plane.research.services.context_tokens import issue_agent_dock_context_token
+from plane.research.services.backend_connections import resolve_science_discovery_connection
+from plane.research.services.mcp_catalog import TOOL_NAMES
 from plane.research.views.projects import can_read_project_research_metadata, visible_profile_queryset
 
 
@@ -33,6 +36,23 @@ class AgentDockContextError(Exception):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
+
+
+SD_DOCK_POLICY_VERSION = "agent-dock-science-discovery.v1"
+
+
+def grant_provider(grant: ResearchContextGrant) -> str:
+    """返回授权绑定的后端，兼容现有 Synlora 授权。
+
+    Args:
+        grant: 服务端上下文授权。
+
+    Returns:
+        固定的会话 provider 标识。
+    """
+    if grant.policy_version == SD_DOCK_POLICY_VERSION:
+        return ResearchAgentSession.Provider.SCIENCE_DISCOVERY
+    return ResearchAgentSession.Provider.SYNLORA
 
 
 @dataclass(frozen=True)
@@ -164,8 +184,20 @@ def _envelope(grant: ResearchContextGrant, target: AgentDockTarget, user) -> dic
     for resource in manifest.get("resources", []):
         kind = str(resource.get("kind") or "other")
         resource_kinds[kind] = resource_kinds.get(kind, 0) + 1
+    provider = grant_provider(grant)
+    is_sd = provider == ResearchAgentSession.Provider.SCIENCE_DISCOVERY
+    connection = resolve_science_discovery_connection(target.workspace, user)
+    sd_configured = bool(connection and connection.base_url and connection.credential_encrypted)
+    sd_available = sd_configured and connection.health_status != "DOWN"
     return {
         "schema_version": "agent-context-envelope.v2",
+        "provider": provider,
+        "science_discovery": {
+            "available": sd_available,
+            "reason": "" if sd_available else (
+                "science_discovery_service_unavailable" if sd_configured else "science_discovery_not_configured"
+            ),
+        },
         "context_id": str(grant.context_id),
         "context_version": grant.context_version,
         "status": "linked",
@@ -193,8 +225,8 @@ def _envelope(grant: ResearchContextGrant, target: AgentDockTarget, user) -> dic
         "manifest_hash": str(manifest.get("hash") or ""),
         "page_context": manifest.get("page_context") or {},
         "capabilities": {
-            "agent": "Synlora workspace assistant",
-            "tool_source": "plane-unified-mcp",
+            "agent": "ScienceDiscovery workspace assistant" if is_sd else "Synlora workspace assistant",
+            "tool_source": "plane-research-mcp" if is_sd else "plane-unified-mcp",
             "allowed_tools": grant.allowed_tools,
             "allowed_plugins": grant.allowed_plugins,
             "allowed_mcp_ids": grant.allowed_mcp_ids,
@@ -219,6 +251,7 @@ def resolve_agent_dock_context(
     selected_text: str = "",
     focus_ref: dict | None = None,
     attachment_ids: list[str] | None = None,
+    provider: str = ResearchAgentSession.Provider.SYNLORA,
 ):
     """Resolve a route, enforce ACL, and issue a bounded v3 Context grant.
 
@@ -226,6 +259,8 @@ def resolve_agent_dock_context(
         ``(grant, raw_token, envelope)``. Only the grant/envelope are safe to
         serialize; the raw token must remain in the backend call path.
     """
+    if provider not in ResearchAgentSession.Provider.values:
+        raise AgentDockContextError("Invalid provider", 400)
     if not request_id:
         raise AgentDockContextError("request_id is required", 400)
     if len(selected_text) > MAX_SELECTED_TEXT:
@@ -246,6 +281,8 @@ def resolve_agent_dock_context(
     if existing is not None:
         if existing.workspace_id != workspace.id or existing.user_id != user.id:
             raise AgentDockContextError("request_id was already used by another user", 409)
+        if grant_provider(existing) != provider:
+            raise AgentDockContextError("request_id was already used by another provider", 409)
         # Agent Dock threads are workspace-stable. A route only changes the page
         # seed, so moving between project/chain/node pages never forks history.
         if existing.revoked_at is not None or existing.expires_at <= timezone.now():
@@ -266,7 +303,10 @@ def resolve_agent_dock_context(
     }
     knowledge_ids: list[str] = []
     file_ids: list[str] = []
-    allowed_tools = sorted(UNIFIED_MCP_SCHEMAS)
+    is_sd = provider == ResearchAgentSession.Provider.SCIENCE_DISCOVERY
+    allowed_tools = (
+        sorted(TOOL_NAMES) if getattr(settings, "RESEARCH_MCP_ENABLED", False) else []
+    ) if is_sd else sorted(UNIFIED_MCP_SCHEMAS)
     scope_kind, scope_source = "OWNER", "workspace_member"
     issuer = _context_issuer()
     grant, token = issue_agent_dock_context_token(
@@ -285,7 +325,7 @@ def resolve_agent_dock_context(
         policy_id=f"agent-dock:workspace:{workspace.id}",
         scope_kind=scope_kind,
         scope_source=scope_source,
-        policy_version="agent-dock-policy.v1",
+        policy_version=SD_DOCK_POLICY_VERSION if is_sd else "agent-dock-policy.v1",
         issuer=issuer,
         ttl_seconds=3600,
     )

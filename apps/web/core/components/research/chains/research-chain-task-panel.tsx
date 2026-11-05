@@ -49,6 +49,10 @@ type TReasonActionState = {
   reason: string;
 };
 
+type TPendingDeleteState = {
+  taskId: string;
+};
+
 const EMPTY_FORM: TTaskFormState = {
   taskId: null,
   title: "",
@@ -126,6 +130,8 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
   const [formBusy, setFormBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const [reasonAction, setReasonAction] = useState<TReasonActionState | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<TPendingDeleteState | null>(null);
+  const [deleteError, setDeleteError] = useState("");
   const [actionBusy, setActionBusy] = useState("");
   const [actionError, setActionError] = useState("");
   const [statusMenuId, setStatusMenuId] = useState<string | null>(null);
@@ -199,6 +205,8 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
     setForm(EMPTY_FORM);
     setLocalPeek(null);
     setReasonAction(null);
+    setPendingDelete(null);
+    setDeleteError("");
     void load(() => active);
     return () => {
       active = false;
@@ -232,8 +240,15 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
     );
   }, []);
 
+  /** 从本地列表移除已删除任务，不触发整页刷新。 */
+  const removeTask = useCallback((taskId: string) => {
+    setTasks((current) => current.filter((task) => task.id !== taskId));
+  }, []);
+
   const closePeek = () => {
     setIsTaskEditMode(false);
+    setPendingDelete(null);
+    setDeleteError("");
     if (sharedPeek) sharedPeek.close();
     else setLocalPeek(null);
   };
@@ -477,6 +492,24 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
       setStatusMenuId(null);
     } catch (error) {
       setActionError(serverErrorMessage(error, t("research.chain_tasks.server_rejected")));
+    } finally {
+      setActionBusy("");
+    }
+  };
+
+  /** 确认后软删除科研任务，并关闭对应详情。 */
+  const submitDeleteTask = async () => {
+    if (!pendingDelete) return;
+    setActionBusy(`${pendingDelete.taskId}:delete`);
+    setDeleteError("");
+    try {
+      await taskService.deleteNodeTask(workspaceSlug, chainId, nodeId, pendingDelete.taskId);
+      removeTask(pendingDelete.taskId);
+      setPendingDelete(null);
+      closePeek();
+      setForm(EMPTY_FORM);
+    } catch (error) {
+      setDeleteError(serverErrorMessage(error, t("research.chain_tasks.delete_failed")));
     } finally {
       setActionBusy("");
     }
@@ -746,6 +779,11 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
           onCreate={() => void submitForm()}
           onAction={(action) => {
             if (!activeTask) return;
+            if (action === "delete") {
+              setPendingDelete({ taskId: activeTask.id });
+              setDeleteError("");
+              return;
+            }
             if (action === "cancel") {
               setReasonAction({ taskId: activeTask.id, action, reason: "" });
               setActionError("");
@@ -785,6 +823,46 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
             </Button>
             <Button variant="secondary" size="sm" disabled={Boolean(actionBusy)} onClick={() => setReasonAction(null)}>
               {t("research.chain_tasks.cancel_edit")}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {pendingDelete && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          data-delete-dialog=""
+          aria-label={t("research.chain_tasks.delete")}
+          className="fixed top-24 right-6 z-40 w-80 rounded-md border border-subtle bg-surface-1 p-4 shadow-[0_8px_24px_rgba(37,37,34,0.08)]"
+        >
+          <h4 className="text-13 font-semibold text-primary">{t("research.chain_tasks.delete")}</h4>
+          <p className="mt-2 text-12 text-secondary">{t("research.chain_tasks.delete_confirm_hint")}</p>
+          {deleteError && (
+            <p className="mt-2 text-12 text-danger-primary" role="alert">
+              {deleteError}
+            </p>
+          )}
+          <div className="mt-3 flex items-center justify-end gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={Boolean(actionBusy)}
+              onClick={() => {
+                setPendingDelete(null);
+                setDeleteError("");
+              }}
+            >
+              {t("research.chain_tasks.cancel_edit")}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              className="!bg-danger-primary !text-on-color"
+              disabled={Boolean(actionBusy)}
+              onClick={() => void submitDeleteTask()}
+            >
+              {actionBusy ? t("research.chain_tasks.processing") : t("research.chain_tasks.delete")}
             </Button>
           </div>
         </div>

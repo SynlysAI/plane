@@ -3,6 +3,7 @@
 # See the LICENSE file for details.
 
 from .instance import InstanceEndpoint, SignUpScreenVisitedEndpoint
+from .email_recipient_filters import EmailRecipientFiltersEndpoint, EmailRecipientFilterCheckEndpoint
 
 
 from .configuration import (

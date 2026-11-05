@@ -13,6 +13,7 @@ import { AIAssistantPanel } from "./ai-assistant-panel";
 // helpers
 import { AssistantService, type TAssistantStatus } from "@/services/assistant";
 import { clearLaunchHistoryScopes } from "@/components/assistant/lib/launch-history";
+import { BACKEND_AVAILABILITY_CHANGED } from "./lib/backend-availability";
 import { RightDockProvider, RightDockShell, useRightDockState } from "@/components/right-dock";
 import { useAgentDockDesktop } from "@/hooks/use-agent-dock-desktop";
 // store
@@ -57,7 +58,7 @@ const AIAssistantRootContent = observer(function AIAssistantRootContent({ childr
     error,
     mutate,
   } = useSWR(
-    workspaceSlug ? `AI_ASSISTANT_STATUS_${workspaceSlug}` : null,
+    workspaceSlug && currentUser?.id ? `AI_ASSISTANT_STATUS_${workspaceSlug}_${currentUser.id}` : null,
     workspaceSlug ? () => assistantService.getStatus(workspaceSlug) : null,
     { shouldRetryOnError: false }
   );
@@ -79,6 +80,20 @@ const AIAssistantRootContent = observer(function AIAssistantRootContent({ childr
   useEffect(() => {
     if (resolvedStatus) assistantStore.setStatus(resolvedStatus);
   }, [assistantStore, resolvedStatus]);
+
+  useEffect(() => {
+    if (!workspaceSlug) return;
+    const invalidate = (event: Event) => {
+      const changedWorkspace = (event as CustomEvent<{ workspaceSlug?: string }>).detail?.workspaceSlug;
+      if (!changedWorkspace || changedWorkspace === workspaceSlug) void mutate();
+    };
+    window.addEventListener(BACKEND_AVAILABILITY_CHANGED, invalidate);
+    return () => window.removeEventListener(BACKEND_AVAILABILITY_CHANGED, invalidate);
+  }, [mutate, workspaceSlug]);
+
+  useEffect(() => {
+    if (assistantStore.isOpen) void mutate();
+  }, [assistantStore.isOpen, mutate]);
 
   useEffect(() => {
     if (workspaceSlug && currentUser?.id) assistantStore.hydrate(workspaceSlug, currentUser.id);

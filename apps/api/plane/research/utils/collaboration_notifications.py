@@ -51,7 +51,7 @@ def _notify(task, receivers, *, actor, action, title, extra=None, include_subscr
         elif action == "completed":
             category = NotificationEvent.Category.RESEARCH_COMPLETION
             immediate = is_direct
-        elif action in {"reopened", "cancelled"}:
+        elif action in {"reopened", "cancelled", "deleted"}:
             category = NotificationEvent.Category.RESEARCH_STATE_CHANGE
             immediate = is_direct
         elif action == "commented":
@@ -165,6 +165,18 @@ def notify_task_cancelled(task, actor, reason=""):
         action="cancelled",
         title=f"科研节点任务已取消：{task.title}",
         extra={"reason": (reason or "")[:500]},
+    )
+
+
+def notify_task_deleted(task, actor):
+    """Notify the task creator and assignee that a task was deleted."""
+    receivers = [task.created_by, task.assignee]
+    return _notify(
+        task,
+        receivers,
+        actor=actor,
+        action="deleted",
+        title=f"科研节点任务已删除：{task.title}",
     )
 
 
