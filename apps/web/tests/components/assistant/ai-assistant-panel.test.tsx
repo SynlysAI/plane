@@ -484,12 +484,100 @@ describe("AIAssistantPanel", () => {
 
     typeAndSend();
     await waitForText("你好，世界");
+    const question = [...document.querySelectorAll("div")].find((node) => node.textContent === "介绍这个项目");
+    const answer = [...document.querySelectorAll("p")].find((node) => node.textContent === "你好，世界");
+    const timeline = document.querySelector('[aria-label="aiAssistant.runtime_inline"]');
+    expect(question?.compareDocumentPosition(timeline as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(timeline?.compareDocumentPosition(answer as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(document.body.textContent).toContain("plane_get_context");
     expect(document.body.textContent).toContain("runtime_context_bound");
     expect(document.body.textContent).toContain("runtime_thinking");
     expect(document.body.textContent).toContain("runtime_status_completed");
     expect(document.body.textContent).toContain("project-1");
     expect(document.body.textContent).toContain("context read");
+
+    expect(timeline?.classList.contains("ml-7")).toBe(true);
+    expect(timeline?.classList.contains("pl-3")).toBe(true);
+    expect(timeline?.classList.contains("ml-auto")).toBe(false);
+    expect(timeline?.classList.contains("max-w-[85%]")).toBe(false);
+  });
+
+  it("keeps a completed replay answer below its runtime timeline", async () => {
+    mocks.getEvents.mockResolvedValue({
+      results: [
+        event(1, "USER_MESSAGE", { content: "历史问题", remote_type: "user/message", remote_seq: 1 }),
+        event(2, "TOOL_CALL", {
+          remote_seq: 2,
+          remote_type: "tool/result",
+          name: "plane_get_context",
+          tool_call_id: "history-call",
+          status: "COMPLETED",
+        }),
+        event(3, "OUTPUT", { remote_seq: 3, remote_type: "assistant.snapshot", content: "已保存回答", final: true }),
+      ],
+      count: 3,
+      latest_seq: 3,
+      session,
+    });
+    window.localStorage.setItem("PLANE_AI_ASSISTANT_THREAD_lab", "session-1");
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+
+    await waitForText("已保存回答");
+    const question = [...document.querySelectorAll("div")].find((node) => node.textContent === "历史问题");
+    const answer = [...document.querySelectorAll("p")].find((node) => node.textContent === "已保存回答");
+    const timeline = document.querySelector('[aria-label="aiAssistant.runtime_inline"]');
+    expect(question?.compareDocumentPosition(timeline as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(timeline?.compareDocumentPosition(answer as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("does not reuse the previous run while a new question connects", async () => {
+    mocks.sendMessage
+      .mockReset()
+      .mockResolvedValueOnce({ ...session, run_id: "run-1", status: "STREAMING", run_start_cursor: 2 })
+      .mockResolvedValueOnce({ ...session, run_id: "run-2", status: "STREAMING", run_start_cursor: 10 });
+    mocks.streamEvents
+      .mockReset()
+      .mockImplementation((_workspace: string, runId: string, _cursor: number, signal: AbortSignal) =>
+        Promise.resolve(
+          runId === "run-1"
+            ? sseResponse(
+                [
+                  {
+                    type: "tool.completed",
+                    seq: 3,
+                    payload: { name: "plane_get_context", tool_call_id: "call-old", status: "completed" },
+                  },
+                  { type: "output.delta", seq: 4, payload: { content: "第一轮回答" } },
+                  { type: "run.completed", seq: 5 },
+                ],
+                signal,
+                "run-1"
+              )
+            : sseResponse([], signal, "run-2")
+        )
+      );
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+
+    typeAndSend("第一轮");
+    await waitForText("第一轮回答");
+    typeAndSend("第二轮");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    const conversationText = document.body.textContent ?? "";
+    expect(conversationText).toContain("第二轮");
+    expect(conversationText).not.toContain("plane_get_context");
+    expect(conversationText).not.toContain("aiAssistant.runtime_elapsed");
+    expect(conversationText).not.toContain("aiAssistant.runtime_latest_event");
+    expect(conversationText.indexOf("第一轮回答")).toBeLessThan(conversationText.indexOf("第二轮"));
   });
 
   it("only listens to page selection while the cloud dock is open", async () => {

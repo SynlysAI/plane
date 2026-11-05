@@ -41,7 +41,7 @@ import { Button } from "@plane/propel/button";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 // components
-import { useAssistantChat } from "./use-assistant-chat";
+import { useAssistantChat, type TAssistantMessage } from "./use-assistant-chat";
 import { groupRuntimeEventsByRun, mergeRuntimeToolCalls } from "./lib/runtime-events";
 import { useWorkbenchChat } from "./use-workbench-chat";
 import { useAgentDockDesktop } from "@/hooks/use-agent-dock-desktop";
@@ -156,17 +156,18 @@ function InlineRunTimeline({
       ? Math.max(0, (active ? Date.now() : lastEventAt) - firstEventAt)
       : 0;
   return (
-    <section
-      aria-label={t("aiAssistant.runtime_inline")}
-      className="ml-auto w-full max-w-[85%] border-l border-subtle pl-3"
-    >
-      <div className="flex items-center gap-2 text-11 text-secondary">
-        {active && <Loader2 className="size-3 animate-spin text-accent-primary" />}
+    <section aria-label={t("aiAssistant.runtime_inline")} className="ml-7 w-full border-l border-subtle pl-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-11 text-secondary">
         <span className="font-medium text-primary">{phaseLabel}</span>
-        <span className="text-tertiary">
-          {t("aiAssistant.runtime_elapsed", { count: Math.round(elapsedMs / 1000) })}
-        </span>
-        <span className="text-tertiary">{t("aiAssistant.runtime_latest_event", { label: latestEventLabel })}</span>
+        {active && <Loader2 className="size-3 animate-spin text-accent-primary" />}
+        {events.length > 0 && (
+          <span className="text-tertiary">
+            {t("aiAssistant.runtime_elapsed", { count: Math.round(elapsedMs / 1000) })}
+          </span>
+        )}
+        {events.length > 0 && (
+          <span className="text-tertiary">{t("aiAssistant.runtime_latest_event", { label: latestEventLabel })}</span>
+        )}
       </div>
       <ol className="mt-2 space-y-1.5" role="list">
         {contextEvents.slice(-1).map((event) => (
@@ -226,6 +227,26 @@ function InlineRunTimeline({
         {!events.length && <li className="text-10 text-tertiary">{t("aiAssistant.runtime_waiting_events")}</li>}
       </ol>
     </section>
+  );
+}
+
+/** Render one durable cloud conversation message with its stable conversation identity. */
+function renderCloudMessage(message: TAssistantMessage) {
+  return message.role === "user" ? (
+    <div key={message.id} className="flex justify-end">
+      <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent-primary px-3.5 py-2 text-13 leading-relaxed break-words whitespace-pre-wrap text-on-color">
+        {message.content}
+      </div>
+    </div>
+  ) : (
+    <div key={message.id} className="flex gap-3">
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-accent-primary/10 text-accent-primary">
+        <Sparkles className="size-3.5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <AnswerMarkdown content={message.content} />
+      </div>
+    </div>
   );
 }
 
@@ -460,6 +481,19 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
     () => cloud.runtimeEvents.filter((event) => event.event_type === "CONTEXT_ACCESSED"),
     [cloud.runtimeEvents]
   );
+  const inlineRuntimeEvents = useMemo(
+    () => cloud.runtimeEvents.filter((event) => event.run_id === cloud.inlineRunId),
+    [cloud.inlineRunId, cloud.runtimeEvents]
+  );
+  const inlineRuntimeTools = useMemo(() => mergeRuntimeToolCalls(inlineRuntimeEvents), [inlineRuntimeEvents]);
+  const inlineApprovalEvents = useMemo(
+    () => inlineRuntimeEvents.filter((event) => event.event_type === "APPROVAL"),
+    [inlineRuntimeEvents]
+  );
+  const inlineContextSnapshots = useMemo(
+    () => inlineRuntimeEvents.filter((event) => event.event_type === "CONTEXT_ASSEMBLED"),
+    [inlineRuntimeEvents]
+  );
   const phaseLabels: Record<string, string> = {
     idle: "空闲",
     connecting: "连接中",
@@ -473,11 +507,23 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
     expired: "上下文已过期",
   };
   const phaseLabel = phaseLabels[cloud.streamState.phase] ?? cloud.streamState.phase;
-  const latestEventLabel = cloud.latestEventAt
+  const inlineLatestEventAt = inlineRuntimeEvents.at(-1)?.created_at ?? null;
+  const latestEventLabel = inlineLatestEventAt
     ? new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(
-        new Date(cloud.latestEventAt)
+        new Date(inlineLatestEventAt)
       )
     : "暂无事件";
+  const lastUserMessageIndex = cloud.messages.reduce(
+    (lastIndex, message, index) => (message.role === "user" ? index : lastIndex),
+    -1
+  );
+  const cloudMessagesBeforeRun = lastUserMessageIndex >= 0 ? cloud.messages.slice(0, lastUserMessageIndex + 1) : [];
+  const cloudMessagesAfterRun =
+    lastUserMessageIndex >= 0 ? cloud.messages.slice(lastUserMessageIndex + 1) : cloud.messages;
+  const inlineTimelineVisible =
+    inlineRuntimeTools.length > 0 ||
+    ACTIVE_CLOUD_PHASES.has(cloud.streamState.phase) ||
+    ["completed", "failed", "cancelled", "expired"].includes(cloud.streamState.phase);
 
   const contextView = (
     <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 text-11">
@@ -900,41 +946,22 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
               </div>
             )}
 
-            {provider === "cloud" &&
-              cloud.messages.map((message) =>
-                message.role === "user" ? (
-                  <div key={message.id} className="flex justify-end">
-                    <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent-primary px-3.5 py-2 text-13 leading-relaxed break-words whitespace-pre-wrap text-on-color">
-                      {message.content}
-                    </div>
-                  </div>
-                ) : (
-                  <div key={message.id} className="flex gap-3">
-                    <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-accent-primary/10 text-accent-primary">
-                      <Sparkles className="size-3.5" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <AnswerMarkdown content={message.content} />
-                    </div>
-                  </div>
-                )
-              )}
+            {provider === "cloud" && cloudMessagesBeforeRun.map((message) => renderCloudMessage(message))}
 
-            {provider === "cloud" &&
-              (runtimeTools.length > 0 ||
-                ACTIVE_CLOUD_PHASES.has(cloud.streamState.phase) ||
-                ["completed", "failed", "cancelled", "expired"].includes(cloud.streamState.phase)) && (
-                <InlineRunTimeline
-                  active={ACTIVE_CLOUD_PHASES.has(cloud.streamState.phase)}
-                  approvalEvents={approvalEvents}
-                  contextEvents={contextSnapshots}
-                  events={cloud.runtimeEvents}
-                  generating={Boolean(cloud.streamingAnswer)}
-                  phaseLabel={phaseLabel}
-                  latestEventLabel={latestEventLabel}
-                  tools={runtimeTools}
-                />
-              )}
+            {provider === "cloud" && inlineTimelineVisible && (
+              <InlineRunTimeline
+                active={ACTIVE_CLOUD_PHASES.has(cloud.streamState.phase)}
+                approvalEvents={inlineApprovalEvents}
+                contextEvents={inlineContextSnapshots}
+                events={inlineRuntimeEvents}
+                generating={Boolean(cloud.streamingAnswer)}
+                phaseLabel={phaseLabel}
+                latestEventLabel={latestEventLabel}
+                tools={inlineRuntimeTools}
+              />
+            )}
+
+            {provider === "cloud" && cloudMessagesAfterRun.map((message) => renderCloudMessage(message))}
 
             {provider === "cloud" &&
               (cloud.streamingAnswer ||
@@ -962,7 +989,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
             {provider === "cloud" && cloud.streamState.phase === "waiting_approval" && (
               <div className="mx-4 mb-2 rounded-lg border border-subtle bg-layer-1 px-3 py-2">
                 {(() => {
-                  const approval = approvalEvents.at(-1)?.payload ?? {};
+                  const approval = inlineApprovalEvents.at(-1)?.payload ?? {};
                   return (
                     <>
                       <p className="text-12 font-medium text-primary">{String(approval.tool ?? "工具执行请求")}</p>

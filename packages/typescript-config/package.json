@@ -1,6 +1,6 @@
 {
   "name": "@plane/typescript-config",
-  "version": "9.13.3",
+  "version": "9.13.4",
   "private": true,
   "license": "AGPL-3.0",
   "files": [
