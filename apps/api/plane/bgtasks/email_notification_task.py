@@ -8,7 +8,6 @@ import smtplib
 import uuid
 from collections import defaultdict
 from datetime import timedelta
-from html import escape
 
 from bs4 import BeautifulSoup
 
@@ -35,10 +34,12 @@ from plane.db.models import (
     UserNotificationPreference,
     WorkspaceNotificationPolicy,
 )
+from plane.db.models.research.task import ResearchChainNodeTask
 from plane.license.utils.instance_value import get_email_configuration
 from plane.utils.administrative_projects import project_member_roster
 from plane.utils.email import generate_plain_text_from_html
 from plane.utils.notification_outbox import issue_notification_category
+from plane.utils.assignment_transfer import assignment_transfer_email_context
 
 MAX_EMAIL_DELIVERY_ATTEMPTS = 6
 EMAIL_DELIVERY_MAX_AGE = timedelta(hours=24)
@@ -416,6 +417,87 @@ def process_html_content(content):
         processed_content = process_mention(html_content)
         processed_content_list.append(processed_content)
     return processed_content_list
+
+
+def _display_value(value):
+    """Convert an email activity value to a concise localized string."""
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple, set)):
+        return "、".join(str(item) for item in value if str(item) not in {"", "None"})
+    return "" if value in {None, "", "None"} else str(value)
+
+
+def _issue_change_rows(data):
+    """Normalize grouped issue changes into template-ready rows.
+
+    Args:
+        data: Actor-keyed activity data produced by ``create_payload``.
+
+    Returns:
+        Flat rows containing actor, time, field label, old value, and new value.
+    """
+    labels = {
+        "name": "名称",
+        "priority": "优先级",
+        "state": "状态",
+        "assignees": "负责人",
+        "labels": "标签",
+        "start_date": "开始日期",
+        "target_date": "截止日期",
+        "estimate": "估算",
+    }
+    rows = []
+    for actor_id, changes in data.items():
+        actor = User.objects.filter(pk=actor_id).only("id", "first_name", "last_name", "display_name", "email").first()
+        actor_name = actor.display_name if actor else "已删除用户"
+        activity_time = changes.get("activity_time")
+        parsed = parse_datetime(str(activity_time)) if activity_time else None
+        if parsed is None:
+            parsed = timezone.now()
+        formatted_time = timezone.localtime(parsed).strftime("%m-%d %H:%M")
+        for field, change in changes.items():
+            if field == "activity_time" or not isinstance(change, dict):
+                continue
+            rows.append(
+                {
+                    "actor_name": actor_name,
+                    "activity_time": formatted_time,
+                    "field_label": labels.get(field, field),
+                    "old_value": _display_value(change.get("old_value")),
+                    "new_value": _display_value(change.get("new_value")),
+                }
+            )
+    return rows
+
+
+def _assignment_transfer_context(entity_type, entity, receiver, base_url):
+    """Build the transfer block only when email actions are enabled."""
+    if not getattr(settings, "NOTIFICATION_ASSIGNMENT_TRANSFER_EMAIL_ENABLED", True):
+        return {}
+    return assignment_transfer_email_context(entity_type, entity, receiver, base_url)
+
+
+def audit_email_image_resources(html_content):
+    """Reject rendered email HTML that contains fragile image resources.
+
+    Args:
+        html_content: Rendered notification HTML.
+
+    Raises:
+        ValueError: When an image source is empty, relative, external S3, or non-image.
+    """
+    soup = BeautifulSoup(html_content, "html.parser")
+    for image in soup.find_all("img"):
+        source = (image.get("src") or "").strip()
+        if not source:
+            raise ValueError("email image src is empty")
+        if source.startswith("/"):
+            raise ValueError("email image src is relative")
+        if "plane-marketing.s3" in source:
+            raise ValueError("email uses an external Plane marketing image")
+        if not source.lower().split("?", 1)[0].endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
+            raise ValueError("email image src does not point to an image asset")
 
 
 def _claim_smtp_probe():
@@ -830,9 +912,9 @@ def _send_email_notification(issue_id, notification_data, receiver_id, email_not
         )
         return False
 
-    template_data = []
+    change_rows = _issue_change_rows(data)
     comments = []
-    actors_involved = []
+    actor_names = []
     for actor_id, changes in data.items():
         actor = User.objects.filter(pk=actor_id).first()
         if actor is None:
@@ -840,11 +922,10 @@ def _send_email_notification(issue_id, notification_data, receiver_id, email_not
         changes = dict(changes)
         comment = changes.pop("comment", False)
         mention = changes.pop("mention", False)
-        actors_involved.append(actor_id)
+        actor_names.append(actor.display_name)
         actor_detail = {
-            "avatar_url": f"{base_api}{actor.avatar_url}",
-            "first_name": actor.first_name,
-            "last_name": actor.last_name,
+            "name": actor.display_name,
+            "initial": (actor.first_name or actor.display_name or "?")[:1].upper(),
         }
         if comment:
             comments.append({"actor_comments": comment, "actor_detail": actor_detail})
@@ -852,46 +933,34 @@ def _send_email_notification(issue_id, notification_data, receiver_id, email_not
             mention["new_value"] = process_html_content(mention.get("new_value"))
             mention["old_value"] = process_html_content(mention.get("old_value"))
             comments.append({"actor_comments": mention, "actor_detail": actor_detail})
-        activity_time = changes.pop("activity_time", None)
-        parsed_activity_time = parse_datetime(str(activity_time)) if activity_time else None
-        if parsed_activity_time is None:
-            parsed_activity_time = timezone.now()
-        elif timezone.is_naive(parsed_activity_time):
-            parsed_activity_time = timezone.make_aware(parsed_activity_time, timezone.get_current_timezone())
-        formatted_time = timezone.localtime(parsed_activity_time).strftime("%H:%M %p")
-        if changes:
-            template_data.append(
-                {
-                    "actor_detail": actor_detail,
-                    "changes": changes,
-                    "issue_details": {
-                        "name": issue.name,
-                        "identifier": f"{issue.project.identifier}-{issue.sequence_id}",
-                    },
-                    "activity_time": formatted_time,
-                }
-            )
-
     issue_url = f"{base_api}/{issue.project.workspace.slug}/projects/{issue.project_id}/issues/{issue.id}"
+    assignment_transfer = {}
+    if any(
+        (row.data or {}).get("issue_activity", {}).get("field") == "assignees"
+        and str((row.data or {}).get("issue_activity", {}).get("new_identifier")) == str(receiver.id)
+        for row in eligible_logs
+    ):
+        assignment_transfer = _assignment_transfer_context("issue", issue, receiver, base_api)
     context = {
-        "data": template_data,
-        "summary": "Updates were made to the issue by",
-        "actors_involved": len(set(actors_involved)),
-        "issue": {
-            "issue_identifier": f"{issue.project.identifier}-{issue.sequence_id}",
-            "name": issue.name,
-            "issue_url": issue_url,
-        },
+        "heading": "行政工作项更新",
+        "item_identifier": f"{issue.project.identifier}-{issue.sequence_id}",
+        "item_title": issue.name,
+        "summary": "以下人员更新了行政工作项：",
+        "actor_summary": "、".join(dict.fromkeys(actor_names)),
+        "change_rows": change_rows,
+        "comments": comments,
         "receiver": {"email": receiver.email},
+        "current_site": base_api,
         "issue_url": issue_url,
         "project_url": f"{base_api}/{issue.project.workspace.slug}/projects/{issue.project_id}/issues/",
         "workspace": str(issue.project.workspace.slug),
         "project": str(issue.project.name),
         "user_preference": f"{base_api}/{issue.project.workspace.slug}/settings/account/notifications/",
-        "comments": comments,
-        "entity_type": "issue",
+        "entity_type": "行政工作项",
+        "assignment_transfer": assignment_transfer,
     }
     html_content = render_to_string("emails/notifications/issue-updates.html", context)
+    audit_email_image_resources(html_content)
     text_content = generate_plain_text_from_html(html_content)
     connection = get_connection(
         host=email_host,
@@ -903,7 +972,10 @@ def _send_email_notification(issue_id, notification_data, receiver_id, email_not
         timeout=15,
     )
     message = EmailMultiAlternatives(
-        subject=(f"{issue.project.identifier}-{issue.sequence_id} {remove_unwanted_characters(issue.name)}"),
+        subject=(
+            f"行政工作项更新：{issue.project.identifier}-{issue.sequence_id} "
+            f"{remove_unwanted_characters(issue.name)}"
+        ),
         body=text_content,
         from_email=email_from,
         to=[receiver.email],
@@ -1478,21 +1550,67 @@ def send_research_notification_email(delivery_ids, lease_token):
 
     events = [delivery.event for delivery in eligible]
     first_event = events[0]
-    rows = []
-    for event in events:
-        title = escape(str(event.title))
-        summary = escape(str(event.summary or ""))
-        route = event.route if event.route.startswith("/") and not event.route.startswith("//") else ""
-        link = f"{base_url}{route}" if route else base_url
-        rows.append(
-            f"<li><strong>{title}</strong><p>{summary}</p>"
-            f'<p><a href="{escape(link, quote=True)}">查看工作项</a></p></li>'
-        )
-    html_content = (
-        "<!doctype html><html><body><h2>科研工作项通知</h2><ul>"
-        + "".join(rows)
-        + "</ul><p>可在账户通知设置中调整邮件偏好。</p></body></html>"
+    first_route = (
+        first_event.route
+        if first_event.route.startswith("/") and not first_event.route.startswith("//")
+        else f"/{deliveries[0].event.workspace.slug}/research"
     )
+    issue_url = f"{base_url}{first_route}"
+    task = (
+        ResearchChainNodeTask.objects.select_related(
+            "workspace", "chain", "chain__project", "node"
+        ).filter(pk=first_event.entity_identifier)
+        .first()
+    )
+    assignment_transfer = {}
+    if (
+        task is not None
+        and any(
+            event.category == NotificationEvent.Category.ASSIGNMENT
+            and event.action == "assigned"
+            for event in events
+        )
+    ):
+        assignment_transfer = _assignment_transfer_context(
+            "research_chain_task", task, receiver, base_url
+        )
+
+    change_rows = []
+    actor_names = []
+    for event in events:
+        actor_name = event.triggered_by.display_name if event.triggered_by else "系统"
+        actor_names.append(actor_name)
+        change_rows.append(
+            {
+                "actor_name": actor_name,
+                "activity_time": timezone.localtime(event.created_at).strftime("%m-%d %H:%M"),
+                "field_label": "动态",
+                "old_value": "",
+                "new_value": event.summary or event.title,
+            }
+        )
+    context = {
+        "heading": "科研工作项通知",
+        "item_identifier": task.chain.project.identifier if task else "",
+        "item_title": task.title if task else first_event.title,
+        "summary": "以下科研工作项有新的动态：",
+        "actor_summary": "、".join(dict.fromkeys(actor_names)),
+        "change_rows": change_rows,
+        "comments": [],
+        "receiver": {"email": receiver.email},
+        "current_site": base_url,
+        "issue_url": issue_url,
+        "project_url": f"{base_url}/{deliveries[0].event.workspace.slug}/research",
+        "workspace": str(deliveries[0].event.workspace.slug),
+        "project": task.chain.project.name if task else str(deliveries[0].event.workspace.name),
+        "user_preference": (
+            f"{base_url}/{deliveries[0].event.workspace.slug}/settings/account/notifications/"
+        ),
+        "entity_type": "科研工作项",
+        "assignment_transfer": assignment_transfer,
+    }
+    html_content = render_to_string("emails/notifications/issue-updates.html", context)
+    audit_email_image_resources(html_content)
     text_content = generate_plain_text_from_html(html_content)
     connection = get_connection(
         host=email_host,
