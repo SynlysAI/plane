@@ -694,6 +694,8 @@ export const researchEndpoints = {
     `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/stage-approvals/${stageCode}/materials/${materialId}/`,
   chainStagePrecheck: (slug: string, chainId: string, stageCode: string) =>
     `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/stage-approvals/${stageCode}/precheck/`,
+  chainStageEvaluations: (slug: string, chainId: string, stageCode: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/stage-approvals/${stageCode}/evaluations/`,
   chainStageSubmit: (slug: string, chainId: string, stageCode: string) =>
     `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/stage-approvals/${stageCode}/submit/`,
   chainStageReview: (slug: string, chainId: string, stageCode: string) =>

@@ -30,6 +30,7 @@ from .chain import (
 )
 from .chain_stage import (
     ResearchChainStage,
+    ResearchChainStageEvaluation,
     ResearchChainStageMaterialItem,
     ResearchChainStageMaterialRequirement,
     ResearchChainStagePrecheck,
@@ -112,6 +113,7 @@ __all__ = [
     "ResearchApprovalRoute",
     "ResearchChain",
     "ResearchChainStage",
+    "ResearchChainStageEvaluation",
     "ResearchChainStageMaterialItem",
     "ResearchChainStageMaterialRequirement",
     "ResearchChainStagePrecheck",

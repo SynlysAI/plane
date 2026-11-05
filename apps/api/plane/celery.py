@@ -37,6 +37,10 @@ app.conf.beat_schedule = {
         "task": "plane.bgtasks.agent_dock_task.reconcile_agent_dock_runs",
         "schedule": timedelta(seconds=15),
     },
+    "reconcile-research-stage-evaluations": {
+        "task": "plane.bgtasks.stage_evaluation_task.reconcile_stage_evaluations",
+        "schedule": timedelta(seconds=30),
+    },
     "cleanup-attachment-previews": {
         "task": "plane.bgtasks.asset_preview_task.cleanup_asset_previews",
         "schedule": crontab(hour=4, minute=15),

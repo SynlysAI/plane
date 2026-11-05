@@ -60,6 +60,7 @@ from plane.research.views.workspace_outcomes import ResearchWorkspaceOutcomeEndp
 from plane.research.views.report_context import ResearchFormalReportContentEndpoint, ResearchFormalReportOptionsEndpoint
 from plane.research.views.chain_stage_approvals import (
     ResearchChainStageApprovalListEndpoint,
+    ResearchChainStageEvaluationEndpoint,
     ResearchChainStageMaterialDetailEndpoint,
     ResearchChainStageMaterialEndpoint,
     ResearchChainStagePrecheckEndpoint,
@@ -345,6 +346,11 @@ urlpatterns = [
         name="weekly-report-mcp",
     ),
     path(
+        "research/workspaces/<str:slug>/weekly-report-agent/mcp",
+        WeeklyReportMCPHTTPEndpoint.as_view(),
+        name="weekly-report-mcp-without-slash",
+    ),
+    path(
         "research/workspaces/<str:slug>/mcp/candidates/",
         ResearchMCPCandidatesEndpoint.as_view(),
         name="research-mcp-candidates",
@@ -562,6 +568,11 @@ urlpatterns = [
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/stage-approvals/<str:stage_code>/precheck/",
         ResearchChainStagePrecheckEndpoint.as_view(),
         name="research-chain-stage-precheck",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/stage-approvals/<str:stage_code>/evaluations/",
+        ResearchChainStageEvaluationEndpoint.as_view(),
+        name="research-chain-stage-evaluations",
     ),
     path(
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/stage-approvals/<str:stage_code>/submit/",

@@ -92,6 +92,7 @@ const common = {
 };
 const projectSecret = "pum_" + "a".repeat(43);
 const weeklySecret = "pwr_" + "b".repeat(43);
+const weeklyWorkbuddyKey = "plane-weekly-report-11111111222243338444555555555555";
 const project = {
   ...common,
   name: "我的连接",
@@ -137,6 +138,15 @@ const weekly = {
   mcp_path: "/api/research/workspaces/lab/weekly-report-agent/mcp/",
   mcp_url: "https://plane.test/api/research/workspaces/lab/weekly-report-agent/mcp/",
   headers: { "X-Weekly-Report-Token": weeklySecret },
+  workbuddy_server_key: weeklyWorkbuddyKey,
+  workbuddy_json: JSON.stringify({
+    mcpServers: {
+      [weeklyWorkbuddyKey]: {
+        url: "https://plane.test/api/research/workspaces/lab/weekly-report-agent/mcp",
+        headers: { "X-Weekly-Report-Token": weeklySecret },
+      },
+    },
+  }),
   codex_toml: "unused",
   sciencediscovery_json: "unused",
   api_docs_url: "https://plane.test/mcp/api-docs/weekly-report/lab/" + ID,
@@ -309,12 +319,13 @@ describe.each(["project", "weekly"] as const)("%s 连接的公共行为", (kind)
     expect(text()).toContain(secret);
     await click("通用 MCP JSON");
     expect(Object.keys(JSON.parse(text()!).mcpServers)).toHaveLength(1);
-    if (!isWeekly) {
-      await click("WorkBuddy JSON");
-      const workbuddy = JSON.parse(text()!).mcpServers["plane-unified-11111111222243338444555555555555"];
-      expect(Object.keys(workbuddy)).toEqual(["url", "headers"]);
-      expect(workbuddy.url).toBe("https://plane.test/api/mcp");
-    }
+    await click("WorkBuddy JSON");
+    const workbuddyKey = isWeekly ? weeklyWorkbuddyKey : "plane-unified-11111111222243338444555555555555";
+    const workbuddy = JSON.parse(text()!).mcpServers[workbuddyKey];
+    expect(Object.keys(workbuddy)).toEqual(["url", "headers"]);
+    expect(workbuddy.url).toBe(
+      isWeekly ? "https://plane.test/api/research/workspaces/lab/weekly-report-agent/mcp" : "https://plane.test/api/mcp"
+    );
     await click("复制配置");
     expect(mocks.copy).toHaveBeenCalledWith(text());
     await click("导出配置");

@@ -12,7 +12,10 @@ import type {
   TResearchChainNodeAction,
   TResearchChainStageApproval,
   TResearchChainStageApprovalSummary,
+  TResearchChainStageEvaluation,
+  TResearchChainStageEvaluationTrack,
   TResearchChainStageMaterialItem,
+  TReportTemplate,
   TResearchChainSnapshot,
   TResearchChainUploadLimits,
 } from "@plane/types";
@@ -239,6 +242,57 @@ export class ResearchChainService extends APIService {
         const payload = res?.data as TResearchEnvelope<TResearchChainStageApproval["latest_precheck"]> | undefined;
         if (!payload?.data) throw payload ?? {};
         return payload.data;
+      })
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
+
+  async createChainStageEvaluation(
+    workspaceSlug: string,
+    chainId: string,
+    stageCode: string,
+    track: TResearchChainStageEvaluationTrack
+  ) {
+    return this.post(researchEndpoints.chainStageEvaluations(workspaceSlug, chainId, stageCode), {
+      track,
+      request_id: request_id(),
+    })
+      .then((res) => {
+        const payload = res?.data as TResearchEnvelope<TResearchChainStageEvaluation> | undefined;
+        if (!payload?.data) throw payload ?? {};
+        return payload.data;
+      })
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
+
+  async getPreopeningTemplate(workspaceSlug: string) {
+    return this.get(researchEndpoints.reportTemplates(workspaceSlug), {
+      params: {
+        scope: "STAGE_MATERIAL",
+        stage: "PRE_OPENING",
+        material_type: "TOPIC_DESCRIPTION",
+      },
+    })
+      .then((res) => {
+        const payload = res?.data as { results?: TReportTemplate[] } | undefined;
+        const templates = payload?.results ?? [];
+        return templates.find((template) => template.is_default) ?? templates[0] ?? null;
+      })
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
+
+  async getLatestChainStageEvaluation(workspaceSlug: string, chainId: string, stageCode: string) {
+    return this.get(researchEndpoints.chainStageEvaluations(workspaceSlug, chainId, stageCode), {
+      params: { latest: "1" },
+    })
+      .then((res) => {
+        const payload = res?.data as TResearchEnvelope<TResearchChainStageEvaluation | null> | undefined;
+        return payload?.data ?? null;
       })
       .catch((err) => {
         throw err?.response?.data ?? err;

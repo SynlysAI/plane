@@ -22,7 +22,11 @@ from plane.research.utils.errors import (
     research_permission_denied,
 )
 from plane.research.utils.roles import is_research_admin
-from plane.research.utils.templates import template_target_key, validate_template_sections
+from plane.research.utils.templates import (
+    ensure_default_preopening_template,
+    template_target_key,
+    validate_template_sections,
+)
 from plane.research.views.base import ResearchAPIView, truthy
 
 REPORT_TYPES = ("WEEKLY", "MONTHLY")
@@ -45,31 +49,54 @@ def template_target_payload(scope, report_type, stage, material_type):
     stage = str(stage or "").strip().upper()
     material_type = str(material_type or "").strip().upper()
     if scope not in ReportTemplate.Scope.values:
-        return None, None, None, None, None, research_error(
-            ResearchErrorCode.TEMPLATE_NOT_FOUND, "Unknown template scope."
+        return (
+            None,
+            None,
+            None,
+            None,
+            None,
+            research_error(ResearchErrorCode.TEMPLATE_NOT_FOUND, "Unknown template scope."),
         )
     if scope == ReportTemplate.Scope.REPORT:
         if report_type not in REPORT_TYPES:
-            return None, None, None, None, None, research_error(
-                ResearchErrorCode.TEMPLATE_NOT_FOUND, "Unknown report type."
+            return (
+                None,
+                None,
+                None,
+                None,
+                None,
+                research_error(ResearchErrorCode.TEMPLATE_NOT_FOUND, "Unknown report type."),
             )
     elif scope == ReportTemplate.Scope.STAGE_MATERIAL:
         if stage not in StageType.values:
-            return None, None, None, None, None, research_error(
-                ResearchErrorCode.TEMPLATE_NOT_FOUND, "Unknown research stage."
+            return (
+                None,
+                None,
+                None,
+                None,
+                None,
+                research_error(ResearchErrorCode.TEMPLATE_NOT_FOUND, "Unknown research stage."),
             )
         if material_type not in MATERIAL_TYPES_BY_STAGE.get(stage, ()):
-            return None, None, None, None, None, research_error(
-                ResearchErrorCode.TEMPLATE_NOT_FOUND, "Unknown stage material type."
+            return (
+                None,
+                None,
+                None,
+                None,
+                None,
+                research_error(ResearchErrorCode.TEMPLATE_NOT_FOUND, "Unknown stage material type."),
             )
     elif not material_type:
-        return None, None, None, None, None, research_error(
-            ResearchErrorCode.TEMPLATE_NOT_FOUND, "material_type is required."
+        return (
+            None,
+            None,
+            None,
+            None,
+            None,
+            research_error(ResearchErrorCode.TEMPLATE_NOT_FOUND, "material_type is required."),
         )
 
-    target_key = template_target_key(
-        scope, report_type=report_type, stage=stage, material_type=material_type
-    )
+    target_key = template_target_key(scope, report_type=report_type, stage=stage, material_type=material_type)
     return scope, report_type, stage, material_type, target_key, None
 
 
@@ -82,6 +109,12 @@ class ResearchReportTemplateListCreateEndpoint(ResearchAPIView):
         workspace, error = self.get_workspace(section="reports")
         if error:
             return error
+        if (
+            str(request.GET.get("scope") or "").upper() == ReportTemplate.Scope.STAGE_MATERIAL
+            and str(request.GET.get("stage") or "").upper() == "PRE_OPENING"
+            and str(request.GET.get("material_type") or "").upper() == "TOPIC_DESCRIPTION"
+        ):
+            ensure_default_preopening_template(workspace)
         templates = ReportTemplate.objects.filter(workspace=workspace)
         if request.GET.get("scope"):
             templates = templates.filter(scope=str(request.GET["scope"]).upper())
@@ -130,9 +163,9 @@ class ResearchReportTemplateListCreateEndpoint(ResearchAPIView):
         try:
             with transaction.atomic():
                 if is_default:
-                    ReportTemplate.objects.filter(
-                        workspace=workspace, target_key=target_key, is_default=True
-                    ).update(is_default=False)
+                    ReportTemplate.objects.filter(workspace=workspace, target_key=target_key, is_default=True).update(
+                        is_default=False
+                    )
                 template = ReportTemplate.objects.create(
                     workspace=workspace,
                     name=name,

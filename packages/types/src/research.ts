@@ -347,6 +347,43 @@ export type TResearchChainStagePrecheck = {
   created_at: string;
 };
 
+export type TResearchChainStageEvaluationTrack = "BASIC" | "APPLIED";
+
+export type TResearchChainStageEvaluationResult = {
+  decision: "PASS" | "RETURN" | "ADVISORY";
+  subjournal_probability: number | null;
+  conservative_probability: number | null;
+  paper_tier: string;
+  criteria: Array<{
+    code: string;
+    title: string;
+    score: number;
+    evidence: string;
+    gap: string;
+  }>;
+  risks: string[];
+  recommendations: string[];
+};
+
+export type TResearchChainStageEvaluation = {
+  schema_version: "research-chain-stage-evaluation.v1";
+  id: string;
+  stage: string;
+  agent_run_id: string;
+  track: TResearchChainStageEvaluationTrack;
+  status: "RUNNING" | "READY" | "FAILED";
+  result: TResearchChainStageEvaluationResult | Record<string, never>;
+  material_version: string;
+  is_current: boolean;
+  prompt_version: string;
+  provider: "SCIENCE_DISCOVERY" | "SYNLORA";
+  model_version: string;
+  error_code: string;
+  request_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type TResearchChainStageApproval = {
   schema_version: "research-chain-stage.v1";
   id: string;
@@ -364,6 +401,7 @@ export type TResearchChainStageApproval = {
   materials: TResearchChainStageMaterial[];
   review_actions: TResearchChainStageReviewAction[];
   latest_precheck: TResearchChainStagePrecheck | null;
+  latest_evaluation: TResearchChainStageEvaluation | null;
   advisor: TResearchChainStageReviewer;
   principal_investigator: TResearchChainStageReviewer;
   current_review_step: "ADVISOR" | "PI" | null;

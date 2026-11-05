@@ -19,6 +19,8 @@ type Props = {
   stageApprovals: TResearchChainStageApproval[];
   currentNodeId: string | null;
   selectedStageId: TResearchWorkflowStageId | null;
+  /** Whether secondary status text is visible; compact mode keeps it accessible. */
+  expanded?: boolean;
   onSelectStage: (stage: TResearchWorkflowStage) => void;
 };
 
@@ -79,6 +81,7 @@ export function ResearchChainWorkflowRail({
   stageApprovals,
   currentNodeId,
   selectedStageId,
+  expanded = true,
   onSelectStage,
 }: Props) {
   const { t } = useTranslation();
@@ -86,10 +89,10 @@ export function ResearchChainWorkflowRail({
 
   return (
     <section
-      className="shrink-0 border-b border-subtle bg-surface-2 px-5 py-3"
+      className="shrink-0 border-b border-subtle bg-surface-2 px-5 py-2"
       aria-label={t("research.chains.workflow_title")}
     >
-      <div className="flex flex-wrap items-stretch gap-y-2" role="list">
+      <div className="flex flex-wrap items-stretch gap-y-1" role="list">
         {workflow.stages.map((stage, index) => {
           const kind = stepKind(stage);
           const selected = selectedStageId === stage.id;
@@ -114,7 +117,7 @@ export function ResearchChainWorkflowRail({
                 aria-current={stage.isCurrent ? "step" : undefined}
                 aria-pressed={selected || undefined}
                 title={stageTitle}
-                className={`flex min-w-0 flex-col gap-0.5 rounded-md px-2 py-1 text-left transition-colors duration-150 hover:bg-surface-2 ${
+                className={`flex min-w-0 flex-col gap-0.5 rounded-md px-1.5 py-0.5 text-left transition-colors duration-150 hover:bg-surface-2 ${
                   viewing ? "bg-surface-2" : ""
                 } ${kind === "archived" ? "opacity-70" : ""}`}
               >
@@ -124,8 +127,12 @@ export function ResearchChainWorkflowRail({
                     {t(stage.labelKey)}
                   </span>
                 </span>
-                <span className={`text-11 ${STATUS_CLASSES[kind]}`}>{statusLabel}</span>
-                {preparationLabel && <span className="text-10 text-tertiary">{preparationLabel}</span>}
+                {expanded ? (
+                  <span className={`text-11 ${STATUS_CLASSES[kind]}`}>{statusLabel}</span>
+                ) : (
+                  <span className="sr-only">{statusLabel}</span>
+                )}
+                {expanded && preparationLabel && <span className="text-10 text-tertiary">{preparationLabel}</span>}
               </button>
             </div>
           );

@@ -11,3 +11,4 @@ class BgtasksConfig(AppConfig):
     def ready(self):
         """Import Celery tasks that are not referenced by request-time modules."""
         from plane.bgtasks import agent_dock_task  # noqa: F401
+        from plane.bgtasks import stage_evaluation_task  # noqa: F401

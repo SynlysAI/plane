@@ -72,7 +72,7 @@ def test_runtime_without_delegated_identity_requires_legacy_token(monkeypatch):
     assert resolve_synlora_runtime(object()) is None
 
 
-def test_projects_synlora_events_without_user_text_or_reasoning():
+def test_projects_synlora_events_with_bounded_user_text_without_reasoning():
     """v1 durable events map to the existing Plane run vocabulary safely."""
     projected = project_synlora_events(
         [
@@ -95,11 +95,12 @@ def test_projects_synlora_events_without_user_text_or_reasoning():
 
     assert [(item["sequence"], item["event"]["type"]) for item in projected] == [
         (0, "run.started"),
+        (1, "user.message"),
         (3, "tool.started"),
         (4, "tool.completed"),
         (5, "run.completed"),
     ]
-    assert all("secret question" not in str(item) for item in projected)
+    assert projected[1]["event"]["content"] == "secret question"
     assert all("internal thought" not in str(item) for item in projected)
 
 

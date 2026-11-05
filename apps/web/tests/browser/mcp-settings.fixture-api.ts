@@ -78,10 +78,26 @@ function configuration(row: UnifiedConnection | WeeklyReportConnection): Unified
       }),
     };
   }
+  const path = `/api/research/workspaces/${workspace.slug}/weekly-report-agent/mcp/`;
+  const url = `${location.origin}${path}`;
+  const workbuddyKey = `plane-weekly-report-${row.id.replaceAll("-", "")}`;
   return {
     ...row,
-    mcp_path: `/api/research/workspaces/${workspace.slug}/weekly-report-agent/mcp/`,
+    server_key: row.label,
+    mcp_path: path,
+    mcp_url: url,
     headers: { "X-Weekly-Report-Token": `pwr_${raw}` },
+    codex_toml: "",
+    sciencediscovery_json: JSON.stringify({
+      mcpServers: { [row.label]: { type: "http", url, headers: { "X-Weekly-Report-Token": `pwr_${raw}` } } },
+    }),
+    workbuddy_server_key: workbuddyKey,
+    workbuddy_json: JSON.stringify({
+      mcpServers: {
+        [workbuddyKey]: { url: url.replace(/\/$/, ""), headers: { "X-Weekly-Report-Token": `pwr_${raw}` } },
+      },
+    }),
+    api_docs_url: `${location.origin}/mcp/api-docs/weekly-report/${workspace.slug}/${row.id}`,
     csrf_token: "fixture-csrf",
   };
 }

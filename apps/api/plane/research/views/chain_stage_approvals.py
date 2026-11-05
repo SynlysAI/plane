@@ -12,9 +12,15 @@ from plane.db.models import (
     ResearchChainUpload,
 )
 from plane.research.serializers.chain_stage import (
+    ResearchChainStageEvaluationSerializer,
     ResearchChainStageMaterialItemSerializer,
     ResearchChainStagePrecheckSerializer,
     ResearchChainStageSerializer,
+)
+from plane.research.services.stage_evaluations import (
+    create_stage_evaluation,
+    latest_stage_evaluation,
+    refresh_stage_evaluation,
 )
 from plane.research.services.chain_stage_approvals import (
     CHAIN_STAGE_CODES,
@@ -102,6 +108,7 @@ class ResearchChainStageApprovalListEndpoint(ResearchAPIView):
                 "material_requirements__items__upload__node",
                 "review_actions__reviewer",
                 "prechecks",
+                "evaluations__agent_session",
             )
             .order_by("sort_order")
         )
@@ -231,7 +238,9 @@ class ResearchChainStageMaterialEndpoint(ResearchChainStageApprovalBaseEndpoint)
             if uuid_error:
                 return uuid_error
             upload = (
-                ResearchChainUpload.objects.select_related("workspace", "node").filter(pk=upload_id, chain=chain).first()
+                ResearchChainUpload.objects.select_related("workspace", "node")
+                .filter(pk=upload_id, chain=chain)
+                .first()
             )
             if upload is None:
                 return research_error(
@@ -353,6 +362,64 @@ class ResearchChainStagePrecheckEndpoint(ResearchChainStageApprovalBaseEndpoint)
                 "research-chain-stage-precheck.v1",
             ),
             status=status.HTTP_201_CREATED,
+        )
+
+
+class ResearchChainStageEvaluationEndpoint(ResearchChainStageApprovalBaseEndpoint):
+    """Create or poll the stage-three reusable-agent evaluation."""
+
+    def post(self, request, slug, chain_id, stage_code):
+        workspace, chain, error = self._chain(request, slug, chain_id)
+        if error:
+            return error
+        stage_or_error = self._stage(chain, stage_code)
+        if isinstance(stage_or_error, Response):
+            return stage_or_error
+        stage = stage_or_error
+        request_id, request_error = _request_id(request)
+        if request_error:
+            return request_error
+        permission_error = self._writable(request, chain)
+        if permission_error:
+            return permission_error
+        try:
+            evaluation = create_stage_evaluation(
+                stage,
+                request.user,
+                track=request.data.get("track"),
+                request_id=request_id,
+            )
+        except ChainStageRuleError as rule_error:
+            return _rule_error(rule_error)
+        except IntegrityError:
+            return conflict_response()
+        return Response(
+            _envelope(
+                ResearchChainStageEvaluationSerializer(evaluation).data,
+                request_id,
+                "research-chain-stage-evaluation.v1",
+            ),
+            status=status.HTTP_201_CREATED,
+        )
+
+    def get(self, request, slug, chain_id, stage_code):
+        workspace, chain, error = self._chain(request, slug, chain_id)
+        if error:
+            return error
+        stage_or_error = self._stage(chain, stage_code)
+        if isinstance(stage_or_error, Response):
+            return stage_or_error
+        stage = stage_or_error
+        evaluation = latest_stage_evaluation(stage)
+        if evaluation is not None and evaluation.status == "RUNNING":
+            evaluation = refresh_stage_evaluation(evaluation)
+        payload = ResearchChainStageEvaluationSerializer(evaluation).data if evaluation else None
+        return Response(
+            _envelope(
+                payload,
+                request_id_from(request),
+                "research-chain-stage-evaluation.v1",
+            )
         )
 
 

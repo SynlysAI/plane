@@ -45,7 +45,10 @@ def normalize_synlora_base_url(base_url: str) -> str:
         raise SynloraIdentityError("invalid_synlora_base_url")
     scheme = parsed.scheme.lower()
     host = parsed.hostname.lower()
-    port = parsed.port
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise SynloraIdentityError("invalid_synlora_base_url") from exc
     if (scheme == "http" and port == 80) or (scheme == "https" and port == 443):
         port = None
     netloc = f"{host}:{port}" if port is not None else host

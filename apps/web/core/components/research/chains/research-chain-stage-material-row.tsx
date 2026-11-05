@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { useTranslation } from "@plane/i18n";
-import type { TResearchChainStageMaterial } from "@plane/types";
+import type { TReportTemplateSection, TResearchChainStageMaterial } from "@plane/types";
 import { Button } from "@plane/propel/button";
 
 import { AttachmentPreviewLink } from "@/components/attachments/preview";
@@ -25,10 +25,22 @@ type Props = {
   editable: boolean;
   busy: boolean;
   knowledge: TResearchChainKnowledgeController;
+  /** Existing pre-opening sections used only as a local input aid. */
+  templateSections?: TReportTemplateSection[];
   onStageChanged: () => Promise<void> | void;
 };
 
 const chainService = new ResearchChainService();
+
+/** Build a plain-text framework from the existing structured template. */
+function templateFramework(sections: TReportTemplateSection[]): string {
+  return sections
+    .map((section) => {
+      const limit = section.max_chars ? `（${section.max_chars} 字以内）` : "";
+      return `## ${section.title}${limit}\n${section.guidance}\n`;
+    })
+    .join("\n");
+}
 
 /** Read the only user-facing conclusion for one requirement row. */
 function materialStateKey(state: string | undefined): string {
@@ -70,6 +82,7 @@ export function ResearchChainStageMaterialRow({
   editable,
   busy,
   knowledge,
+  templateSections = [],
   onStageChanged,
 }: Props) {
   const { t } = useTranslation();
@@ -110,6 +123,13 @@ export function ResearchChainStageMaterialRow({
     : (availableUploads[0]?.id ?? "");
   const actionBusy = busy || rowBusy;
   const effectiveLimits = knowledge.uploadLimits ?? DEFAULT_RESEARCH_CHAIN_UPLOAD_LIMITS;
+
+  /** Insert the reusable template framework without submitting it. */
+  const applyTemplate = () => {
+    const framework = templateFramework(templateSections);
+    if (!framework) return;
+    setTextContent((current) => (current.trim() ? `${current.trimEnd()}\n\n${framework}` : framework));
+  };
 
   /** Convert one row action error to concise localized text. */
   const describeError = (error: unknown) => {
@@ -323,16 +343,24 @@ export function ResearchChainStageMaterialRow({
               className="w-full resize-y rounded-md border border-subtle bg-surface-2 px-2 py-1.5 text-12 leading-5 text-primary placeholder:text-tertiary"
             />
           </label>
-          <div className="mt-1.5 flex justify-end">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={actionBusy || !textContent.trim()}
-              onClick={() => void saveTextMaterial()}
-            >
-              {t("research.chains.stage_approval.material_text_save")}
-            </Button>
+          <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-10 text-tertiary">{textContent.length}/50000</span>
+            <span className="flex items-center gap-1.5">
+              {templateSections.length > 0 && (
+                <Button type="button" variant="ghost" size="sm" disabled={actionBusy} onClick={applyTemplate}>
+                  {t("research.chains.stage_approval.template_apply")}
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={actionBusy || !textContent.trim()}
+                onClick={() => void saveTextMaterial()}
+              >
+                {t("research.chains.stage_approval.material_text_save")}
+              </Button>
+            </span>
           </div>
         </div>
       )}

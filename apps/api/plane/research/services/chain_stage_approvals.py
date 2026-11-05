@@ -664,9 +664,7 @@ def _stage_source_node(stage):
     if not node_type:
         return stage.submitted_node
     return (
-        stage.chain.nodes.filter(node_type=node_type, deleted_at__isnull=True)
-        .order_by("created_at")
-        .first()
+        stage.chain.nodes.filter(node_type=node_type, deleted_at__isnull=True).order_by("created_at").first()
         or stage.submitted_node
     )
 
@@ -746,7 +744,11 @@ def add_stage_material(
                 )
             item_title = upload.file_name[:500]
             item_description = ""
-            event_metadata = {"requirement": requirement.code, "upload_id": str(upload.id), "upload_status": upload.status}
+            event_metadata = {
+                "requirement": requirement.code,
+                "upload_id": str(upload.id),
+                "upload_status": upload.status,
+            }
         else:
             normalized_content = content.strip()
             normalized_title = (title or normalized_content[:DEFAULT_STAGE_MATERIAL_TITLE_LENGTH]).strip()
@@ -920,6 +922,28 @@ def _validate_submission(stage, node, requires_pi, escalation_reason):
             "Generate a current material precheck before submitting this stage.",
             status.HTTP_422_UNPROCESSABLE_ENTITY,
         )
+    if stage.stage_code == "TOPIC_EVALUATION":
+        from plane.research.services.stage_evaluations import (
+            evaluation_allows_submission,
+            latest_stage_evaluation,
+        )
+
+        latest_evaluation = latest_stage_evaluation(stage)
+        if latest_evaluation is None:
+            raise ChainStageRuleError(
+                ResearchErrorCode.CHAIN_STAGE_EVALUATION_REQUIRED,
+                "Generate a current Agent stage evaluation before submitting this stage.",
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        if not evaluation_allows_submission(latest_evaluation, stage_material_version(stage)):
+            raise ChainStageRuleError(
+                ResearchErrorCode.CHAIN_STAGE_EVALUATION_BLOCKED,
+                "The current stage evaluation is missing, stale or below the basic-research threshold.",
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                decision=latest_evaluation.result.get("decision")
+                if isinstance(latest_evaluation.result, dict)
+                else None,
+            )
     resolve_advisor(stage.chain)
     policy = CHAIN_STAGE_PI_POLICIES[stage.stage_code]
     final_requires_pi = policy == "ALWAYS_PI" or (policy == "CONDITIONAL_PI" and bool(requires_pi))

@@ -11,6 +11,7 @@ from plane.db.models import ReportTemplate
 VARIABLE_PATTERN = re.compile(r"\{\{\s*([a-z_]+)\s*\}\}")
 SECTION_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 MAX_TEMPLATE_SECTIONS = 50
+DEFAULT_PREOPENING_TEMPLATE_NAME = "课题报告（预开题）五点判据模板"
 
 
 def validate_template_sections(value):
@@ -226,4 +227,51 @@ def find_report_template(workspace, report_type):
         )
         .order_by("-is_default", "name")
         .first()
+    )
+
+
+def ensure_default_preopening_template(workspace):
+    """Seed the reusable five-criteria template once without overriding edits.
+
+    Args:
+        workspace: The workspace whose stage material template is needed.
+
+    Returns:
+        The created template, or ``None`` when a suitable row already exists.
+    """
+    from plane.research.seed.scenario import TEMPLATES
+
+    target_key = template_target_key(
+        ReportTemplate.Scope.STAGE_MATERIAL,
+        stage="PRE_OPENING",
+        material_type="TOPIC_DESCRIPTION",
+    )
+    if (
+        ReportTemplate.objects.filter(
+            workspace=workspace,
+            target_key=target_key,
+            is_default=True,
+            is_active=True,
+            deleted_at__isnull=True,
+        ).exists()
+        or ReportTemplate.all_objects.filter(
+            workspace=workspace,
+            target_key=target_key,
+            name=DEFAULT_PREOPENING_TEMPLATE_NAME,
+        ).exists()
+    ):
+        return None
+
+    spec = next(item for item in TEMPLATES if item.name == DEFAULT_PREOPENING_TEMPLATE_NAME)
+    return ReportTemplate.objects.create(
+        workspace=workspace,
+        report_type=spec.report_type,
+        name=spec.name,
+        scope=spec.scope,
+        stage=spec.stage,
+        material_type=spec.material_type,
+        is_default=True,
+        is_active=True,
+        variables=list(spec.variables),
+        sections_json={"version": 1, "guidance": spec.guidance, "sections": list(spec.sections)},
     )

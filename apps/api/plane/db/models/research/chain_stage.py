@@ -229,3 +229,58 @@ class ResearchChainStagePrecheck(AppendOnlyModel):
 
     def __str__(self):
         return f"{self.stage_id} <{self.status}>"
+
+
+class ResearchChainStageEvaluation(BaseModel):
+    """One reusable-agent evaluation run for the stage-three topic gate."""
+
+    class Track(models.TextChoices):
+        BASIC = "BASIC", "Basic research"
+        APPLIED = "APPLIED", "Applied research"
+
+    class Status(models.TextChoices):
+        RUNNING = "RUNNING", "Running"
+        READY = "READY", "Ready"
+        FAILED = "FAILED", "Failed"
+
+    class Provider(models.TextChoices):
+        SCIENCE_DISCOVERY = "SCIENCE_DISCOVERY", "ScienceDiscovery"
+        SYNLORA = "SYNLORA", "Synlora"
+
+    stage = models.ForeignKey(
+        ResearchChainStage,
+        on_delete=models.PROTECT,
+        related_name="evaluations",
+    )
+    agent_session = models.OneToOneField(
+        "ResearchAgentSession",
+        on_delete=models.PROTECT,
+        related_name="stage_evaluation",
+    )
+    track = models.CharField(max_length=16, choices=Track.choices)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.RUNNING)
+    input_snapshot = models.JSONField(default=dict, blank=True)
+    result = models.JSONField(default=dict, blank=True)
+    material_version = models.CharField(max_length=128, blank=True, default="")
+    prompt_version = models.CharField(max_length=128)
+    provider = models.CharField(max_length=32, choices=Provider.choices)
+    model_version = models.CharField(max_length=128, blank=True, default="")
+    error_code = models.CharField(max_length=128, blank=True, default="")
+    request_id = models.CharField(max_length=128, unique=True)
+    created_by = models.ForeignKey(
+        "db.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="research_chain_stage_evaluations",
+    )
+
+    class Meta:
+        verbose_name = "Research Chain Stage Evaluation"
+        verbose_name_plural = "Research Chain Stage Evaluations"
+        db_table = "research_chain_stage_evaluations"
+        ordering = ("-created_at",)
+        indexes = [models.Index(fields=["stage", "created_at"], name="rsch_stage_eval_idx")]
+
+    def __str__(self):
+        return f"{self.stage_id} <{self.track}:{self.status}>"

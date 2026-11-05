@@ -349,7 +349,25 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  window.localStorage.removeItem("research-chain.context-details.v1");
   vi.clearAllMocks();
+});
+
+it("keeps the chain context compact by default and persists expansion", async () => {
+  const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  await act(async () => root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />));
+  await act(async () => undefined);
+
+  expect(container.textContent).toContain("当前阶段: 文献调研");
+  expect(container.textContent).toContain("阶段审批 3/13");
+  expect(container.textContent).not.toContain("负责人:");
+
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((item) => item.textContent === "展开详情")?.click();
+  });
+
+  expect(container.textContent).toContain("负责人:");
+  expect(window.localStorage.getItem("research-chain.context-details.v1")).toBe("expanded");
 });
 
 it("opens node evidence and runs lifecycle actions through the service", async () => {
@@ -418,16 +436,25 @@ it("renders the authoritative stage approval summary and material gaps", async (
   await act(async () => undefined);
 
   expect(container.textContent).toContain("阶段审批 3/13");
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "展开详情")?.click();
+  });
   expect(container.textContent).toContain("待导师审 1");
   expect(container.textContent).toContain("需修改 1");
   expect(container.textContent).toContain("阶段可并行推进；13 个阶段全部通过后课题自动完成。");
   expect(container.textContent).toContain("阶段审批要求");
   expect(container.textContent).toContain("材料 0/1");
-  expect(container.querySelector("button[aria-expanded]")?.getAttribute("aria-expanded")).toBe("false");
+  expect(
+    [...container.querySelectorAll("button[aria-expanded]")]
+      .find((button) => button.textContent?.includes("阶段审批要求"))
+      ?.getAttribute("aria-expanded")
+  ).toBe("false");
   expect(container.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("3");
 
   await act(async () => {
-    container.querySelector<HTMLButtonElement>("button[aria-expanded]")?.click();
+    [...container.querySelectorAll<HTMLButtonElement>("button[aria-expanded]")]
+      .find((button) => button.textContent?.includes("阶段审批要求"))
+      ?.click();
   });
   expect(container.textContent).toContain("已提交 2/5");
   expect(container.textContent).toContain("待补充");

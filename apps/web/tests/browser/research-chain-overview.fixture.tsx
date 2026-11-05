@@ -120,6 +120,7 @@ function baseStage(seed: Partial<TResearchChainStageApproval>): TResearchChainSt
       },
     ],
     latest_precheck: null,
+    latest_evaluation: null,
     advisor: { user: { id: "advisor", display_name: "直接导师", email: "advisor@example.com" }, error: null },
     principal_investigator: { user: { id: "pi", display_name: "主 PI", email: "pi@example.com" }, error: null },
     current_review_step: null,

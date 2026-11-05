@@ -172,6 +172,23 @@ def test_invalid_synlora_key_fails_closed():
         )
 
 
+def test_invalid_synlora_base_url_port_fails_closed_without_network_request():
+    owner = make_user()
+    workspace = make_workspace(owner)
+
+    def fail_if_called(_request):
+        raise AssertionError("Invalid base URL must fail before verification")
+
+    with pytest.raises(SynloraIdentityError, match="invalid_synlora_base_url"):
+        bind_synlora_api_key(
+            workspace,
+            user=owner,
+            base_url="http://synlora.internal:bad",
+            token="yxkey_test",
+            transport=__import__("httpx").MockTransport(fail_if_called),
+        )
+
+
 def test_repair_submits_one_idempotent_alias_per_plane_user(settings):
     owner = make_user()
     workspace = make_workspace(owner)

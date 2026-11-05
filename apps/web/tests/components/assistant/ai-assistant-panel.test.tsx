@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   getEvents: vi.fn(),
   streamEvents: vi.fn(),
   cancelRun: vi.fn(),
+  toggleProfileSettingsModal: vi.fn(),
 }));
 
 const routerPush = vi.fn();
@@ -52,6 +53,10 @@ vi.mock("next/link", () => ({
 vi.mock("@plane/i18n", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   useTranslation: () => ({ t: (key: string) => key }),
+}));
+
+vi.mock("@/hooks/store/use-command-palette", () => ({
+  useCommandPalette: () => ({ toggleProfileSettingsModal: mocks.toggleProfileSettingsModal }),
 }));
 
 const { AIAssistantPanel } = await import("@/components/assistant/ai-assistant-panel");
@@ -280,8 +285,17 @@ describe("AIAssistantPanel", () => {
     renderPanel(store);
     await waitForText("aiAssistant.status_personal_credential_required");
 
-    const setupLink = document.querySelector('a[href="/settings/profile/agent-configuration"]') as HTMLAnchorElement;
-    expect(setupLink).not.toBeNull();
+    const setupButton = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === "aiAssistant.configure_token"
+    ) as HTMLButtonElement;
+    expect(setupButton).toBeDefined();
+    await act(async () => {
+      setupButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(mocks.toggleProfileSettingsModal).toHaveBeenCalledWith({
+      activeTab: "agent-configuration",
+      isOpen: true,
+    });
     expect((document.querySelector("textarea") as HTMLTextAreaElement).disabled).toBe(true);
     expect(mocks.resolveContext).not.toHaveBeenCalled();
   });
@@ -323,6 +337,15 @@ describe("AIAssistantPanel", () => {
       },
     };
     mocks.listSessions.mockResolvedValue({ results: [historySession], count: 1 });
+    mocks.getEvents.mockResolvedValue({
+      results: [
+        event(1, "USER_MESSAGE", { content: "历史问题", remote_type: "user/message", remote_seq: 1 }),
+        event(2, "OUTPUT", { content: "你好，世界" }),
+      ],
+      count: 2,
+      latest_seq: 2,
+      session: historySession,
+    });
     const store = new AIAssistantStore();
     store.hydrate("lab");
     store.open();
@@ -343,7 +366,52 @@ describe("AIAssistantPanel", () => {
         .find((button) => button.textContent?.includes("新材料研究"))
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
+    await waitForText("历史问题");
+    await waitForText("你好，世界");
     expect(store.threadId).toBe("session-2");
+  });
+
+  it("restores the user prompt while an active run resumes after refresh", async () => {
+    const activeSession = { ...session, session_id: "session-active", status: "STREAMING" };
+    mocks.getSession.mockResolvedValue(activeSession);
+    mocks.getEvents.mockResolvedValue({
+      results: [event(1, "USER_MESSAGE", { content: "刷新后的问题", remote_type: "user/message", remote_seq: 1 })],
+      count: 1,
+      latest_seq: 1,
+      session: activeSession,
+    });
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.setThreadId("lab", "session-active");
+    store.open();
+    renderPanel(store);
+
+    await waitForText("刷新后的问题");
+    expect(mocks.getEvents).toHaveBeenCalledWith("lab", "run-1", 0);
+  });
+
+  it("preserves repeated identical prompts in one history session", async () => {
+    const repeatedSession = { ...session, session_id: "session-repeated", status: "READY" };
+    mocks.getSession.mockResolvedValue(repeatedSession);
+    mocks.getEvents.mockResolvedValue({
+      results: [
+        event(1, "USER_MESSAGE", { content: "重复提问", remote_type: "user/message", remote_seq: 1 }),
+        event(2, "OUTPUT", { content: "第一次回答" }),
+        event(3, "USER_MESSAGE", { content: "重复提问", remote_type: "user/message", remote_seq: 3 }),
+        event(4, "OUTPUT", { content: "第二次回答" }),
+      ],
+      count: 4,
+      latest_seq: 4,
+      session: repeatedSession,
+    });
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.setThreadId("lab", "session-repeated");
+    store.open();
+    renderPanel(store);
+
+    await waitForText("第二次回答");
+    expect(document.body.textContent?.match(/重复提问/g)).toHaveLength(2);
   });
 
   it("navigates before restoring a history session from another target", async () => {
@@ -430,12 +498,100 @@ describe("AIAssistantPanel", () => {
 
     typeAndSend();
     await waitForText("你好，世界");
+    const question = [...document.querySelectorAll("div")].find((node) => node.textContent === "介绍这个项目");
+    const answer = [...document.querySelectorAll("p")].find((node) => node.textContent === "你好，世界");
+    const timeline = document.querySelector('[aria-label="aiAssistant.runtime_inline"]');
+    expect(question?.compareDocumentPosition(timeline as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(timeline?.compareDocumentPosition(answer as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(document.body.textContent).toContain("plane_get_context");
     expect(document.body.textContent).toContain("runtime_context_bound");
     expect(document.body.textContent).toContain("runtime_thinking");
     expect(document.body.textContent).toContain("runtime_status_completed");
     expect(document.body.textContent).toContain("project-1");
     expect(document.body.textContent).toContain("context read");
+
+    expect(timeline?.classList.contains("ml-7")).toBe(true);
+    expect(timeline?.classList.contains("pl-3")).toBe(true);
+    expect(timeline?.classList.contains("ml-auto")).toBe(false);
+    expect(timeline?.classList.contains("max-w-[85%]")).toBe(false);
+  });
+
+  it("keeps a completed replay answer below its runtime timeline", async () => {
+    mocks.getEvents.mockResolvedValue({
+      results: [
+        event(1, "USER_MESSAGE", { content: "历史问题", remote_type: "user/message", remote_seq: 1 }),
+        event(2, "TOOL_CALL", {
+          remote_seq: 2,
+          remote_type: "tool/result",
+          name: "plane_get_context",
+          tool_call_id: "history-call",
+          status: "COMPLETED",
+        }),
+        event(3, "OUTPUT", { remote_seq: 3, remote_type: "assistant.snapshot", content: "已保存回答", final: true }),
+      ],
+      count: 3,
+      latest_seq: 3,
+      session,
+    });
+    window.localStorage.setItem("PLANE_AI_ASSISTANT_THREAD_lab", "session-1");
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+
+    await waitForText("已保存回答");
+    const question = [...document.querySelectorAll("div")].find((node) => node.textContent === "历史问题");
+    const answer = [...document.querySelectorAll("p")].find((node) => node.textContent === "已保存回答");
+    const timeline = document.querySelector('[aria-label="aiAssistant.runtime_inline"]');
+    expect(question?.compareDocumentPosition(timeline as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(timeline?.compareDocumentPosition(answer as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("does not reuse the previous run while a new question connects", async () => {
+    mocks.sendMessage
+      .mockReset()
+      .mockResolvedValueOnce({ ...session, run_id: "run-1", status: "STREAMING", run_start_cursor: 2 })
+      .mockResolvedValueOnce({ ...session, run_id: "run-2", status: "STREAMING", run_start_cursor: 10 });
+    mocks.streamEvents
+      .mockReset()
+      .mockImplementation((_workspace: string, runId: string, _cursor: number, signal: AbortSignal) =>
+        Promise.resolve(
+          runId === "run-1"
+            ? sseResponse(
+                [
+                  {
+                    type: "tool.completed",
+                    seq: 3,
+                    payload: { name: "plane_get_context", tool_call_id: "call-old", status: "completed" },
+                  },
+                  { type: "output.delta", seq: 4, payload: { content: "第一轮回答" } },
+                  { type: "run.completed", seq: 5 },
+                ],
+                signal,
+                "run-1"
+              )
+            : sseResponse([], signal, "run-2")
+        )
+      );
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+
+    typeAndSend("第一轮");
+    await waitForText("第一轮回答");
+    typeAndSend("第二轮");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    const conversationText = document.body.textContent ?? "";
+    expect(conversationText).toContain("第二轮");
+    expect(conversationText).not.toContain("plane_get_context");
+    expect(conversationText).not.toContain("aiAssistant.runtime_elapsed");
+    expect(conversationText).not.toContain("aiAssistant.runtime_latest_event");
+    expect(conversationText.indexOf("第一轮回答")).toBeLessThan(conversationText.indexOf("第二轮"));
   });
 
   it("only listens to page selection while the cloud dock is open", async () => {

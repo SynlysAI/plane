@@ -22,6 +22,7 @@ export type TAssistantMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  sourceId?: string;
 };
 
 export type TAssistantPhase =
@@ -129,6 +130,7 @@ export const useAssistantChat = (
   const [contextEnvelope, setContextEnvelope] = useState<TAgentContextEnvelope | null>(null);
   const [selectedText, setSelectedText] = useState("");
   const [runtimeEvents, setRuntimeEvents] = useState<TAgentDockEvent[]>([]);
+  const [inlineRunId, setInlineRunId] = useState<string | null>(null);
   const [historySessions, setHistorySessions] = useState<TAgentDockSession[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const activeRunIdRef = useRef<string | null>(null);
@@ -212,6 +214,30 @@ export const useAssistantChat = (
     });
   }, []);
 
+  /** 按事件标识追加用户消息，并认领同文本的本地乐观消息。 */
+  const appendUserMessage = useCallback((content: string, sourceId?: string) => {
+    if (!content) return;
+    setMessages((previous) => {
+      if (sourceId && previous.some((item) => item.sourceId === sourceId)) return previous;
+      const next = [...previous];
+      let optimisticIndex = -1;
+      if (sourceId) {
+        for (let index = next.length - 1; index >= 0; index -= 1) {
+          const item = next[index];
+          if (item.role === "user" && item.content === content && !item.sourceId) {
+            optimisticIndex = index;
+            break;
+          }
+        }
+      }
+      if (optimisticIndex >= 0) {
+        next[optimisticIndex] = { ...next[optimisticIndex], sourceId };
+        return next;
+      }
+      return [...next, { id: sourceId ?? `user-${Date.now()}`, sourceId, role: "user" as const, content }];
+    });
+  }, []);
+
   const applyEvent = useCallback(
     (event: TAgentDockEvent, runId: string, generation: number) => {
       if (generationRef.current !== generation || activeRunIdRef.current !== runId || event.run_id !== runId) return;
@@ -225,7 +251,8 @@ export const useAssistantChat = (
       if (normalizedRuntime) {
         setRuntimeEvents((previous) => {
           const key = sourceSeq || event.seq;
-          if (previous.some((item) => (item.source_seq ?? item.seq) === key)) return previous;
+          const eventKey = `${event.run_id}:${key}`;
+          if (previous.some((item) => `${item.run_id}:${item.source_seq ?? item.seq}` === eventKey)) return previous;
           return [...previous, normalizedRuntime];
         });
       }
@@ -454,6 +481,7 @@ export const useAssistantChat = (
         activeRunIdRef.current = null;
         setMessages([]);
         setRuntimeEvents([]);
+        setInlineRunId(null);
         latestSeqRef.current = -1;
         processedSeqRef.current = new Set();
         setStreamState({ phase: "idle" });
@@ -466,6 +494,7 @@ export const useAssistantChat = (
       );
       const lastConsumedCursor = activeRunIdRef.current === session.run_id ? latestSeqRef.current : runStartCursor;
       activeRunIdRef.current = session.run_id;
+      setInlineRunId(session.run_id);
       latestSeqRef.current = Math.max(runStartCursor, lastConsumedCursor);
       const history = await agentDockService.getEvents(workspaceSlug, session.run_id, 0);
       if (generationRef.current !== historyGeneration || pendingSendRef.current) return;
@@ -479,19 +508,21 @@ export const useAssistantChat = (
           event.payload.context_access === true ||
           toolName.split(".").some((part) => ["list", "read", "context", "knowledge"].includes(part));
         const replayType =
-          remoteType === "turn/end" || remoteType === "run.completed"
-            ? "run.completed"
-            : remoteType === "error" || remoteType === "run.failed"
-              ? "run.failed"
-              : remoteType === "turn/aborted" || remoteType === "run.cancelled"
-                ? "run.cancelled"
-                : remoteType === "assistant/message" || remoteType === "assistant.snapshot"
-                  ? "output.delta"
-                  : remoteType === "tool/result" && event.event_type === "HUMAN_DECISION"
-                    ? "approval.resolved"
-                    : isContextAccess && (event.event_type === "TOOL_CALL" || event.payload.context_access === true)
-                      ? "context.accessed"
-                      : event.event_type;
+          remoteType === "user/message" || event.event_type === "user.message"
+            ? "user.message"
+            : remoteType === "turn/end" || remoteType === "run.completed"
+              ? "run.completed"
+              : remoteType === "error" || remoteType === "run.failed"
+                ? "run.failed"
+                : remoteType === "turn/aborted" || remoteType === "run.cancelled"
+                  ? "run.cancelled"
+                  : remoteType === "assistant/message" || remoteType === "assistant.snapshot"
+                    ? "output.delta"
+                    : remoteType === "tool/result" && event.event_type === "HUMAN_DECISION"
+                      ? "approval.resolved"
+                      : isContextAccess && (event.event_type === "TOOL_CALL" || event.payload.context_access === true)
+                        ? "context.accessed"
+                        : event.event_type;
         const normalized = normalizeEvent(
           {
             ...event,
@@ -517,6 +548,14 @@ export const useAssistantChat = (
           }
           if (remoteType === "assistant/message") {
             normalized.payload = { ...normalized.payload, final: true };
+          }
+          if (normalized.event_type === "user.message") {
+            const sourceSeq = normalized.source_seq || normalized.seq;
+            appendUserMessage(
+              String(normalized.payload.content ?? normalized.payload.text ?? ""),
+              `${session.run_id}:${sourceSeq}`
+            );
+            continue;
           }
           if (!isActive && normalized.event_type === "output.delta") {
             appendAssistantMessage(String(normalized.payload.content ?? ""));
@@ -550,6 +589,7 @@ export const useAssistantChat = (
         activeRunIdRef.current = null;
         setMessages([]);
         setRuntimeEvents([]);
+        setInlineRunId(null);
         latestSeqRef.current = -1;
         processedSeqRef.current = new Set();
         setStreamState({ phase: "idle" });
@@ -558,7 +598,7 @@ export const useAssistantChat = (
       assistantStore.clearThreadId(workspaceSlug);
       setStreamState({ phase: "failed", error: "session_unavailable", canRetry: true });
     }
-  }, [appendAssistantMessage, applyEvent, assistantStore, contextEnvelope, workspaceSlug]);
+  }, [appendAssistantMessage, appendUserMessage, applyEvent, assistantStore, contextEnvelope, workspaceSlug]);
 
   useEffect(() => {
     if (assistantStore.isOpen && enabled && assistantStore.threadId && contextEnvelope) void loadHistory();
@@ -574,6 +614,7 @@ export const useAssistantChat = (
       latestSeqRef.current = -1;
       processedSeqRef.current = new Set();
       setRuntimeEvents([]);
+      setInlineRunId(null);
       setMessages([]);
       setStreamingAnswer("");
       streamingAnswerRef.current = "";
@@ -626,10 +667,12 @@ export const useAssistantChat = (
           // A stale local session id should be replaced with a fresh grant-bound session.
         }
         assistantStore.clearThreadId(workspaceSlug);
+        setMessages([]);
       }
       disconnectStream();
-      setMessages([]);
+      if (assistantStore.threadId) setMessages([]);
       setRuntimeEvents([]);
+      setInlineRunId(null);
       processedSeqRef.current = new Set();
       latestSeqRef.current = -1;
       activeRunIdRef.current = null;
@@ -649,13 +692,16 @@ export const useAssistantChat = (
       if (!enabled || !query || ACTIVE_PHASES.has(streamState.phase) || pendingSendRef.current) return;
       generationRef.current += 1;
       const generation = generationRef.current;
+      const optimisticUserId = `user-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`;
       pendingSendRef.current = true;
       pendingSendGenerationRef.current = generation;
       approvalPendingRef.current = false;
       disconnectStream();
       streamingAnswerRef.current = "";
       setStreamingAnswer("");
+      setInlineRunId(null);
       setStreamState({ phase: "connecting" });
+      setMessages((previous) => [...previous, { id: optimisticUserId, role: "user", content: query }]);
       try {
         let context = contextEnvelope;
         if (!context || !isContextFresh(context)) context = await resolveContext(messageFocusRef);
@@ -664,10 +710,11 @@ export const useAssistantChat = (
         setStreamState({ phase: "connecting" });
         const session = await ensureSession(context);
         if (generationRef.current !== generation) return;
-        setMessages((previous) => [
-          ...previous,
-          { id: `user-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`, role: "user", content: query },
-        ]);
+        setMessages((previous) =>
+          previous.some((message) => message.id === optimisticUserId)
+            ? previous
+            : [...previous, { id: optimisticUserId, role: "user", content: query }]
+        );
         const updated = await agentDockService.sendMessage(workspaceSlug, session.session_id, query, {
           route: pathname ?? `/${workspaceSlug}`,
           focusRef: messageFocusRef,
@@ -678,6 +725,7 @@ export const useAssistantChat = (
           return;
         }
         activeRunIdRef.current = updated.run_id;
+        setInlineRunId(updated.run_id);
         latestSeqRef.current = Number(
           updated.run_start_cursor ?? (updated.assembly as { run_start_cursor?: number }).run_start_cursor ?? -1
         );
@@ -769,6 +817,7 @@ export const useAssistantChat = (
     latestSeqRef.current = -1;
     processedSeqRef.current = new Set();
     setRuntimeEvents([]);
+    setInlineRunId(null);
     setMessages([]);
     setStreamingAnswer("");
     streamingAnswerRef.current = "";
@@ -827,6 +876,7 @@ export const useAssistantChat = (
     contextEnvelope,
     contextStatus,
     runtimeEvents,
+    inlineRunId,
     historySessions,
     historyLoading,
     latestEventAt: runtimeEvents.at(-1)?.created_at ?? null,

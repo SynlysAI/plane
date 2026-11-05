@@ -12,17 +12,18 @@ def server_key(name):
     return name.strip()
 
 
-def workbuddy_server_key(connection_id):
+def workbuddy_server_key(connection_id, prefix="plane-unified"):
     """生成适合 WorkBuddy 配置导入的稳定安全服务标识。
 
     Args:
-        connection_id: 统一 MCP 连接 UUID。
+        connection_id: MCP 连接 UUID。
+        prefix: 连接类型使用的 ASCII 前缀。
 
     Returns:
         由连接 UUID 全量十六进制形式派生的 ASCII 服务标识，保证不同连接
         在 WorkBuddy 中不会因键名碰撞而互相覆盖。
     """
-    return f"plane-unified-{str(connection_id).replace('-', '')}"
+    return f"{prefix}-{str(connection_id).replace('-', '')}"
 
 
 def _valid_origin(value):

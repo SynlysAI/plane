@@ -100,6 +100,14 @@ const NODE_TYPE_BY_STAGE: Record<TResearchWorkflowStage["id"], string> = {
   transfer: "TRANSFER",
 };
 
+const CONTEXT_DETAIL_STORAGE_KEY = "research-chain.context-details.v1";
+
+/** Read the persisted header preference while remaining safe for prerendering. */
+function initialContextExpanded(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(CONTEXT_DETAIL_STORAGE_KEY) === "expanded";
+}
+
 const MEMBER_ROLE_LABELS: Record<string, string> = {
   OWNER: "research.chains.members.role_owner",
   ADMIN: "research.chains.members.role_admin",
@@ -142,6 +150,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const [memberRole, setMemberRole] = useState<"15" | "20">("15");
   const [memberBusy, setMemberBusy] = useState(false);
   const [memberError, setMemberError] = useState("");
+  const [contextExpanded, setContextExpanded] = useState(initialContextExpanded);
   const stageRefreshVersionRef = useRef(0);
   const approvedCountRef = useRef<number | null>(null);
   const current = useMemo(() => pickCurrentNode(nodes), [nodes]);
@@ -173,6 +182,15 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
     (stage) => stage.stage_code === selectedStage?.stageCode
   );
   const knowledgeNodeId = requestedNode?.id ?? selectedStage?.preferredNodeId ?? selected?.node.id ?? current?.id ?? "";
+
+  /** Toggle the compact context header and remember the researcher's preference. */
+  const toggleContextDetails = () => {
+    setContextExpanded((expanded) => {
+      const next = !expanded;
+      window.localStorage.setItem(CONTEXT_DETAIL_STORAGE_KEY, next ? "expanded" : "compact");
+      return next;
+    });
+  };
 
   /** Refresh only authoritative stage/node state without resetting the workbench. */
   const refreshStageState = useCallback(async () => {
@@ -560,31 +578,52 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <section className="shrink-0 border-b border-subtle bg-surface-1 px-5 py-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      <section className={`shrink-0 border-b border-subtle bg-surface-1 px-5 ${contextExpanded ? "py-3" : "py-2.5"}`}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="truncate text-20 font-semibold text-primary">{chain?.project_name ?? chain?.project}</h3>
+              <h3 className="truncate text-18 font-semibold text-primary">{chain?.project_name ?? chain?.project}</h3>
               <ResearchStatusBadge status={chain?.status}>
                 {t(`research.chains.chain_status.${chain?.status.toLowerCase()}`)}
               </ResearchStatusBadge>
               <ResearchStatusBadge status="visibility">
                 {t(`research.projects.chain_visibility.${chain?.visibility.toLowerCase()}`)}
               </ResearchStatusBadge>
+              {stageApprovalSummary && (
+                <span className="text-11 text-secondary">
+                  {t("research.chains.stage_approval.progress", {
+                    approved: stageApprovalSummary.progress.approved,
+                    total: stageApprovalSummary.progress.total,
+                  })}
+                </span>
+              )}
             </div>
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-12 text-tertiary">
-              <span>
-                {t("research.chains.owner")}: {chain?.owner_name ?? "-"}
-              </span>
-              <span>
-                {t("research.chains.project_identifier")}: {chain?.project_identifier ?? chain?.project ?? "-"}
-              </span>
-              <span>
-                {t("research.chains.org_unit")}: {chain?.org_unit_name ?? "-"}
-              </span>
-              <span>{chain ? formatResearchDateTime(chain.updated_at, currentLocale) : "-"}</span>
+            <div
+              className={`flex flex-wrap items-center gap-x-3 gap-y-1 text-12 text-tertiary ${
+                contextExpanded ? "mt-1.5" : "mt-1"
+              }`}
+            >
+              {contextExpanded && (
+                <>
+                  <span>
+                    {t("research.chains.owner")}: {chain?.owner_name ?? "-"}
+                  </span>
+                  <span>
+                    {t("research.chains.project_identifier")}: {chain?.project_identifier ?? chain?.project ?? "-"}
+                  </span>
+                  <span>
+                    {t("research.chains.org_unit")}: {chain?.org_unit_name ?? "-"}
+                  </span>
+                  <span>{chain ? formatResearchDateTime(chain.updated_at, currentLocale) : "-"}</span>
+                </>
+              )}
+              {selectedStage && (
+                <span className="text-secondary">
+                  {t("research.chains.current_stage")}: {t(selectedStage.labelKey)}
+                </span>
+              )}
             </div>
-            {current && (
+            {contextExpanded && current && (
               <div className="border-accent-primary mt-3 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 border-l-2 pl-3">
                 <span className="text-11 text-tertiary">{t("research.chains.current_node")}</span>
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -595,7 +634,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                 </div>
               </div>
             )}
-            {stageApprovalSummary && (
+            {contextExpanded && stageApprovalSummary && (
               <div className="mt-3 border-t border-subtle pt-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-12 font-medium text-primary">
@@ -651,6 +690,18 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-8"
+              aria-expanded={contextExpanded}
+              onClick={toggleContextDetails}
+            >
+              {contextExpanded
+                ? t("research.chains.context_details_collapse")
+                : t("research.chains.context_details_expand")}
+            </Button>
             {chain?.capabilities?.actions.delete?.allowed && (
               <ResearchDeleteButton
                 name={chain.project_name ?? chain.project}
@@ -677,6 +728,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
         stageApprovals={stageApprovalSummary?.stages ?? []}
         currentNodeId={current?.id ?? null}
         selectedStageId={selectedStage?.id ?? null}
+        expanded={contextExpanded}
         onSelectStage={(stage) => {
           setReason("");
           selectStage(stage);

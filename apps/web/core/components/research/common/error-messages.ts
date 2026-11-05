@@ -114,6 +114,10 @@ const RESEARCH_ERROR_KEYS: Record<string, string> = {
   research_chain_stage_reviewer_not_configured: "research.errors.research_chain_stage_reviewer_not_configured",
   research_chain_stage_escalation_confirm_required: "research.errors.research_chain_stage_escalation_confirm_required",
   research_chain_stage_material_incomplete: "research.errors.research_chain_stage_material_incomplete",
+  research_chain_stage_evaluation_required: "research.errors.research_chain_stage_evaluation_required",
+  research_chain_stage_evaluation_blocked: "research.errors.research_chain_stage_evaluation_blocked",
+  evaluation_runtime_unavailable: "research.errors.evaluation_runtime_unavailable",
+  AGENT_UPSTREAM_NOT_CONFIGURED: "research.errors.agent_upstream_not_configured",
   // ---- P1 integrations ----
   integration_not_configured: "research.errors.integration_not_configured",
   integration_connection_not_found: "research.errors.integration_connection_not_found",
