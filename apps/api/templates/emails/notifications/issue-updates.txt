@@ -1,0 +1,27 @@
+{% autoescape off %}{{ heading }}
+{{ item_title }}{% if item_identifier %} ({{ item_identifier }}){% endif %}
+{{ workspace }} / {{ project }}
+
+{{ summary }}{% if actor_summary %} {{ actor_summary }}{% endif %}
+{% for change in change_rows %}
+{{ change.actor_name }} / {{ change.activity_time }}
+{{ change.field_label }}: {% if change.old_value %}{{ change.old_value }} -> {% endif %}{{ change.new_value }}
+{% endfor %}{% for comment in comments %}
+{{ comment.actor_detail.name }} 的评论
+{% for actor_comment in comment.actor_comments.new_value %}{{ actor_comment|striptags }}
+{% endfor %}{% endfor %}{% if assignment_transfer.enabled %}
+选择下一位负责人
+{% for candidate in assignment_transfer.candidates %}
+转派给 {{ candidate.display_name }}
+{{ candidate.url }}
+{% endfor %}{% if assignment_transfer.has_more_candidates %}
+更多候选人
+{{ assignment_transfer.native_url }}
+{% endif %}{% endif %}
+查看{{ entity_type }}
+{{ issue_url }}
+
+此邮件发送至 {{ receiver.email }}。
+账户通知设置
+{{ user_preference }}
+{% endautoescape %}

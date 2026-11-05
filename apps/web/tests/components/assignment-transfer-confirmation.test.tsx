@@ -63,20 +63,26 @@ function linkByText(text: string) {
 }
 
 it("previews, confirms, and shows the completed transfer without leaving the page", async () => {
-  const fetchMock = vi
-    .fn()
-    .mockResolvedValueOnce(responseBody(preview))
-    .mockResolvedValueOnce(responseBody({ ...preview, status: "completed" }));
+  const fetchMock = vi.fn(async (input: string, options: RequestInit) => {
+    const url = new URL(input);
+    if (options.method === "GET") {
+      if (url.searchParams.get("token") !== "signed" || url.searchParams.get("candidate_id") !== "next") {
+        return responseBody({ error_code: "assignment_transfer_invalid", message: "转派链接无效。" }, 400);
+      }
+      return responseBody(preview);
+    }
+    return responseBody({ ...preview, status: "completed" });
+  });
   vi.stubGlobal("fetch", fetchMock);
   await renderComponent("/email-actions/assignment-transfer/?token=signed&candidate=next");
 
   expect(container.textContent).toContain("JACS 审稿意见回复");
   expect(container.textContent).toContain("下一位负责人");
-  expect(fetchMock).toHaveBeenCalledExactlyOnceWith("https://plane.test/api/email-actions/assignment-transfer/", {
-    method: "GET",
-    credentials: "include",
-    headers: { Accept: "application/json" },
-  });
+  expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+    "https://plane.test/api/email-actions/assignment-transfer/?token=signed&candidate_id=next",
+    { method: "GET", credentials: "include", headers: { Accept: "application/json" } }
+  );
+  expect(container.textContent).not.toContain("转派完成");
 
   await act(async () => {
     container.querySelector<HTMLButtonElement>("button[type='button']")!.click();
@@ -89,6 +95,53 @@ it("previews, confirms, and shows the completed transfer without leaving the pag
     credentials: "include",
     body: JSON.stringify({ token: "signed", candidate_id: "next" }),
   });
+  expect(fetchMock.mock.calls[1][0]).toBe("https://plane.test/api/email-actions/assignment-transfer/");
+});
+
+it("encodes query values without losing token punctuation", async () => {
+  const token = "signed:token+with/&=中文";
+  const candidate = "next&member";
+  const fetchMock = vi.fn().mockResolvedValue(responseBody(preview));
+  vi.stubGlobal("fetch", fetchMock);
+  await renderComponent(`/email-actions/assignment-transfer/?${new URLSearchParams({ token, candidate })}`);
+
+  const url = new URL(fetchMock.mock.calls[0][0]);
+  expect(url.searchParams.get("token")).toBe(token);
+  expect(url.searchParams.get("candidate_id")).toBe(candidate);
+  expect([...url.searchParams.keys()]).toEqual(["token", "candidate_id"]);
+});
+
+it.each(["", "?token=signed", "?candidate=next"])(
+  "rejects missing parameters without requesting the API: %s",
+  async (query) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await renderComponent(`/email-actions/assignment-transfer/${query}`);
+
+    expect(container.textContent).toContain("转派链接无效");
+    expect(fetchMock).not.toHaveBeenCalled();
+  }
+);
+
+it("shows an already completed transfer without offering another submission", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(responseBody({ ...preview, status: "already_completed" }));
+  vi.stubGlobal("fetch", fetchMock);
+  await renderComponent("/email-actions/assignment-transfer/?token=signed&candidate=next");
+
+  expect(container.textContent).toContain("无需重复操作");
+  expect(container.querySelector("button")).toBeNull();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  ["assignment_transfer_expired", "转派链接已过期。", 410],
+  ["assignment_transfer_invalid", "转派链接无效。", 400],
+])("shows the server rejection without offering confirmation: %s", async (error_code, message, status) => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(responseBody({ error_code, message }, status)));
+  await renderComponent("/email-actions/assignment-transfer/?token=signed&candidate=next");
+
+  expect(container.textContent).toContain(message);
+  expect(container.querySelector("button")).toBeNull();
 });
 
 it("preserves the full confirmation URL when guiding an unauthenticated recipient to sign in", async () => {
