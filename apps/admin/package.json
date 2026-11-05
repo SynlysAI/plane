@@ -1,6 +1,6 @@
 {
   "name": "admin",
-  "version": "9.16.1",
+  "version": "9.16.2",
   "private": true,
   "description": "Admin UI for PiLab",
   "license": "AGPL-3.0",
