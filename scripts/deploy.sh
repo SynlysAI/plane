@@ -218,21 +218,21 @@ record_check() {
     fi
 }
 
+# 校验 HTTP 状态及可选内容类型，等待服务完成启动。
 check_status() {
-    local name="$1" url="$2" expected="${3:-200}" retries="${4:-1}" delay=6 code="000" try
+    local name="$1" url="$2" expected="${3:-200}" retries="${4:-1}" expected_type="${5:-}"
+    local delay=6 code="000" content_type="" response="" ok=false try
     for try in $(seq 1 "$retries"); do
-        code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url" || true)"
-        [[ "$code" == "$expected" ]] && break
+        response="$(curl -s -o /dev/null -w '%{http_code} %{content_type}' --max-time 10 "$url" || true)"
+        code="${response%% *}"
+        content_type="${response#* }"
+        if [[ "$code" == "$expected" && ( -z "$expected_type" || "$content_type" == "$expected_type"* ) ]]; then
+            ok=true
+            break
+        fi
         [[ "$try" -lt "$retries" ]] && sleep "$delay"
     done
-    record_check "$name" "$url -> ${code:-000}" "$([[ "$code" == "$expected" ]] && echo true || echo false)"
-}
-
-check_content_type() {
-    local name="$1" url="$2" expected="$3" content_type=""
-    content_type="$(curl -s -o /dev/null -w '%{content_type}' --max-time 10 "$url" || true)"
-    record_check "$name" "$url -> ${content_type:-empty}" \
-        "$([[ "$content_type" == "$expected"* ]] && echo true || echo false)"
+    record_check "$name" "$url -> ${code:-000} ${content_type:-empty}" "$ok"
 }
 
 check_service_running() {
@@ -260,10 +260,12 @@ done
 check_status "Web" "http://127.0.0.1:${PLANE_WEB_PORT}/" 200 1
 check_status "Admin" "http://127.0.0.1:${PLANE_WEB_PORT}/god-mode/" 200 1
 check_status "API" "http://127.0.0.1:${PLANE_WEB_PORT}/api/instances/" 200 15
+check_status "Assignment transfer page" \
+    "http://127.0.0.1:${PLANE_WEB_PORT}/email-actions/assignment-transfer/" 200 1 "text/html"
 check_status "Assignment transfer API" \
-    "http://127.0.0.1:${PLANE_WEB_PORT}/api/email-actions/assignment-transfer/?token=x&candidate=x" 401 5
-check_content_type "Email logo" \
-    "http://127.0.0.1:${PLANE_WEB_PORT}/static/logos/Logo.png" "image/png"
+    "http://127.0.0.1:${PLANE_WEB_PORT}/api/email-actions/assignment-transfer/?token=x&candidate=x" 401 5 "application/json"
+check_status "Email logo" \
+    "http://127.0.0.1:${PLANE_WEB_PORT}/static/logos/Logo.png" 200 1 "image/png"
 
 if [[ "$FAILURES" -eq 0 ]]; then
     printf '\n\033[1;32mDeployment completed; all checks passed.\033[0m\n'
