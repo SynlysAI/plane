@@ -376,6 +376,30 @@ describe("AIAssistantPanel", () => {
     expect(mocks.getEvents).toHaveBeenCalledWith("lab", "run-1", 0);
   });
 
+  it("preserves repeated identical prompts in one history session", async () => {
+    const repeatedSession = { ...session, session_id: "session-repeated", status: "READY" };
+    mocks.getSession.mockResolvedValue(repeatedSession);
+    mocks.getEvents.mockResolvedValue({
+      results: [
+        event(1, "USER_MESSAGE", { content: "重复提问", remote_type: "user/message", remote_seq: 1 }),
+        event(2, "OUTPUT", { content: "第一次回答" }),
+        event(3, "USER_MESSAGE", { content: "重复提问", remote_type: "user/message", remote_seq: 3 }),
+        event(4, "OUTPUT", { content: "第二次回答" }),
+      ],
+      count: 4,
+      latest_seq: 4,
+      session: repeatedSession,
+    });
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.setThreadId("lab", "session-repeated");
+    store.open();
+    renderPanel(store);
+
+    await waitForText("第二次回答");
+    expect(document.body.textContent?.match(/重复提问/g)).toHaveLength(2);
+  });
+
   it("navigates before restoring a history session from another target", async () => {
     globalThis.sessionStorage.setItem(
       "PLANE_AGENT_DOCK_LAUNCH_HISTORY_lab:anonymous",

@@ -345,6 +345,11 @@ urlpatterns = [
         name="weekly-report-mcp",
     ),
     path(
+        "research/workspaces/<str:slug>/weekly-report-agent/mcp",
+        WeeklyReportMCPHTTPEndpoint.as_view(),
+        name="weekly-report-mcp-without-slash",
+    ),
+    path(
         "research/workspaces/<str:slug>/mcp/candidates/",
         ResearchMCPCandidatesEndpoint.as_view(),
         name="research-mcp-candidates",

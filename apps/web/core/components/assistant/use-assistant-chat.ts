@@ -22,6 +22,7 @@ export type TAssistantMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  sourceId?: string;
 };
 
 export type TAssistantPhase =
@@ -212,11 +213,27 @@ export const useAssistantChat = (
     });
   }, []);
 
-  const appendUserMessage = useCallback((content: string) => {
+  /** 按事件标识追加用户消息，并认领同文本的本地乐观消息。 */
+  const appendUserMessage = useCallback((content: string, sourceId?: string) => {
     if (!content) return;
     setMessages((previous) => {
-      if (previous.some((item) => item.role === "user" && item.content === content)) return previous;
-      return [...previous, { id: `user-${Date.now()}`, role: "user", content }];
+      if (sourceId && previous.some((item) => item.sourceId === sourceId)) return previous;
+      const next = [...previous];
+      let optimisticIndex = -1;
+      if (sourceId) {
+        for (let index = next.length - 1; index >= 0; index -= 1) {
+          const item = next[index];
+          if (item.role === "user" && item.content === content && !item.sourceId) {
+            optimisticIndex = index;
+            break;
+          }
+        }
+      }
+      if (optimisticIndex >= 0) {
+        next[optimisticIndex] = { ...next[optimisticIndex], sourceId };
+        return next;
+      }
+      return [...next, { id: sourceId ?? `user-${Date.now()}`, sourceId, role: "user" as const, content }];
     });
   }, []);
 
@@ -529,7 +546,11 @@ export const useAssistantChat = (
             normalized.payload = { ...normalized.payload, final: true };
           }
           if (normalized.event_type === "user.message") {
-            appendUserMessage(String(normalized.payload.content ?? normalized.payload.text ?? ""));
+            const sourceSeq = normalized.source_seq || normalized.seq;
+            appendUserMessage(
+              String(normalized.payload.content ?? normalized.payload.text ?? ""),
+              `${session.run_id}:${sourceSeq}`
+            );
             continue;
           }
           if (!isActive && normalized.event_type === "output.delta") {

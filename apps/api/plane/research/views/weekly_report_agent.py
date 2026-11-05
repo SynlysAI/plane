@@ -21,7 +21,7 @@ from rest_framework.throttling import SimpleRateThrottle
 
 from plane.db import models as db
 from plane.mcp.api_documentation import document_weekly_tools, full_weekly_catalog
-from plane.mcp.client_config import client_files, public_url, server_key
+from plane.mcp.client_config import client_files, public_url, server_key, workbuddy_server_key
 from plane.mcp.protocol import DEFAULT_PROTOCOL, accepts_json_response, negotiate_protocol, protocol_header_valid
 from plane.mcp.credentials import (
     DEFAULT_TTL_DAYS,
@@ -336,7 +336,8 @@ class WeeklyManagementBase(WeeklyBase):
         url = public_url(request, path)
         key = server_key(grant.label)
         headers = {HEADER: raw}
-        files = client_files(key, url, headers)
+        safe_key = workbuddy_server_key(grant.pk, prefix="plane-weekly-report")
+        files = client_files(key, url, headers, workbuddy_key=safe_key)
         return {
             **WeeklyManagementBase.present(grant),
             "contract_version": VERSION,

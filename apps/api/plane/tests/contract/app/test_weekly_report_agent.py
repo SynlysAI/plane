@@ -1,7 +1,9 @@
 """Personal weekly report capabilities, immutable proposals and atomic recovery."""
 
-from unittest.mock import patch
+import json
 from datetime import timedelta
+from unittest.mock import patch
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 import pytest
@@ -442,10 +444,31 @@ def test_management_issue_list_revoke_and_machine_workspace_isolation(env):
     )
     assert issued.status_code == 201, issued.data
     secret = issued.data["headers"]["X-Weekly-Report-Token"]
+    workbuddy_key = issued.data["workbuddy_server_key"]
+    workbuddy = json.loads(issued.data["workbuddy_json"])
+    workbuddy_server = workbuddy["mcpServers"][workbuddy_key]
+    assert workbuddy_key == f"plane-weekly-report-{issued.data['id'].replace('-', '')}"
+    assert set(workbuddy) == {"mcpServers"}
+    assert set(workbuddy_server) == {"url", "headers"}
+    assert workbuddy_server["url"].endswith("/weekly-report-agent/mcp")
+    assert workbuddy_server["headers"] == {"X-Weekly-Report-Token": secret}
     listing = client.get(root + "connections/")
     assert secret not in str(listing.data)
     machine = APIClient()
     machine.credentials(HTTP_X_WEEKLY_REPORT_TOKEN=secret)
+    initialized = machine.post(
+        urlsplit(workbuddy_server["url"]).path,
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "WorkBuddy"}},
+        },
+        format="json",
+        HTTP_ACCEPT="application/json",
+    )
+    assert initialized.status_code == 200, initialized.data
+    assert initialized.json()["result"]["serverInfo"]["name"] == "plane-weekly-report"
     catalogue = machine.get(issued.data["mcp_path"].replace("mcp/", "tools/"))
     assert catalogue.status_code == 200, catalogue.data
     assert len(catalogue.data["tools"]) == 8

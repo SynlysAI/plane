@@ -5,7 +5,7 @@ vi.mock("axios", () => ({
   create: calls.create.mockReturnValue({ get: calls.get, post: calls.post, delete: calls.delete }),
 }));
 import { WeeklyReportMCPService } from "@/services/weekly-report-mcp.service";
-import { weeklyReportConfig } from "@/components/mcp/weekly-report-config";
+import { weeklyReportConfig, weeklyReportFiles } from "@/components/mcp/weekly-report-config";
 import type { WeeklyReportIssued } from "@/services/weekly-report-mcp.service";
 beforeEach(() => {
   vi.clearAllMocks();
@@ -72,6 +72,15 @@ it.each([undefined, 503, 403, 409])(
   }
 );
 
+const workbuddyKey = "plane-weekly-report-11111111222243338444555555555555";
+const workbuddyJson = JSON.stringify({
+  mcpServers: {
+    [workbuddyKey]: {
+      url: "https://plane.test/api/research/workspaces/public/weekly-report-agent/mcp",
+      headers: { "X-Weekly-Report-Token": `pwr_${"a".repeat(43)}` },
+    },
+  },
+});
 const issued = () =>
   ({
     id: "11111111-2222-4333-8444-555555555555",
@@ -81,11 +90,21 @@ const issued = () =>
     mcp_path: "/api/research/workspaces/public/weekly-report-agent/mcp/",
     mcp_url: "https://plane.test/api/research/workspaces/public/weekly-report-agent/mcp/",
     headers: { "X-Weekly-Report-Token": `pwr_${"a".repeat(43)}`, Authorization: "must-not-copy" },
+    workbuddy_server_key: workbuddyKey,
+    workbuddy_json: workbuddyJson,
   }) as WeeklyReportIssued;
 it("copies only the dedicated weekly header into the user-supplied service name", () => {
   const value = weeklyReportConfig(issued(), "public");
   expect(value.name).toBe("fyk_report_mcp");
   expect(value.headers).not.toHaveProperty("Authorization");
+});
+it("preserves the WorkBuddy-specific weekly configuration", () => {
+  const files = weeklyReportFiles(issued(), "public");
+  const server = JSON.parse(files.workbuddy!).mcpServers[workbuddyKey];
+  expect(Object.keys(server).toSorted()).toEqual(["headers", "url"]);
+  expect(server.url).toBe("https://plane.test/api/research/workspaces/public/weekly-report-agent/mcp");
+  expect(server.headers).toEqual({ "X-Weekly-Report-Token": `pwr_${"a".repeat(43)}` });
+  expect(files.toml).toContain("https://plane.test/api/research/workspaces/public/weekly-report-agent/mcp/");
 });
 it.each([
   { workspace: "other" },
@@ -98,6 +117,19 @@ it.each([
   { mcp_path: "javascript:SECRET" },
 ])("rejects malformed credentials/paths with a fixed non-sensitive error (%j)", (override) => {
   expect(() => weeklyReportConfig({ ...issued(), ...override }, "public")).toThrow(
+    "连接配置无效，请核对已有连接后重新创建。"
+  );
+});
+it.each([
+  { workbuddy_server_key: "plane-weekly-report-wrong" },
+  {
+    workbuddy_json: workbuddyJson.replace("https://plane.test", "https://evil.test"),
+  },
+  {
+    workbuddy_json: workbuddyJson.replace("X-Weekly-Report-Token", "Authorization"),
+  },
+])("rejects mismatched WorkBuddy configuration without echoing credentials (%j)", (override) => {
+  expect(() => weeklyReportFiles({ ...issued(), ...override }, "public")).toThrow(
     "连接配置无效，请核对已有连接后重新创建。"
   );
 });

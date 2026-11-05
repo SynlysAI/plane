@@ -8,9 +8,8 @@ import {
   type WeeklyReportProblem,
 } from "@/services/weekly-report-mcp.service";
 import { ConnectionBrowser, CreateConnectionDialog, LifetimeSelect, MCP_INPUT } from "./connection-ui";
-import { configurationFiles } from "./connection-config";
 import { useConnectionManager } from "./use-connection-manager";
-import { weeklyReportActionLabels, weeklyReportConfig, weeklyReportMetadata } from "./weekly-report-config";
+import { weeklyReportActionLabels, weeklyReportFiles, weeklyReportMetadata } from "./weekly-report-config";
 
 const SERVICE = new WeeklyReportMCPService();
 /** 将服务错误转换为不含凭据的中文消息。 */
@@ -116,7 +115,7 @@ function WorkspaceWeeklyReportSettings({ workspace }: { workspace: WeeklyReportW
       revoke: (id: string, csrf: string) => SERVICE.revoke(slug, id, csrf),
       delete: (id: string, csrf: string) => SERVICE.delete(slug, id, csrf),
       metadata: weeklyReportMetadata,
-      files: (value: Parameters<typeof weeklyReportConfig>[0]) => configurationFiles([weeklyReportConfig(value, slug)]),
+      files: (value: Parameters<typeof weeklyReportFiles>[0]) => weeklyReportFiles(value, slug),
       error: errorMessage,
     }),
     [slug]

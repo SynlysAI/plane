@@ -41,6 +41,8 @@ export type WeeklyReportIssued = WeeklyReportConnection & {
   headers: Record<string, string>;
   codex_toml: string;
   sciencediscovery_json: string;
+  workbuddy_server_key: string;
+  workbuddy_json: string;
   api_docs_url: string;
   csrf_token: string;
 };

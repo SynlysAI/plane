@@ -4,7 +4,7 @@ import type {
   WeeklyReportConnection,
   WeeklyReportIssued,
 } from "@/services/weekly-report-mcp.service";
-import type { MCPConfig } from "./connection-config";
+import { configurationFiles, type MCPConfig } from "./connection-config";
 
 export const weeklyReportActionLabels: Record<WeeklyReportAction, string> = {
   read_reports: "读取可见周报",
@@ -16,6 +16,9 @@ export const weeklyReportActionLabels: Record<WeeklyReportAction, string> = {
 };
 
 const invalid = () => new Error("连接配置无效，请核对已有连接后重新创建。");
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 /** 白名单提取元数据，避免配置密钥随列表长期驻留。 */
 export function weeklyReportMetadata(value: WeeklyReportConnection): WeeklyReportConnection {
   return {
@@ -61,6 +64,43 @@ export function weeklyReportConfig(value: WeeklyReportIssued, workspace: string)
       headers: { "X-Weekly-Report-Token": token },
     };
   } catch {
+    throw invalid();
+  }
+}
+
+/** 校验并导出周报连接的 Codex、通用 MCP 与 WorkBuddy 配置。 */
+export function weeklyReportFiles(value: WeeklyReportIssued, workspace: string) {
+  try {
+    const config = weeklyReportConfig(value, workspace);
+    const expectedKey = `plane-weekly-report-${value.id.replaceAll("-", "")}`;
+    const expectedUrl = config.url.replace(/\/$/, "");
+    const decoded = JSON.parse(value.workbuddy_json) as {
+      mcpServers?: Record<string, { url?: string; headers?: Record<string, string> }>;
+    };
+    const servers = decoded.mcpServers ?? {};
+    const server = servers[value.workbuddy_server_key];
+    if (
+      !/^plane-weekly-report-[a-f0-9]{32}$/.test(value.workbuddy_server_key) ||
+      value.workbuddy_server_key !== expectedKey ||
+      Object.keys(decoded).join() !== "mcpServers" ||
+      Object.keys(servers).length !== 1 ||
+      !isRecord(server) ||
+      !server.url ||
+      new URL(server.url).href !== expectedUrl ||
+      Object.keys(server).length !== 2 ||
+      !("url" in server) ||
+      !("headers" in server) ||
+      !isRecord(server.headers) ||
+      Object.keys(server.headers).join() !== "X-Weekly-Report-Token" ||
+      server.headers["X-Weekly-Report-Token"] !== config.headers["X-Weekly-Report-Token"]
+    )
+      throw invalid();
+    return {
+      ...configurationFiles([config]),
+      workbuddy: value.workbuddy_json,
+    };
+  } catch {
+    // Parser diagnostics can include credential text. Never expose them.
     throw invalid();
   }
 }
