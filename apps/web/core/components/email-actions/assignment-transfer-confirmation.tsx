@@ -58,8 +58,11 @@ function formatExpiry(value: string): string {
   }).format(date);
 }
 
+/** 校验或执行邮件转派，预览参数放入查询串，确认参数放入 JSON。 */
 async function requestPreview(token: string, candidate: string, method: "GET" | "POST") {
-  const response = await fetch(`${API_BASE_URL}/api/email-actions/assignment-transfer/`, {
+  const endpoint = `${API_BASE_URL}/api/email-actions/assignment-transfer/`;
+  const query = new URLSearchParams({ token, candidate_id: candidate });
+  const response = await fetch(method === "GET" ? `${endpoint}?${query}` : endpoint, {
     method,
     credentials: "include",
     headers: {
@@ -98,7 +101,7 @@ export function AssignmentTransferConfirmation() {
       .then(({ response, payload }) => {
         if (cancelled) return undefined;
         if (response.ok) {
-          setState({ kind: "ready", data: payload });
+          setState({ kind: payload.status === "already_completed" ? "done" : "ready", data: payload });
           return undefined;
         }
         setState({
@@ -219,8 +222,16 @@ export function AssignmentTransferConfirmation() {
             <p className="text-xs font-semibold tracking-wide text-[#426B67]">转派完成</p>
             <h1 className="text-2xl mt-3 leading-snug font-semibold text-[#252522]">{state.data.title}</h1>
             <p className="text-sm mt-4 leading-6 text-[#6D6D67]">
-              该{ENTITY_LABELS[state.data.entity_type]}已由 {state.data.current_assignee?.display_name} 转派给{" "}
-              {state.data.candidate?.display_name}。新负责人会收到下一封指派通知。
+              {state.data.status === "already_completed" ? (
+                <>
+                  该{ENTITY_LABELS[state.data.entity_type]}已转派给 {state.data.candidate?.display_name}，无需重复操作。
+                </>
+              ) : (
+                <>
+                  该{ENTITY_LABELS[state.data.entity_type]}已由 {state.data.current_assignee?.display_name} 转派给{" "}
+                  {state.data.candidate?.display_name}。新负责人会收到下一封指派通知。
+                </>
+              )}
             </p>
             <a
               href={absoluteRoute(state.data.route)}

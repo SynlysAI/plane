@@ -29,6 +29,7 @@ from plane.authentication.session import BaseSessionAuthentication
 from plane.utils.exception_logger import log_exception
 from plane.utils.paginator import BasePaginator
 from plane.utils.core.mixins import ReadReplicaControlMixin
+from plane.utils.request_log_path import request_path_for_logging
 
 
 class TimezoneMixin:
@@ -125,7 +126,7 @@ class BaseViewSet(TimezoneMixin, ReadReplicaControlMixin, ModelViewSet, BasePagi
             if settings.DEBUG:
                 from django.db import connection
 
-                print(f"{request.method} - {request.get_full_path()} of Queries: {len(connection.queries)}")
+                print(f"{request.method} - {request_path_for_logging(request)} of Queries: {len(connection.queries)}")
 
             return response
         except Exception as exc:
@@ -220,7 +221,7 @@ class BaseAPIView(TimezoneMixin, ReadReplicaControlMixin, APIView, BasePaginator
             if settings.DEBUG:
                 from django.db import connection
 
-                print(f"{request.method} - {request.get_full_path()} of Queries: {len(connection.queries)}")
+                print(f"{request.method} - {request_path_for_logging(request)} of Queries: {len(connection.queries)}")
             return response
 
         except Exception as exc:

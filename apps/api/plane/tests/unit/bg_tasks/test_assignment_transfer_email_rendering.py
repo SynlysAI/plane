@@ -3,6 +3,7 @@
 from datetime import timedelta
 from uuid import uuid4
 
+from bs4 import BeautifulSoup
 from django.template.loader import render_to_string
 from django.utils import timezone
 
@@ -24,7 +25,6 @@ from plane.db.models import (
 )
 from plane.tests.research_fixtures import make_research_boundary_fixture
 from plane.utils.assignment_transfer import assignment_transfer_email_context
-from plane.utils.email import generate_plain_text_from_html
 
 
 def _user(workspace, index, project):
@@ -76,7 +76,9 @@ def test_assignment_email_candidates_are_sorted_capped_and_explain_overflow(work
 
 
 @pytest.mark.django_db
-def test_shared_template_has_visible_text_fallbacks_and_no_external_images():
+@pytest.mark.parametrize("entity_type", ["行政工作项", "科研工作项"])
+def test_shared_template_keeps_button_links_and_separate_plain_text(entity_type):
+    """HTML 只显示操作按钮，纯文本版本仍保留可使用的完整地址。"""
     context = {
         "heading": "科研工作项通知",
         "item_identifier": "RB123",
@@ -100,13 +102,13 @@ def test_shared_template_has_visible_text_fallbacks_and_no_external_images():
         "workspace": "work",
         "project": "科研项目",
         "user_preference": "https://plane.example/settings",
-        "entity_type": "科研工作项",
+        "entity_type": entity_type,
         "assignment_transfer": {
             "enabled": True,
             "candidates": [
                 {
                     "display_name": "下一位负责人",
-                    "url": "https://plane.example/email-actions/assignment-transfer/?token=signed",
+                    "url": "https://plane.example/email-actions/assignment-transfer/?token=signed&candidate=next",
                 }
             ],
             "has_more_candidates": False,
@@ -114,15 +116,22 @@ def test_shared_template_has_visible_text_fallbacks_and_no_external_images():
         },
     }
     html = render_to_string("emails/notifications/issue-updates.html", context)
-    plain = generate_plain_text_from_html(html)
+    plain = render_to_string("emails/notifications/issue-updates.txt", context)
+    soup = BeautifulSoup(html, "html.parser")
 
     audit_email_image_resources(html)
     assert "plane-marketing.s3" not in html
     assert "https://plane.example/static/logos/Logo.png" in html
     assert "选择下一位负责人" in html
     assert "转派给 下一位负责人" in html
-    assert "https://plane.example/email-actions/assignment-transfer/" in plain
+    candidate_url = context["assignment_transfer"]["candidates"][0]["url"]
+    assert soup.find("a", string="转派给 下一位负责人")["href"] == candidate_url
+    assert soup.find("a", string=f"查看{entity_type}")["href"] == context["issue_url"]
+    assert "https://" not in soup.get_text()
+    assert candidate_url in plain
+    assert "&amp;" not in plain
     assert "https://plane.example/work/research" in plain
+    assert "账户通知设置" in plain
 
 
 @pytest.mark.django_db
@@ -231,3 +240,7 @@ def test_research_assignment_email_uses_shared_standard_template(db, settings, m
     assert "选择下一位负责人" in html
     assert fixture["advisor"].display_name in html
     assert "<ul>" not in html
+    assert "https://" not in BeautifulSoup(html, "html.parser").get_text()
+    assert "转派给" in captured["body"]
+    assert "/email-actions/assignment-transfer/?token=" in captured["body"]
+    assert "&candidate=" in captured["body"]

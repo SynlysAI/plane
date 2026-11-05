@@ -37,7 +37,7 @@ from plane.db.models import (
 from plane.db.models.research.task import ResearchChainNodeTask
 from plane.license.utils.instance_value import get_email_configuration
 from plane.utils.administrative_projects import project_member_roster
-from plane.utils.email import generate_plain_text_from_html, is_email_recipient_blocked
+from plane.utils.email import is_email_recipient_blocked
 from plane.utils.email_recipient_filters import EmailRecipientFilterConfigurationError
 from plane.utils.notification_outbox import issue_notification_category
 from plane.utils.assignment_transfer import assignment_transfer_email_context
@@ -981,7 +981,7 @@ def _send_email_notification(issue_id, notification_data, receiver_id, email_not
     }
     html_content = render_to_string("emails/notifications/issue-updates.html", context)
     audit_email_image_resources(html_content)
-    text_content = generate_plain_text_from_html(html_content)
+    text_content = render_to_string("emails/notifications/issue-updates.txt", context)
     connection = get_connection(
         host=email_host,
         port=int(email_port),
@@ -1649,7 +1649,7 @@ def send_research_notification_email(delivery_ids, lease_token):
     }
     html_content = render_to_string("emails/notifications/issue-updates.html", context)
     audit_email_image_resources(html_content)
-    text_content = generate_plain_text_from_html(html_content)
+    text_content = render_to_string("emails/notifications/issue-updates.txt", context)
     connection = get_connection(
         host=email_host,
         port=int(email_port),
