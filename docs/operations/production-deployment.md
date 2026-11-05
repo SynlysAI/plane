@@ -23,12 +23,13 @@
 
 主要容器：
 
-| Compose 文件                  | 容器/服务                                  | 说明                                                          |
-| ----------------------------- | ------------------------------------------ | ------------------------------------------------------------- |
-| `docker-compose-prod-web.yml` | `web-prod` / `plane-web-prod-1`            | Caddy，监听宿主机 `3300`                                      |
-| `docker-compose-local.yml`    | `api`、`worker`、`beat-worker`、`migrator` | Django、Celery 与迁移                                         |
-| `docker-compose-local.yml`    | `document-converter`                       | 内部 Gotenberg/LibreOffice 附件预览转换服务，不暴露宿主机端口 |
-| `docker-compose-local.yml`    | PostgreSQL、Redis、RabbitMQ、MinIO         | 后端基础设施                                                  |
+| Compose 文件                  | 容器/服务                                                     | 说明                                                          |
+| ----------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------- |
+| `docker-compose-prod-web.yml` | `web-prod` / `plane-web-prod-1`                               | Caddy，监听宿主机 `3300`                                      |
+| `docker-compose-local.yml`    | `api`、`worker`、`beat-worker`、`migrator`                    | Django、Celery 与迁移                                         |
+| `docker-compose-local.yml`    | `notification-generation-worker`、`notification-email-worker` | 通知生成与邮件投递专用队列，发布时必须重建                    |
+| `docker-compose-local.yml`    | `document-converter`                                          | 内部 Gotenberg/LibreOffice 附件预览转换服务，不暴露宿主机端口 |
+| `docker-compose-local.yml`    | PostgreSQL、Redis、RabbitMQ、MinIO                            | 后端基础设施                                                  |
 
 管理端不再使用独立的宿主机 `3001` 端口。浏览器始终通过 `:3300/god-mode/` 访问，Caddy 再选择正确的静态目录。若前端构建配置中仍有 `localhost:3001`，Web 会把系统管理入口解析为 `10.26.15.53:3001`，最终出现 `ERR_CONNECTION_REFUSED`。
 
@@ -128,31 +129,20 @@ CADDY_BINARY=/path/to/caddy node --test apps/web/tests/production-proxy.test.mjs
 
 ## 4. 日常更新流程
 
-在服务器执行：
+在服务器仓库工作区干净时执行统一部署脚本。生产路径通过容器的 Compose labels 确认，不能直接套用本文历史路径或 IP；当前公开域名为 `https://openeva.xmuzc.com`，发布不修改 `.env`、`WEB_URL` 或 SMTP 配置。
 
 ```bash
-cd /share/users/fangyikai/github_project/SynlysAI/plane
-
-# 1. 拉取代码和安装依赖
-git pull
-pnpm install
-
-# 2. Web 与 Admin 必须一起构建
-pnpm turbo run build --filter=web --filter=admin
-
-# 3. 静态产物更新后重启 Caddy
-docker-compose -f docker-compose-prod-web.yml restart web-prod
-
-# 4. 构建内部转换服务并执行数据库迁移
-docker-compose -f docker-compose-local.yml up -d --build document-converter
-docker-compose -f docker-compose-local.yml up -d migrator
-
-# 5. 重启使用 bind mount 代码的后端进程
-docker rm -f plane-api-1 plane-worker-1 plane-beat-worker-1
-docker-compose -f docker-compose-local.yml up -d api worker beat-worker
+git status --short
+git checkout main
+git pull --ff-only
+./scripts/deploy.sh --skip-pull
 ```
 
-不要再只运行 `--filter=web`，否则 Web 可能已经引用新接口或新路由，而系统管理仍停留在旧构建。
+生产从 `origin/main` 发布；开发变更在 `develop` 验证后，通过 PR 合并到 `main`。部署前核对 `HEAD` 与已验收的 main 提交一致。`scripts/deploy.sh` 的默认 `git pull --ff-only` 跟随当前分支上游，并不固定拉 main；上面的流程先显式更新 main，再用 `--skip-pull` 部署该提交。
+
+发现生产仓库有本地改动时，先停止并人工确认，不执行 reset 或自动清理。脚本负责一起构建 Web/Admin、重建 Caddy、运行迁移，并通过 `--force-recreate` 更新 API、通用 Worker、Beat、文档转换及两个通知专用 Worker。仅重启通用 Worker 会让专用队列继续使用旧代码。
+
+部署当前检出提交时使用 `./scripts/deploy.sh --skip-pull`；仅更新前端或后端时分别使用 `--web`、`--backend`。本次邮件修复必须完整部署。失败时保留失败容器与日志，不自动回滚。
 
 如果修改了 `docker-compose-prod-web.yml` 的端口、卷挂载、网络或其他容器定义，`restart` 不会应用这些变化，需要重新创建容器：
 
@@ -163,7 +153,8 @@ docker-compose -f docker-compose-prod-web.yml up -d --no-deps --force-recreate w
 如果只修改了 `apps/api/.env`，也需要重新创建 API、Worker 和 Beat Worker；普通 restart 可能继续使用容器创建时的旧环境变量：
 
 ```bash
-docker-compose -f docker-compose-local.yml up -d --no-deps --force-recreate api worker beat-worker
+docker compose -f docker-compose-local.yml up -d --no-deps --force-recreate \
+  api worker beat-worker notification-generation-worker notification-email-worker
 ```
 
 ## 5. 部署后验证
@@ -176,6 +167,8 @@ docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' \
   --filter name=plane-api-1 \
   --filter name=plane-worker-1 \
   --filter name=plane-beat-worker-1 \
+  --filter name=plane-notification-generation-worker-1 \
+  --filter name=plane-notification-email-worker-1 \
   --filter name=plane-document-converter-1
 ```
 
@@ -191,6 +184,20 @@ curl -fsS -o /dev/null -w 'api=%{http_code}\n' \
 ```
 
 三项都应返回 `200`。最后使用实例管理员账号从 Web 左下角点击「系统管理」，确认地址停留在 `http://10.26.15.53:3300/god-mode/`，登录后能进入管理菜单。
+
+邮件修复还须验证以下发布契约，部署脚本会检查状态及内容类型：
+
+| 路径                                                          | 预期                      |
+| ------------------------------------------------------------- | ------------------------- |
+| `/email-actions/assignment-transfer/`                         | `200`、`text/html`        |
+| `/api/email-actions/assignment-transfer/?token=x&candidate=x` | `401`、`application/json` |
+| `/static/logos/Logo.png`                                      | `200`、`image/png`        |
+
+`9.16.2` 发布时，确认 `/api/instances/` 的 `current_version` 为 `9.16.2`，六个后端服务的创建和启动时间均晚于发布开始时间，专用 Worker 注册日志包含 `send_email_notification`、`send_research_notification_email`、`process_notification_generation_outbox`。
+
+最后新触发一条科研指派和一条行政指派，核对中文标准模板、「选择下一位负责人」、「转派给 <候选人>」及对应「查看工作项」按钮，并查询 `notification_events`、`notification_email_deliveries`。新投递应达到 `accepted`；失败时记录明确的 `last_error_code`。已经发出的旧邮件不会随发布改变。
+
+`9.16.2` 还须在真实确认页检查 GET 预览请求携带 `token` 和 `candidate_id`，且预览不修改负责人；显式确认后才提交 POST。重复确认不重复生成通知。HTML 邮件保留操作按钮，不重复显示完整网址；纯文本版本保留对应操作地址。请求日志不应包含转派令牌。生产转派验收只使用事先指定的测试工作项和收件人，临时会话在验收结束后失效处理，SMTP `accepted` 仅表示邮件服务器接受。
 
 检查内部转换服务：
 

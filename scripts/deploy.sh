@@ -199,31 +199,73 @@ if [[ "$MODE" != "web" ]]; then
     [[ "$MIGRATOR_EXIT" == "0" ]] \
         || fail_migration "migration exited with code $MIGRATOR_EXIT" "$MIGRATOR_ID"
 
-    log "Recreating API and workers"
-    "${BACKEND_COMPOSE[@]}" up -d --build --force-recreate api worker beat-worker document-converter \
+    log "Recreating API and all task workers"
+    "${BACKEND_COMPOSE[@]}" up -d --build --force-recreate \
+        api worker beat-worker document-converter \
+        notification-generation-worker notification-email-worker \
         || fail "backend services failed to start"
 fi
 
 log "Verifying deployment"
 FAILURES=0
-check() {
-    local name="$1" url="$2" retries="${3:-1}" delay=6 code="000" try
-    for try in $(seq 1 "$retries"); do
-        code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url" || true)"
-        [[ "$code" == "200" ]] && break
-        [[ "$try" -lt "$retries" ]] && sleep "$delay"
-    done
-    if [[ "$code" == "200" ]]; then
-        printf '  OK  %s (%s) -> %s\n' "$name" "$url" "$code"
+record_check() {
+    local name="$1" detail="$2" ok="$3"
+    if [[ "$ok" == true ]]; then
+        printf '  OK  %s (%s)\n' "$name" "$detail"
     else
-        printf '  ERR %s (%s) -> %s\n' "$name" "$url" "${code:-000}"
+        printf '  ERR %s (%s)\n' "$name" "$detail"
         FAILURES=$((FAILURES + 1))
     fi
 }
 
-check "Web" "http://127.0.0.1:${PLANE_WEB_PORT}/" 1
-check "Admin" "http://127.0.0.1:${PLANE_WEB_PORT}/god-mode/" 1
-check "API" "http://127.0.0.1:${PLANE_WEB_PORT}/api/instances/" 15
+# 校验 HTTP 状态及可选内容类型，等待服务完成启动。
+check_status() {
+    local name="$1" url="$2" expected="${3:-200}" retries="${4:-1}" expected_type="${5:-}"
+    local delay=6 code="000" content_type="" response="" ok=false try
+    for try in $(seq 1 "$retries"); do
+        response="$(curl -s -o /dev/null -w '%{http_code} %{content_type}' --max-time 10 "$url" || true)"
+        code="${response%% *}"
+        content_type="${response#* }"
+        if [[ "$code" == "$expected" && ( -z "$expected_type" || "$content_type" == "$expected_type"* ) ]]; then
+            ok=true
+            break
+        fi
+        [[ "$try" -lt "$retries" ]] && sleep "$delay"
+    done
+    record_check "$name" "$url -> ${code:-000} ${content_type:-empty}" "$ok"
+}
+
+check_service_running() {
+    local service="$1" container_id="" status=""
+    if [[ "$service" == "web-prod" ]]; then
+        container_id="$("${WEB_COMPOSE[@]}" ps -q "$service")"
+    else
+        container_id="$("${BACKEND_COMPOSE[@]}" ps -q "$service")"
+    fi
+    if [[ -z "$container_id" ]]; then
+        record_check "$service" "container not created" false
+        return
+    fi
+    status="$(docker inspect --format '{{.State.Status}}' "$container_id" 2>/dev/null || true)"
+    record_check "$service" "container ${container_id} -> ${status:-unknown}" \
+        "$([[ "$status" == "running" ]] && echo true || echo false)"
+}
+
+for service in \
+    api worker beat-worker document-converter \
+    notification-generation-worker notification-email-worker web-prod; do
+    check_service_running "$service"
+done
+
+check_status "Web" "http://127.0.0.1:${PLANE_WEB_PORT}/" 200 1
+check_status "Admin" "http://127.0.0.1:${PLANE_WEB_PORT}/god-mode/" 200 1
+check_status "API" "http://127.0.0.1:${PLANE_WEB_PORT}/api/instances/" 200 15
+check_status "Assignment transfer page" \
+    "http://127.0.0.1:${PLANE_WEB_PORT}/email-actions/assignment-transfer/" 200 1 "text/html"
+check_status "Assignment transfer API" \
+    "http://127.0.0.1:${PLANE_WEB_PORT}/api/email-actions/assignment-transfer/?token=x&candidate=x" 401 5 "application/json"
+check_status "Email logo" \
+    "http://127.0.0.1:${PLANE_WEB_PORT}/static/logos/Logo.png" 200 1 "image/png"
 
 if [[ "$FAILURES" -eq 0 ]]; then
     printf '\n\033[1;32mDeployment completed; all checks passed.\033[0m\n'

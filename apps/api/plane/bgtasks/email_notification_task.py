@@ -37,7 +37,6 @@ from plane.db.models import (
 from plane.db.models.research.task import ResearchChainNodeTask
 from plane.license.utils.instance_value import get_email_configuration
 from plane.utils.administrative_projects import project_member_roster
-from plane.utils.email import generate_plain_text_from_html
 from plane.utils.notification_outbox import issue_notification_category
 from plane.utils.assignment_transfer import assignment_transfer_email_context
 
@@ -961,7 +960,7 @@ def _send_email_notification(issue_id, notification_data, receiver_id, email_not
     }
     html_content = render_to_string("emails/notifications/issue-updates.html", context)
     audit_email_image_resources(html_content)
-    text_content = generate_plain_text_from_html(html_content)
+    text_content = render_to_string("emails/notifications/issue-updates.txt", context)
     connection = get_connection(
         host=email_host,
         port=int(email_port),
@@ -984,9 +983,8 @@ def _send_email_notification(issue_id, notification_data, receiver_id, email_not
     message.attach_alternative(html_content, "text/html")
 
     try:
-        connection_opened = connection.open()
-        if not connection_opened:
-            raise smtplib.SMTPException("SMTP connection did not open")
+        # 连接失败由异常报告，open() 返回值不代表邮件是否投递成功。
+        connection.open()
     except Exception as exc:
         logging.getLogger("plane.worker").exception("Notification SMTP connection failed", exc_info=exc)
         _smtp_failure(
@@ -1611,7 +1609,7 @@ def send_research_notification_email(delivery_ids, lease_token):
     }
     html_content = render_to_string("emails/notifications/issue-updates.html", context)
     audit_email_image_resources(html_content)
-    text_content = generate_plain_text_from_html(html_content)
+    text_content = render_to_string("emails/notifications/issue-updates.txt", context)
     connection = get_connection(
         host=email_host,
         port=int(email_port),
@@ -1630,8 +1628,8 @@ def send_research_notification_email(delivery_ids, lease_token):
     )
     message.attach_alternative(html_content, "text/html")
     try:
-        if not connection.open():
-            raise smtplib.SMTPException("SMTP connection did not open")
+        # 连接失败由异常报告，open() 返回值不代表邮件是否投递成功。
+        connection.open()
     except Exception as exc:
         _research_smtp_failure(
             [delivery.pk for delivery in eligible],

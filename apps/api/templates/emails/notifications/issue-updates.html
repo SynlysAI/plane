@@ -76,9 +76,6 @@
                   <a href="{{ candidate.url }}" style="display:block;padding:10px 12px;border:1px solid #c9d6d2;border-radius:6px;background-color:#f7f7f5;color:#252522;font-size:13px;font-weight:600;text-decoration:none;">转派给 {{ candidate.display_name }}</a>
                 </td>
               </tr>
-              <tr>
-                <td style="padding:3px 12px 0;font-size:11px;line-height:1.5;color:#92928b;word-break:break-all;">{{ candidate.url }}</td>
-              </tr>
             </table>
             {% endfor %}
             {% if assignment_transfer.has_more_candidates %}
@@ -95,7 +92,6 @@
       <tr>
         <td style="padding:26px 32px 30px;">
           <a href="{{ issue_url }}" style="display:inline-block;padding:10px 16px;border-radius:6px;background-color:#426b67;color:#ffffff;font-size:13px;font-weight:600;text-decoration:none;">查看{{ entity_type }}</a>
-          <p style="margin:10px 0 0;font-size:11px;line-height:1.5;color:#92928b;word-break:break-all;">{{ issue_url }}</p>
         </td>
       </tr>
       <tr>

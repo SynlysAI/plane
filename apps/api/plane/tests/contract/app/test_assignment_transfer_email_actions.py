@@ -1,6 +1,9 @@
 """Email assignment-transfer API contracts for administrative and research work items."""
 
+from datetime import timedelta
 from uuid import uuid4
+
+from django.utils import timezone
 
 import pytest
 from rest_framework.test import APIClient
@@ -120,6 +123,7 @@ def test_administrative_transfer_updates_owner_and_queues_native_effects(adminis
     assert preview.status_code == 200, preview.json()
     assert preview.json()["entity_type"] == "administrative_work_item"
     assert preview.json()["title"] == env["issue"].name
+    assert list(env["issue"].issue_assignee.values_list("assignee_id", flat=True)) == [env["owner"].id]
     assert not NotificationGenerationOutbox.objects.filter(payload__issue_id=str(env["issue"].id)).exists()
 
     confirmed = client.post(URL, _request(token, env["candidate"]), format="json")
@@ -159,6 +163,15 @@ def test_research_transfer_preserves_events_audit_and_notification(research_env)
         receiver=research_env["candidate"],
         data__action="assigned",
     ).exists()
+    notification_count = Notification.objects.filter(entity_identifier=task.id).count()
+    audit_count = ResearchAuditEvent.objects.filter(resource_id=task.id, action="task.update").count()
+    repeated = _client(research_env["owner"]).post(
+        URL, _request(token, research_env["candidate"]), format="json"
+    )
+    assert repeated.status_code == 200
+    assert repeated.json()["status"] == "already_completed"
+    assert Notification.objects.filter(entity_identifier=task.id).count() == notification_count
+    assert ResearchAuditEvent.objects.filter(resource_id=task.id, action="task.update").count() == audit_count
 
 
 @pytest.mark.django_db
@@ -185,8 +198,36 @@ def test_transfer_rejects_invalid_candidate_and_changed_owner(research_env):
 
 @pytest.mark.django_db
 def test_tampered_token_is_rejected(administrative_env):
-    response = APIClient().get(URL, {"token": "not-a-signed-token", "candidate_id": str(uuid4())})
-    assert response.status_code in {401, 403, 400}
+    """登录收件人仍不能使用签名无效的链接。"""
+    response = _client(administrative_env["owner"]).get(
+        URL, {"token": "not-a-signed-token", "candidate_id": str(uuid4())}
+    )
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "assignment_transfer_invalid"
+
+
+@pytest.mark.django_db
+def test_expired_transfer_link_is_rejected(administrative_env, monkeypatch):
+    """过期链接返回明确状态，并保持原负责人。"""
+    env = administrative_env
+    expired_time = timezone.now() - timedelta(days=8)
+    with monkeypatch.context() as scoped:
+        scoped.setattr("plane.utils.assignment_transfer.timezone.now", lambda: expired_time)
+        token = build_assignment_transfer_token("issue", env["issue"].id, env["owner"].id, env["owner"].id)
+    response = _client(env["owner"]).get(URL, _request(token, env["candidate"]))
+
+    assert response.status_code == 410
+    assert response.json()["error_code"] == "assignment_transfer_expired"
+    assert list(env["issue"].issue_assignee.values_list("assignee_id", flat=True)) == [env["owner"].id]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("params", [{}, {"token": "signed"}, {"candidate_id": "next"}])
+def test_preview_requires_token_and_candidate(administrative_env, params):
+    """缺少任一预览参数均不能进入确认状态。"""
+    response = _client(administrative_env["owner"]).get(URL, params)
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "assignment_transfer_invalid"
 
 
 @pytest.mark.django_db

@@ -20,6 +20,7 @@ from plane.utils.ip_address import get_client_ip
 from plane.utils.exception_logger import log_exception
 from plane.bgtasks.logger_task import process_logs
 from plane.middleware.request_body_size import is_research_chain_upload
+from plane.utils.request_log_path import ASSIGNMENT_TRANSFER_API_PATH, request_path_for_logging
 
 api_logger = logging.getLogger("plane.api.request")
 
@@ -62,7 +63,7 @@ class RequestLoggerMiddleware:
 
         # Log the request information
         api_logger.info(
-            f"{request.method} {request.get_full_path()} {response.status_code}",
+            f"{request.method} {request_path_for_logging(request)} {response.status_code}",
             extra={
                 "path": request.path,
                 "method": request.method,
@@ -132,6 +133,9 @@ class APITokenLogMiddleware:
         return str(redacted)
 
     def process_request(self, request, response, request_body):
+        # 邮件转派令牌不进入外部 API 的请求或响应正文审计。
+        if request.path.rstrip("/") == ASSIGNMENT_TRANSFER_API_PATH.rstrip("/"):
+            return
         # These routes have their own summary-only audit. Never persist bodies
         # or a one-time issued secret, even if an unrelated X-Api-Key was sent.
         if (request.path == "/api/mcp/" or request.path.startswith("/api/mcp/connections/")

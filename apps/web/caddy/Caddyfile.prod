@@ -20,6 +20,9 @@
 			header_up Host {http.request.hostport}
 		}
 	}
+	handle /static/* {
+		reverse_proxy api:8000
+	}
 	handle /auth/* {
 		reverse_proxy api:8000 {
 			header_up Host {http.request.hostport}
