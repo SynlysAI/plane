@@ -258,6 +258,37 @@ it("submits pasted text as material evidence while retaining file upload", async
   expect(onStageChanged).toHaveBeenCalledTimes(1);
 });
 
+it("inserts the reusable pre-opening template without auto-saving", async () => {
+  await act(async () => {
+    root.render(
+      <ResearchChainStageMaterialRow
+        workspaceSlug="lab"
+        chainId="chain-1"
+        stageCode="TOPIC_SELECTION"
+        material={material({})}
+        editable
+        busy={false}
+        knowledge={knowledge()}
+        templateSections={[
+          { id: "uniqueness", title: "独特性", guidance: "阐明目标", required: true, max_chars: 100 },
+          { id: "innovation", title: "创新性", guidance: "比较 5 项研究", required: true, max_chars: 300 },
+        ]}
+        onStageChanged={vi.fn()}
+      />
+    );
+  });
+
+  const apply = [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+    (item) => item.textContent === "填入模板框架"
+  );
+  await act(async () => apply?.click());
+  const textarea = container.querySelector<HTMLTextAreaElement>("textarea");
+
+  expect(textarea?.value).toContain("## 独特性（100 字以内）");
+  expect(textarea?.value).toContain("## 创新性（300 字以内）");
+  expect(mocks.createChainStageMaterial).not.toHaveBeenCalled();
+});
+
 it("uses the evaluation-specific hint for pasted text", async () => {
   await act(async () => {
     root.render(

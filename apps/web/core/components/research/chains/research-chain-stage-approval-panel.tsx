@@ -4,13 +4,20 @@
  * See the LICENSE file for details.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useTranslation } from "@plane/i18n";
-import type { TResearchChainNode, TResearchChainStageApproval, TResearchChainStageReviewAction } from "@plane/types";
+import type {
+  TReportTemplateSection,
+  TResearchChainNode,
+  TResearchChainStageApproval,
+  TResearchChainStageEvaluationTrack,
+  TResearchChainStageReviewAction,
+} from "@plane/types";
 import { Button } from "@plane/propel/button";
 
 import { ResearchChainStageMaterialRow } from "@/components/research/chains/research-chain-stage-material-row";
+import { ResearchChainStageTemplateGuide } from "@/components/research/chains/research-chain-stage-template-guide";
 import { ResearchChainStageReviewActions } from "@/components/research/chains/research-chain-stage-review-actions";
 import { ResearchChainService } from "@/services/research/chain.service";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
@@ -155,14 +162,24 @@ export function ResearchChainStageApprovalPanel({
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [templateSections, setTemplateSections] = useState<TReportTemplateSection[]>([]);
+  const [evaluation, setEvaluation] = useState(stage.latest_evaluation);
+  const [evaluationTrack, setEvaluationTrack] = useState<TResearchChainStageEvaluationTrack>(
+    stage.latest_evaluation?.track ?? "BASIC"
+  );
   const missingMaterials = stage.materials.filter(
     (material) => (material.submission_state ?? (material.complete ? "READY" : "INCOMPLETE")) !== "READY"
   );
   const selectedNodeIdIsValid = submittableNodes.some((node) => node.id === nodeId);
   const effectiveNodeId = selectedNodeIdIsValid ? nodeId : (submittableNodes[0]?.id ?? "");
-  const precheck = stage.latest_precheck;
-  const precheckCurrent = precheck?.is_current ?? false;
   const stageThreeRequiresCurrentPrecheck = stage.stage_code === "TOPIC_EVALUATION";
+  const evaluationResult = evaluation && "decision" in evaluation.result ? evaluation.result : null;
+  const evaluationCurrent = evaluation?.is_current ?? false;
+  const evaluationReady =
+    stageThreeRequiresCurrentPrecheck &&
+    evaluationCurrent &&
+    evaluation?.status === "READY" &&
+    (evaluation.track === "APPLIED" || evaluationResult?.decision !== "RETURN");
   const finalRequiresPi = stage.pi_policy === "ALWAYS_PI" || (stage.pi_policy === "CONDITIONAL_PI" && requiresPi);
   const piMissing = finalRequiresPi && !stage.principal_investigator.user;
   const advisorMissing = !stage.advisor.user;
@@ -180,10 +197,45 @@ export function ResearchChainStageApprovalPanel({
     reasonCode === "research_chain_stage_reviewer_not_configured"
       ? t("research.errors.research_chain_stage_reviewer_not_configured")
       : t(fallbackKey);
+  const usesPreopeningTemplate = stage.stage_code === "TOPIC_SELECTION" || stage.stage_code === "TOPIC_EVALUATION";
+
+  useEffect(() => {
+    if (!usesPreopeningTemplate) {
+      setTemplateSections([]);
+      return;
+    }
+    let active = true;
+    void (async () => {
+      try {
+        const template = await chainService.getPreopeningTemplate(workspaceSlug);
+        if (active) setTemplateSections(template?.sections_json.sections ?? []);
+      } catch {
+        if (active) setTemplateSections([]);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [usesPreopeningTemplate, workspaceSlug]);
+
+  useEffect(() => {
+    if (stage.stage_code !== "TOPIC_EVALUATION" || evaluation?.status !== "RUNNING") return;
+    const timer = window.setInterval(() => {
+      void (async () => {
+        try {
+          const latest = await chainService.getLatestChainStageEvaluation(workspaceSlug, chainId, stage.stage_code);
+          if (latest) setEvaluation(latest);
+        } catch {
+          // Keep the last known state; the next polling pass retries.
+        }
+      })();
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [chainId, evaluation?.status, stage.stage_code, workspaceSlug]);
   const materialReady =
     missingMaterials.length === 0 &&
     Boolean(effectiveNodeId) &&
-    (!stageThreeRequiresCurrentPrecheck || (Boolean(precheck) && precheckCurrent)) &&
+    (!stageThreeRequiresCurrentPrecheck || evaluationReady) &&
     !piMissing &&
     !advisorMissing;
   const latestReturned = latestReturn(stage);
@@ -218,6 +270,31 @@ export function ResearchChainStageApprovalPanel({
     setError("");
     try {
       await chainService.runChainStagePrecheck(workspaceSlug, chainId, stage.stage_code);
+      await onStageChanged();
+    } catch (actionError) {
+      setError(describeActionError(actionError));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Run the single stage-three material + DeepSeek check through the Agent channel. */
+  const runStageCheck = async () => {
+    if (busy) return;
+    if (missingMaterials.length > 0) {
+      await runPrecheck();
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const created = await chainService.createChainStageEvaluation(
+        workspaceSlug,
+        chainId,
+        stage.stage_code,
+        evaluationTrack
+      );
+      setEvaluation(created);
       await onStageChanged();
     } catch (actionError) {
       setError(describeActionError(actionError));
@@ -334,6 +411,7 @@ export function ResearchChainStageApprovalPanel({
                     : t("research.chains.stage_approval.approval_snapshot_missing")}
                 </p>
               )}
+              <ResearchChainStageTemplateGuide sections={templateSections} />
               <ul className="mt-1 divide-y divide-subtle" role="list">
                 {stage.materials.map((material) => (
                   <ResearchChainStageMaterialRow
@@ -345,6 +423,7 @@ export function ResearchChainStageApprovalPanel({
                     editable={can(stage, "edit_materials")}
                     busy={false}
                     knowledge={knowledge}
+                    templateSections={templateSections}
                     onStageChanged={onStageChanged}
                   />
                 ))}
@@ -483,49 +562,82 @@ export function ResearchChainStageApprovalPanel({
 
                   {stageThreeRequiresCurrentPrecheck && (
                     <div className="space-y-1.5 border-t border-subtle pt-2">
-                      <p className="text-11 font-medium text-primary">{t("research.chains.stage_approval.precheck")}</p>
-                      {precheck ? (
-                        <>
-                          <p className="text-11 text-secondary">
-                            {t("research.chains.stage_approval.precheck_generated_at")}:{" "}
-                            {formatResearchDateTime(precheck.created_at, currentLocale)}
-                            {" · "}
-                            {t("research.chains.stage_approval.material_version")}: {precheck.material_version}
-                            {" · "}
-                            {precheckCurrent
-                              ? t("research.chains.stage_approval.precheck_current")
-                              : t("research.chains.stage_approval.precheck_expired")}
-                          </p>
-                          <ul className="text-11 text-secondary" role="list">
-                            {precheck.checks.map((check) => {
-                              const code = typeof check.code === "string" ? check.code : JSON.stringify(check);
-                              const requirement = stage.materials.find((material) => material.code === code);
-                              return (
-                                <li key={code}>
-                                  {requirement?.title ?? code}:{" "}
-                                  {check.passed
-                                    ? t("research.chains.stage_approval.material_satisfied")
-                                    : t("research.chains.stage_approval.material_missing")}
-                                </li>
-                              );
+                      <div className="flex min-w-0 items-center justify-between gap-2">
+                        <p className="text-11 font-medium text-primary">
+                          {t("research.chains.stage_approval.stage_check")}
+                        </p>
+                        <p className="text-11 text-secondary">
+                          {missingMaterials.length > 0
+                            ? t("research.chains.stage_approval.material_not_ready")
+                            : evaluation?.status === "RUNNING"
+                              ? t("research.chains.stage_approval.evaluation_running")
+                              : evaluation?.status === "FAILED"
+                                ? t("research.chains.stage_approval.evaluation_failed")
+                                : evaluationReady
+                                  ? t("research.chains.stage_approval.evaluation_ready")
+                                  : t("research.chains.stage_approval.evaluation_required")}
+                        </p>
+                      </div>
+                      <label className="grid gap-1 text-11 text-secondary">
+                        <span>{t("research.chains.stage_approval.evaluation_track")}</span>
+                        <select
+                          value={evaluationTrack}
+                          onChange={(event) =>
+                            setEvaluationTrack(event.target.value as TResearchChainStageEvaluationTrack)
+                          }
+                          className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary"
+                        >
+                          <option value="BASIC">{t("research.chains.stage_approval.track_basic")}</option>
+                          <option value="APPLIED">{t("research.chains.stage_approval.track_applied")}</option>
+                        </select>
+                      </label>
+                      {missingMaterials.length > 0 ? (
+                        <p className="text-11 text-secondary">
+                          {t("research.chains.stage_approval.missing_materials", {
+                            materials: missingMaterials.map((material) => material.title).join("、"),
+                          })}
+                        </p>
+                      ) : evaluationResult ? (
+                        <div className="space-y-1 text-11 text-secondary">
+                          <p className="text-primary">
+                            {t("research.chains.stage_approval.evaluation_decision", {
+                              decision: t(
+                                `research.chains.stage_approval.evaluation_${evaluationResult.decision.toLowerCase()}`
+                              ),
                             })}
+                            {evaluationResult.paper_tier ? ` · ${evaluationResult.paper_tier}` : ""}
+                          </p>
+                          {evaluation?.track === "BASIC" && (
+                            <p>
+                              {t("research.chains.stage_approval.evaluation_probabilities", {
+                                optimistic: evaluationResult.subjournal_probability ?? "-",
+                                conservative: evaluationResult.conservative_probability ?? "-",
+                              })}
+                            </p>
+                          )}
+                          <ul role="list">
+                            {evaluationResult.criteria.map((criterion) => (
+                              <li key={criterion.code}>
+                                {criterion.title} · {criterion.score}/10
+                              </li>
+                            ))}
                           </ul>
-                        </>
+                        </div>
                       ) : (
                         <p className="text-11 text-secondary">
-                          {t("research.chains.stage_approval.precheck_required")}
+                          {t("research.chains.stage_approval.evaluation_once_materials_ready")}
                         </p>
                       )}
                       <Button
                         type="button"
                         variant="secondary"
                         size="sm"
-                        disabled={busy}
-                        onClick={() => void runPrecheck()}
+                        disabled={busy || evaluation?.status === "RUNNING"}
+                        onClick={() => void runStageCheck()}
                       >
-                        {precheckCurrent
-                          ? t("research.chains.stage_approval.run_precheck")
-                          : t("research.chains.stage_approval.rerun_precheck")}
+                        {evaluation?.status === "RUNNING"
+                          ? t("research.chains.stage_approval.evaluation_running")
+                          : t("research.chains.stage_approval.run_stage_check")}
                       </Button>
                     </div>
                   )}

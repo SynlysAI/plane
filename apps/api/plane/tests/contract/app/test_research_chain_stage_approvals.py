@@ -1,10 +1,13 @@
 """Research Chain stage approval API contract tests."""
 
+import json
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import (
@@ -12,12 +15,26 @@ from plane.db.models import (
     OrgUnit,
     OrgUnitMember,
     Project,
+    ReportTemplate,
+    ResearchAgentBackendConnection,
+    ResearchAgentRunEvent,
+    ResearchAgentSession,
     ResearchChain,
     ResearchChainNode,
     ResearchChainUpload,
+    ResearchChainStageEvaluation,
+    ResearchChainStageMaterialItem,
+    ResearchContextGrant,
     ResearchProjectProfile,
 )
-from plane.research.services.chain_stage_approvals import initialize_chain_stages
+from plane.research.services.chain_stage_approvals import (
+    create_stage_precheck,
+    initialize_chain_stages,
+    precheck_material_version,
+)
+from plane.research.services.stage_evaluations import refresh_stage_evaluation
+from plane.research.services import stage_evaluations
+from plane.research.utils.templates import ensure_default_preopening_template
 from plane.tests.research_fixtures import add_workspace_member, enable_research, make_user, make_workspace
 
 pytestmark = pytest.mark.contract
@@ -126,6 +143,60 @@ def make_upload(env, node, *, status="SUCCESS", name="stage-material.pdf"):
     )
 
 
+def complete_evaluation_materials(env, node):
+    """Fill every stage-three requirement with successful upload links."""
+    stage = env["chain"].stage_approvals.get(stage_code="TOPIC_EVALUATION")
+    upload = make_upload(env, node, name="evaluation-evidence.pdf")
+    for requirement in stage.material_requirements.all():
+        ResearchChainStageMaterialItem.objects.create(
+            stage=stage,
+            requirement=requirement,
+            title=upload.file_name,
+            source_node=node,
+            upload=upload,
+            request_id=f"evaluation-material-{requirement.id}-{uuid4().hex[:8]}",
+            created_by=env["owner"],
+        )
+    stage.status = "IN_PROGRESS"
+    stage.save(update_fields=["status", "updated_at"])
+    return stage
+
+
+def make_agent_session(env, node, *, status=ResearchAgentSession.Status.READY):
+    """Create one minimal persisted Agent session for evaluation contracts."""
+    grant = make_context_grant(env, node)
+    return ResearchAgentSession.objects.create(
+        workspace=env["workspace"],
+        user=env["owner"],
+        project=env["chain"].project,
+        research_chain=env["chain"],
+        chain_node=node,
+        context_grant=grant,
+        provider=ResearchAgentSession.Provider.SCIENCE_DISCOVERY,
+        status=status,
+        sd_session_id=f"sd-{uuid4().hex[:8]}",
+        sd_run_id=f"run-{uuid4().hex[:8]}",
+        request_id=f"evaluation-session-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+
+
+def make_context_grant(env, node):
+    """Create one short-lived context grant for an evaluation session."""
+    return ResearchContextGrant.objects.create(
+        workspace=env["workspace"],
+        user=env["owner"],
+        project=env["chain"].project,
+        research_chain=env["chain"],
+        chain_node=node,
+        context_hash=uuid4().hex,
+        token_hash=uuid4().hex,
+        expires_at=timezone.now() + timedelta(hours=1),
+        request_id=f"evaluation-grant-{uuid4().hex}",
+    )
+
+
 def test_stage_list_returns_thirteen_stages_and_progress(env):
     response = env["owner_client"].get(url(env))
 
@@ -152,7 +223,7 @@ def test_stage_list_query_count_is_bounded(env):
 
     assert response.status_code == 200, response.json()
     queries = [query["sql"] for query in capture.captured_queries]
-    assert len(queries) < 40
+    assert len(queries) < 41
     assert sum("research_chain_stage_material_requirements" in sql for sql in queries) <= 4
     assert sum("research_chain_stage_material_items" in sql for sql in queries) <= 4
     assert sum("mentor_bindings" in sql for sql in queries) <= 2
@@ -241,7 +312,9 @@ def test_stage_material_accepts_text_and_counts_it_towards_submission(env):
         payload_hash=uuid4().hex,
         created_by=env["owner"],
     )
-    content = "题目：面向金属化的单分子电导研究\n研究课题：光致变色分子的电输运调控\n研究问题：分子结环境如何影响反应动力学。"
+    content = (
+        "题目：面向金属化的单分子电导研究\n研究课题：光致变色分子的电输运调控\n研究问题：分子结环境如何影响反应动力学。"
+    )
     payload = {
         "requirement_code": "RESEARCH_GOAL",
         "content": content,
@@ -799,6 +872,261 @@ def test_topic_evaluation_precheck_is_required_before_submission(env):
     assert precheck.json()["data"]["status"] == "READY"
     assert precheck.json()["data"]["material_version"]
     assert precheck.json()["data"]["is_current"] is True
+
+
+def test_default_preopening_template_is_seeded_once(env):
+    """The reusable five-criteria template is added without overriding later edits."""
+    scoped_url = (
+        f"/api/research/workspaces/{env['workspace'].slug}/report-templates/"
+        "?scope=STAGE_MATERIAL&stage=PRE_OPENING&material_type=TOPIC_DESCRIPTION"
+    )
+    scoped = env["owner_client"].get(scoped_url)
+    assert scoped.status_code == 200, scoped.json()
+    assert scoped.json()["count"] == 1
+
+    assert ensure_default_preopening_template(env["workspace"]) is None
+
+    template = ReportTemplate.objects.get(
+        workspace=env["workspace"],
+        scope=ReportTemplate.Scope.STAGE_MATERIAL,
+        stage="PRE_OPENING",
+        material_type="TOPIC_DESCRIPTION",
+        is_default=True,
+    )
+    sections = template.sections_json["sections"]
+    assert [item["title"] for item in sections] == ["独特性", "创新性", "非做不可", "可行性", "非我莫属"]
+    assert [item["max_chars"] for item in sections] == [100, 300, 200, 100, 100]
+
+    template.is_active = False
+    template.save(update_fields=["is_active", "updated_at"])
+    assert ensure_default_preopening_template(env["workspace"]) is None
+    template.refresh_from_db()
+    assert template.is_active is False
+
+
+def test_stage_evaluation_does_not_call_agent_when_material_is_incomplete(env, monkeypatch):
+    ResearchChainNode.objects.create(
+        chain=env["chain"],
+        node_type="TOPIC_EVALUATION",
+        title="Incomplete evaluation",
+        request_id=f"node-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+    stage = env["chain"].stage_approvals.get(stage_code="TOPIC_EVALUATION")
+    stage.status = "IN_PROGRESS"
+    stage.save(update_fields=["status", "updated_at"])
+    monkeypatch.setattr(
+        "plane.research.services.stage_evaluations._create_agent_session",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("agent must not run")),
+    )
+
+    response = env["owner_client"].post(
+        url(env, "TOPIC_EVALUATION/evaluations/"),
+        {"request_id": f"evaluation-{uuid4().hex}", "track": "BASIC"},
+        format="json",
+    )
+
+    assert response.status_code == 422, response.json()
+    assert response.json()["error_code"] == "research_chain_stage_material_incomplete"
+    assert not ResearchChainStageEvaluation.objects.exists()
+
+
+def test_stage_evaluation_pins_the_science_discovery_provider(env, monkeypatch):
+    node = ResearchChainNode.objects.create(
+        chain=env["chain"],
+        node_type="TOPIC_EVALUATION",
+        title="SD evaluation",
+        request_id=f"node-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+    stage = complete_evaluation_materials(env, node)
+    grant = make_context_grant(env, node)
+    orchestrated = {"grant": grant, "assembly": {}, "sd_session_id": "sd-evaluation"}
+    backend = ResearchAgentBackendConnection.objects.create(
+        workspace=env["workspace"],
+        user=env["owner"],
+        system="SCIENCE_DISCOVERY",
+        base_url="https://eva-cor.example.com",
+        is_enabled=True,
+    )
+    monkeypatch.setattr(stage_evaluations, "resolve_science_discovery_connection", lambda *args, **kwargs: backend)
+    monkeypatch.setattr(stage_evaluations, "create_science_discovery_session", lambda **kwargs: orchestrated)
+    monkeypatch.setattr(stage_evaluations, "_start_agent_run", lambda *args, **kwargs: None)
+
+    evaluation = stage_evaluations.create_stage_evaluation(
+        stage,
+        env["owner"],
+        track="BASIC",
+        request_id=f"evaluation-{uuid4().hex}",
+    )
+
+    assert evaluation.provider == "SCIENCE_DISCOVERY"
+    assert evaluation.agent_session.provider == ResearchAgentSession.Provider.SCIENCE_DISCOVERY
+
+
+def test_stage_evaluation_pins_the_synlora_provider(env, monkeypatch):
+    from plane.research.views import agent as agent_view
+
+    node = ResearchChainNode.objects.create(
+        chain=env["chain"],
+        node_type="TOPIC_EVALUATION",
+        title="Synlora evaluation",
+        request_id=f"node-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+    stage = complete_evaluation_materials(env, node)
+    grant = make_context_grant(env, node)
+    orchestrated = {"grant": grant, "assembly": {}, "synlora_session_id": "synlora-evaluation"}
+    monkeypatch.setattr(stage_evaluations, "resolve_science_discovery_connection", lambda *args, **kwargs: None)
+    monkeypatch.setattr(agent_view, "create_synlora_runtime_session", lambda **kwargs: orchestrated)
+    monkeypatch.setattr(stage_evaluations, "_start_agent_run", lambda *args, **kwargs: None)
+
+    evaluation = stage_evaluations.create_stage_evaluation(
+        stage,
+        env["owner"],
+        track="APPLIED",
+        request_id=f"evaluation-{uuid4().hex}",
+    )
+
+    assert evaluation.provider == "SYNLORA"
+    assert evaluation.agent_session.provider == ResearchAgentSession.Provider.SYNLORA
+
+
+def test_stage_evaluation_converges_from_existing_agent_events(env):
+    node = ResearchChainNode.objects.create(
+        chain=env["chain"],
+        node_type="TOPIC_EVALUATION",
+        title="Evaluation convergence",
+        request_id=f"node-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+    stage = complete_evaluation_materials(env, node)
+    precheck = create_stage_precheck(stage, env["owner"], request_id=f"precheck-{uuid4().hex}")
+    session = make_agent_session(env, node)
+    answer = {
+        "subjournal_probability": 62,
+        "conservative_probability": 48,
+        "paper_tier": "Nature 子刊",
+        "criteria": [
+            {"code": "intelligence", "title": "智能化", "score": 4, "evidence": "与大模型闭环"},
+            {"code": "moat", "title": "护城河", "score": 4, "evidence": "依赖自建表征数据"},
+            {"code": "uniqueness", "title": "独特性", "score": 3, "evidence": "跨尺度表征"},
+            {"code": "positioning", "title": "分级分类（顶天 / 立地）", "score": 4, "evidence": "面向子刊"},
+            {"code": "irreplaceability", "title": "非我莫属", "score": 5, "evidence": "依赖独有仪器"},
+        ],
+        "risks": ["表征 uniqueness 不足"],
+        "recommendations": ["补齐对照组"],
+    }
+    ResearchAgentRunEvent.objects.create(
+        session=session,
+        run_id=session.run_id,
+        seq=1,
+        event_type="OUTPUT",
+        payload={
+            "content": f"```json\n{json.dumps(answer, ensure_ascii=False)}\n```",
+            "remote_seq": 1,
+            "remote_type": "run.completed",
+        },
+        request_id=f"evaluation-output-{uuid4().hex}",
+    )
+    evaluation = ResearchChainStageEvaluation.objects.create(
+        stage=stage,
+        agent_session=session,
+        track="BASIC",
+        status="RUNNING",
+        input_snapshot={"materials": []},
+        material_version=precheck_material_version(precheck),
+        prompt_version="topic-evaluation-deepseek.v1",
+        provider="SCIENCE_DISCOVERY",
+        model_version="deepseek-test",
+        request_id=f"evaluation-{uuid4().hex}",
+        created_by=env["owner"],
+    )
+
+    refreshed = refresh_stage_evaluation(evaluation)
+
+    assert refreshed.status == "READY"
+    assert refreshed.result["decision"] == "RETURN"
+    assert refreshed.result["conservative_probability"] == 48
+    assert refreshed.result["criteria"][0]["title"] == "智能化"
+
+
+def test_basic_stage_evaluation_below_threshold_blocks_submission(env):
+    node = ResearchChainNode.objects.create(
+        chain=env["chain"],
+        node_type="TOPIC_EVALUATION",
+        title="Blocked basic evaluation",
+        request_id=f"node-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+    stage = complete_evaluation_materials(env, node)
+    precheck = create_stage_precheck(stage, env["owner"], request_id=f"precheck-{uuid4().hex}")
+    session = make_agent_session(env, node)
+    ResearchChainStageEvaluation.objects.create(
+        stage=stage,
+        agent_session=session,
+        track="BASIC",
+        status="READY",
+        input_snapshot={},
+        result={"decision": "RETURN", "conservative_probability": 45},
+        material_version=precheck_material_version(precheck),
+        prompt_version="topic-evaluation-deepseek.v1",
+        provider="SCIENCE_DISCOVERY",
+        model_version="deepseek-test",
+        request_id=f"evaluation-{uuid4().hex}",
+        created_by=env["owner"],
+    )
+
+    blocked = env["owner_client"].post(
+        url(env, "TOPIC_EVALUATION/submit/"),
+        {"request_id": f"submit-{uuid4().hex}", "node_id": str(node.id)},
+        format="json",
+    )
+
+    assert blocked.status_code == 422, blocked.json()
+    assert blocked.json()["error_code"] == "research_chain_stage_evaluation_blocked"
+
+
+def test_applied_stage_evaluation_does_not_block_submission(env):
+    node = ResearchChainNode.objects.create(
+        chain=env["chain"],
+        node_type="TOPIC_EVALUATION",
+        title="Applied evaluation",
+        request_id=f"node-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+    stage = complete_evaluation_materials(env, node)
+    precheck = create_stage_precheck(stage, env["owner"], request_id=f"precheck-{uuid4().hex}")
+    session = make_agent_session(env, node)
+    ResearchChainStageEvaluation.objects.create(
+        stage=stage,
+        agent_session=session,
+        track="APPLIED",
+        status="READY",
+        input_snapshot={},
+        result={"decision": "ADVISORY", "conservative_probability": 20},
+        material_version=precheck_material_version(precheck),
+        prompt_version="topic-evaluation-deepseek.v1",
+        provider="SCIENCE_DISCOVERY",
+        model_version="deepseek-test",
+        request_id=f"evaluation-{uuid4().hex}",
+        created_by=env["owner"],
+    )
+
+    submitted = env["owner_client"].post(
+        url(env, "TOPIC_EVALUATION/submit/"),
+        {"request_id": f"submit-{uuid4().hex}", "node_id": str(node.id)},
+        format="json",
+    )
+
+    assert submitted.status_code == 200, submitted.json()
+    assert submitted.json()["data"]["status"] == "AWAITING_ADVISOR"
 
 
 def test_review_idempotency_replay_rejects_a_different_reviewer(env):

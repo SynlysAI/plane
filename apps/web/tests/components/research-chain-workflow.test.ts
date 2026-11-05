@@ -40,6 +40,7 @@ function stageApproval(seed: { stage_code: string; status?: TResearchChainStageA
     materials: [],
     review_actions: [],
     latest_precheck: null,
+    latest_evaluation: null,
     advisor: { user: null, error: null },
     principal_investigator: { user: null, error: null },
     current_review_step: null,

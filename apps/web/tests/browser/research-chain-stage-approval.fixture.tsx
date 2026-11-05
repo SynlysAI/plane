@@ -127,6 +127,7 @@ function baseStage(seed: Partial<TResearchChainStageApproval>): TResearchChainSt
       },
     ],
     latest_precheck: null,
+    latest_evaluation: null,
     advisor: { user: { id: "advisor", display_name: "直接导师", email: "advisor@example.com" }, error: null },
     principal_investigator: {
       user: { id: "pi", display_name: "主 PI", email: "pi@example.com" },
@@ -146,6 +147,42 @@ function baseStage(seed: Partial<TResearchChainStageApproval>): TResearchChainSt
     created_at: "2026-10-20T01:00:00Z",
     updated_at: "2026-10-22T01:00:00Z",
     ...seed,
+  };
+}
+
+/** 生成阶段 03 已完成的 DeepSeek 评估夹具。 */
+function readyEvaluation() {
+  return {
+    schema_version: "research-chain-stage-evaluation.v1" as const,
+    id: "evaluation-fixture",
+    stage: "stage-topic-evaluation",
+    agent_run_id: "run-fixture",
+    track: "BASIC" as const,
+    status: "READY" as const,
+    result: {
+      decision: "PASS" as const,
+      subjournal_probability: 65,
+      conservative_probability: 55,
+      paper_tier: "Nature 子刊",
+      criteria: [
+        { code: "intelligence", title: "智能化", score: 8, evidence: "与大模型闭环", gap: "" },
+        { code: "moat", title: "护城河", score: 7, evidence: "依赖自建表征数据", gap: "" },
+        { code: "uniqueness", title: "独特性", score: 7, evidence: "跨尺度表征", gap: "" },
+        { code: "positioning", title: "分级分类（顶天 / 立地）", score: 8, evidence: "面向子刊", gap: "" },
+        { code: "irreplaceability", title: "非我莫属", score: 9, evidence: "独有仪器", gap: "" },
+      ],
+      risks: ["表征样本量有限"],
+      recommendations: ["补齐对照组"],
+    },
+    material_version: "fixture-version",
+    is_current: true,
+    prompt_version: "topic-evaluation-deepseek.v1",
+    provider: "SCIENCE_DISCOVERY" as const,
+    model_version: "deepseek-fixture",
+    error_code: "",
+    request_id: "evaluation-fixture",
+    created_at: "2026-11-05T01:00:00Z",
+    updated_at: "2026-11-05T01:00:00Z",
   };
 }
 
@@ -215,6 +252,47 @@ const scenarios: Record<string, { label: string; stage: TResearchChainStageAppro
         model_version: "rule-material-v1",
         created_at: "2026-10-21T01:00:00Z",
       },
+      capabilities: {
+        schema_version: "research-capabilities.v1",
+        actions: {
+          edit_materials: decision(true),
+          remove_material: decision(true),
+          precheck: decision(true),
+          submit: decision(true),
+          review: decision(false),
+        },
+      },
+    }),
+    nodes: [fixtureNode("fixture-node", "TOPIC_EVALUATION", "选题评估")],
+  },
+  "evaluation-ready": {
+    label: "阶段 03 DeepSeek 评估通过",
+    stage: baseStage({
+      id: "stage-topic-evaluation",
+      stage_code: "TOPIC_EVALUATION",
+      sort_order: 3,
+      pi_policy: "ALWAYS_PI",
+      materials: [
+        completeMaterial("material-feasibility", "PRINCIPLE_FEASIBILITY", "原理可行性分析"),
+        completeMaterial("material-lab", "LAB_CONDITIONS", "实验室条件"),
+      ],
+      latest_precheck: {
+        schema_version: "research-chain-stage-precheck.v1",
+        id: "precheck-current",
+        status: "READY",
+        summary: "材料完整性预检通过。",
+        material_version: "fixture-version",
+        is_current: true,
+        checks: [
+          { code: "PRINCIPLE_FEASIBILITY", passed: true, submitted_count: 1, minimum_count: 1 },
+          { code: "LAB_CONDITIONS", passed: true, submitted_count: 1, minimum_count: 1 },
+        ],
+        recommendations: [],
+        generated_by: "research-agent-precheck",
+        model_version: "rule-material-v1",
+        created_at: "2026-11-05T00:50:00Z",
+      },
+      latest_evaluation: readyEvaluation(),
       capabilities: {
         schema_version: "research-capabilities.v1",
         actions: {
@@ -342,6 +420,21 @@ ResearchChainService.prototype.uploadKnowledgeFile = async () => ({
   degraded: false,
 });
 ResearchChainService.prototype.runChainStagePrecheck = async () => undefined;
+ResearchChainService.prototype.getPreopeningTemplate = async () => ({
+  id: "fixture-template",
+  name: "课题报告（预开题）五点判据模板",
+  sections_json: {
+    version: 1,
+    guidance: "请逐项自查五点判据。",
+    sections: [
+      { id: "uniqueness", title: "独特性", guidance: "你想做什么？", required: true, max_chars: 100 },
+      { id: "innovation", title: "创新性", guidance: "比较最相关 5 项研究。", required: true, max_chars: 300 },
+      { id: "impact", title: "非做不可", guidance: "说明影响与关心者。", required: true, max_chars: 200 },
+      { id: "feasibility", title: "可行性", guidance: "说明风险、成本和时间。", required: true, max_chars: 100 },
+      { id: "irreplaceability", title: "非我莫属", guidance: "说明依托项目与设施。", required: true, max_chars: 100 },
+    ],
+  },
+});
 ResearchChainService.prototype.submitChainStage = async () => scenario.stage;
 ResearchChainService.prototype.reviewChainStage = async () => scenario.stage;
 

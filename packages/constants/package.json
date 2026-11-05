@@ -1,6 +1,6 @@
 {
   "name": "@plane/constants",
-  "version": "9.13.4",
+  "version": "9.14.0",
   "private": true,
   "license": "AGPL-3.0",
   "type": "module",

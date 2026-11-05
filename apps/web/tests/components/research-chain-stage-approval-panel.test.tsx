@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
   createChainStageMaterial: vi.fn(),
   deleteChainStageMaterial: vi.fn(),
   runChainStagePrecheck: vi.fn(),
+  getPreopeningTemplate: vi.fn(),
+  createChainStageEvaluation: vi.fn(),
+  getLatestChainStageEvaluation: vi.fn(),
   submitChainStage: vi.fn(),
   reviewChainStage: vi.fn(),
 }));
@@ -30,6 +33,9 @@ vi.mock("@/services/research/chain.service", () => ({
     createChainStageMaterial = mocks.createChainStageMaterial;
     deleteChainStageMaterial = mocks.deleteChainStageMaterial;
     runChainStagePrecheck = mocks.runChainStagePrecheck;
+    getPreopeningTemplate = mocks.getPreopeningTemplate;
+    createChainStageEvaluation = mocks.createChainStageEvaluation;
+    getLatestChainStageEvaluation = mocks.getLatestChainStageEvaluation;
     submitChainStage = mocks.submitChainStage;
     reviewChainStage = mocks.reviewChainStage;
   },
@@ -77,6 +83,7 @@ function stage(seed: Record<string, unknown>) {
     ],
     review_actions: [],
     latest_precheck: null,
+    latest_evaluation: null,
     advisor: { user: { id: "advisor", display_name: "直接导师", email: "a@example.com" }, error: null },
     principal_investigator: { user: null, error: null, reason_code: null },
     current_review_step: null,
@@ -92,6 +99,42 @@ function stage(seed: Record<string, unknown>) {
     },
     created_at: "2026-10-22T01:00:00Z",
     updated_at: "2026-10-22T01:00:00Z",
+    ...seed,
+  };
+}
+
+function evaluation(seed: Record<string, unknown>) {
+  return {
+    schema_version: "research-chain-stage-evaluation.v1",
+    id: "evaluation-1",
+    stage: "stage-1",
+    agent_run_id: "run-1",
+    track: "BASIC",
+    status: "READY",
+    result: {
+      decision: "PASS",
+      subjournal_probability: 65,
+      conservative_probability: 55,
+      paper_tier: "Nature 子刊",
+      criteria: [
+        { code: "intelligence", title: "智能化", score: 8, evidence: "与大模型闭环", gap: "" },
+        { code: "moat", title: "护城河", score: 7, evidence: "自建数据", gap: "" },
+        { code: "uniqueness", title: "独特性", score: 7, evidence: "跨尺度表征", gap: "" },
+        { code: "positioning", title: "分级分类（顶天 / 立地）", score: 8, evidence: "面向子刊", gap: "" },
+        { code: "irreplaceability", title: "非我莫属", score: 9, evidence: "独有仪器", gap: "" },
+      ],
+      risks: ["表征范围有限"],
+      recommendations: ["补齐对照组"],
+    },
+    material_version: "version-1",
+    is_current: true,
+    prompt_version: "topic-evaluation-deepseek.v1",
+    provider: "SCIENCE_DISCOVERY",
+    model_version: "deepseek-test",
+    error_code: "",
+    request_id: "evaluation-1",
+    created_at: "2026-11-05T01:00:00Z",
+    updated_at: "2026-11-05T01:00:00Z",
     ...seed,
   };
 }
@@ -171,6 +214,8 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  mocks.getPreopeningTemplate.mockResolvedValue(null);
+  mocks.getLatestChainStageEvaluation.mockResolvedValue(null);
 });
 
 afterEach(async () => {
@@ -410,7 +455,7 @@ it("only lists nodes the backend allows for submission", async () => {
   expect([...(select?.options ?? [])].map((option) => option.text)).toEqual(["可提交节点"]);
 });
 
-it("marks an outdated stage-three precheck and blocks submission", async () => {
+it("requires a current stage-three evaluation and blocks submission", async () => {
   const outdated = stage({
     latest_precheck: {
       schema_version: "research-chain-stage-precheck.v1",
@@ -449,13 +494,76 @@ it("marks an outdated stage-three precheck and blocks submission", async () => {
       },
     ],
   });
-  mocks.runChainStagePrecheck.mockResolvedValue({});
+  mocks.createChainStageEvaluation.mockResolvedValue({
+    schema_version: "research-chain-stage-evaluation.v1",
+    id: "evaluation-1",
+    stage: "stage-1",
+    agent_run_id: "run-1",
+    track: "BASIC",
+    status: "RUNNING",
+    result: {},
+    material_version: "new-version",
+    is_current: true,
+    prompt_version: "topic-evaluation-deepseek.v1",
+    provider: "SCIENCE_DISCOVERY",
+    model_version: "",
+    error_code: "",
+    request_id: "evaluation-1",
+    created_at: "2026-11-05T01:00:00Z",
+    updated_at: "2026-11-05T01:00:00Z",
+  });
   await renderPanel({ stage: outdated, expanded: true });
 
-  expect(container.textContent).toContain("结果已过期，需重新检查");
+  expect(container.textContent).toContain("待生成 DeepSeek 评估");
   expect(button("提交阶段审核")?.disabled).toBe(true);
-  await act(async () => button("重新检查")?.click());
-  expect(mocks.runChainStagePrecheck).toHaveBeenCalledWith("lab", "chain-1", "TOPIC_EVALUATION");
+  await act(async () => button("生成阶段检查")?.click());
+  expect(mocks.createChainStageEvaluation).toHaveBeenCalledWith("lab", "chain-1", "TOPIC_EVALUATION", "BASIC");
+});
+
+it("embeds the reusable pre-opening template guide", async () => {
+  mocks.getPreopeningTemplate.mockResolvedValue({
+    id: "template-1",
+    name: "课题报告（预开题）五点判据模板",
+    sections_json: {
+      version: 1,
+      guidance: "逐项自查",
+      sections: [
+        { id: "uniqueness", title: "独特性", guidance: "阐明目标", required: true, max_chars: 100 },
+        { id: "innovation", title: "创新性", guidance: "比较 5 项研究", required: true, max_chars: 300 },
+      ],
+    },
+  });
+  await renderPanel({ expanded: true });
+
+  expect(container.textContent).toContain("预开题五点判据模板");
+  expect(container.textContent).toContain("独特性");
+  expect(container.textContent).toContain("比较 5 项研究");
+});
+
+it("shows a compact ready DeepSeek evaluation and permits submission", async () => {
+  const readyMaterial = {
+    ...stage({}).materials[0],
+    submitted_count: 1,
+    complete: true,
+    submission_state: "READY",
+  };
+  await renderPanel({
+    stage: stage({
+      materials: [readyMaterial],
+      latest_evaluation: evaluation({}),
+      principal_investigator: {
+        user: { id: "pi", display_name: "主 PI", email: "pi@example.com" },
+        error: null,
+        reason_code: null,
+      },
+    }),
+    expanded: true,
+  });
+
+  expect(container.textContent).toContain("结论：可提交");
+  expect(container.textContent).toContain("子刊概率 65% · 降档后 55%");
+  expect(container.textContent).toContain("智能化 · 8/10");
+  expect(button("提交阶段审核")?.disabled).toBe(false);
 });
 
 it("sends an explicit student declaration for a conditional stage", async () => {

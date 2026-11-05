@@ -122,6 +122,7 @@ from .research import (
     ResearchApprovalRoute,
     ResearchChain,
     ResearchChainStage,
+    ResearchChainStageEvaluation,
     ResearchChainStageMaterialItem,
     ResearchChainStageMaterialRequirement,
     ResearchChainStagePrecheck,

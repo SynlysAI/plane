@@ -152,6 +152,26 @@ it("uses a wrapping responsive layout instead of a fixed horizontal rail", async
   expect(buttons.some((button) => button.className.includes("truncate"))).toBe(false);
 });
 
+it("keeps secondary status visually hidden but accessible in compact mode", async () => {
+  await act(async () => {
+    root.render(
+      <ResearchChainWorkflowRail
+        stageApprovals={[]}
+        nodes={[]}
+        currentNodeId={null}
+        selectedStageId={null}
+        expanded={false}
+        onSelectStage={() => undefined}
+      />
+    );
+  });
+
+  const literature = [...container.querySelectorAll<HTMLButtonElement>('[role="listitem"] button')][0];
+  const status = [...(literature?.querySelectorAll("span") ?? [])].find((item) => item.textContent === "未开始");
+  expect(status?.classList.contains("sr-only")).toBe(true);
+  expect(literature?.getAttribute("title")).toContain("未开始");
+});
+
 it("renders a wrapping process map with visible status and a distinct viewing state", async () => {
   const literature = node({
     id: "literature",

@@ -124,6 +124,7 @@ class ResearchAuditAction:
     CHAIN_STAGE_MATERIAL_ADD = "chain.stage.material.add"
     CHAIN_STAGE_MATERIAL_REMOVE = "chain.stage.material.remove"
     CHAIN_STAGE_PRECHECK = "chain.stage.precheck"
+    CHAIN_STAGE_EVALUATION_CREATE = "chain.stage.evaluation.create"
     CHAIN_STAGE_SUBMIT = "chain.stage.submit"
     CHAIN_STAGE_RETURN = "chain.stage.return"
     CHAIN_STAGE_ADVISOR_APPROVE = "chain.stage.advisor.approve"

@@ -5,6 +5,7 @@ from rest_framework import serializers
 from plane.research.serializers.chain import ResearchChainUploadSerializer
 from plane.db.models import (
     ResearchChainStage,
+    ResearchChainStageEvaluation,
     ResearchChainStageMaterialItem,
     ResearchChainStagePrecheck,
     ResearchChainStageReviewAction,
@@ -160,6 +161,7 @@ class ResearchChainStageSerializer(serializers.ModelSerializer):
     materials = serializers.SerializerMethodField()
     review_actions = serializers.SerializerMethodField()
     latest_precheck = serializers.SerializerMethodField()
+    latest_evaluation = serializers.SerializerMethodField()
     advisor = serializers.SerializerMethodField()
     principal_investigator = serializers.SerializerMethodField()
     current_review_step = serializers.SerializerMethodField()
@@ -184,6 +186,7 @@ class ResearchChainStageSerializer(serializers.ModelSerializer):
             "materials",
             "review_actions",
             "latest_precheck",
+            "latest_evaluation",
             "advisor",
             "principal_investigator",
             "current_review_step",
@@ -210,6 +213,10 @@ class ResearchChainStageSerializer(serializers.ModelSerializer):
     def get_latest_precheck(self, obj):
         precheck = obj.prechecks.first()
         return ResearchChainStagePrecheckSerializer(precheck).data if precheck else None
+
+    def get_latest_evaluation(self, obj):
+        evaluation = obj.evaluations.select_related("agent_session").first()
+        return ResearchChainStageEvaluationSerializer(evaluation).data if evaluation else None
 
     def get_advisor(self, obj):
         user, error, reason_code = self._cached_reviewer("advisor", resolve_advisor, obj.chain)
@@ -294,3 +301,41 @@ class ResearchChainStageSerializer(serializers.ModelSerializer):
         if "writable" not in self.context:
             self.context["writable"] = obj.chain.status == "ACTIVE" and chain_writer(obj.workspace, actor, obj.chain)
         return self.context["writable"]
+
+
+class ResearchChainStageEvaluationSerializer(serializers.ModelSerializer):
+    """Expose one stage-three evaluation without returning the full prompt input."""
+
+    schema_version = serializers.SerializerMethodField()
+    agent_run_id = serializers.SerializerMethodField()
+    is_current = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ResearchChainStageEvaluation
+        fields = [
+            "schema_version",
+            "id",
+            "stage",
+            "agent_run_id",
+            "track",
+            "status",
+            "result",
+            "material_version",
+            "is_current",
+            "prompt_version",
+            "provider",
+            "model_version",
+            "error_code",
+            "request_id",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_schema_version(self, _obj):
+        return "research-chain-stage-evaluation.v1"
+
+    def get_agent_run_id(self, obj):
+        return str(obj.agent_session.run_id)
+
+    def get_is_current(self, obj):
+        return bool(obj.material_version) and obj.material_version == stage_material_version(obj.stage)
