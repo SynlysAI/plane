@@ -54,14 +54,6 @@ class AssignmentTransferEndpoint(BaseAPIView):
                 {"error_code": exc.code, "message": exc.message, "route": exc.route},
                 status=exc.status,
             )
-        except Exception as exc:
-            message = str(exc).lower()
-            if "boundary" in message or "assignee" in message:
-                return Response(
-                    {"error_code": "assignment_candidate_invalid", "message": "候选负责人已失效。"},
-                    status=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                )
-            raise
 
     def _execute(self, request, preview, token):
         from plane.utils.assignment_transfer import load_assignment_transfer_token
