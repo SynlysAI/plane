@@ -187,3 +187,17 @@ def test_transfer_rejects_invalid_candidate_and_changed_owner(research_env):
 def test_tampered_token_is_rejected(administrative_env):
     response = APIClient().get(URL, {"token": "not-a-signed-token", "candidate_id": str(uuid4())})
     assert response.status_code in {401, 403, 400}
+
+
+@pytest.mark.django_db
+def test_malformed_candidate_id_is_rejected_without_server_error(administrative_env):
+    env = administrative_env
+    token = build_assignment_transfer_token("issue", env["issue"].id, env["owner"].id, env["owner"].id)
+    response = _client(env["owner"]).post(
+        URL,
+        {"token": token, "candidate_id": "not-a-uuid"},
+        format="json",
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "assignment_candidate_invalid"

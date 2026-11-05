@@ -2,6 +2,7 @@
 
 from datetime import timedelta
 from urllib.parse import urlencode
+from uuid import UUID
 
 from django.core import signing
 from django.db import transaction
@@ -234,7 +235,13 @@ def assignment_transfer_preview(token, candidate_id, actor):
         raise AssignmentTransferError("assignment_transfer_forbidden", "只有邮件接收人可以执行此转派。", 403)
 
     owner_id = assignment_transfer_owner_id(entity_type, entity)
-    candidate = User.objects.filter(pk=candidate_id, is_active=True).first()
+    candidate = None
+    try:
+        candidate_uuid = UUID(str(candidate_id))
+    except (TypeError, ValueError):
+        candidate_uuid = None
+    if candidate_uuid is not None:
+        candidate = User.objects.filter(pk=candidate_uuid, is_active=True).first()
     route = assignment_transfer_route(entity_type, entity)
     common = {
         "entity_type": "administrative_work_item"

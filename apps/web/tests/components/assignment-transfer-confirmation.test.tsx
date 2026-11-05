@@ -104,6 +104,17 @@ it("preserves the full confirmation URL when guiding an unauthenticated recipien
   expect(login?.getAttribute("href")).toBe(`/?next_path=${encodeURIComponent(path)}`);
 });
 
+it("treats a DRF unauthenticated 403 response as a sign-in prompt", async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValue(responseBody({ detail: "Authentication credentials were not provided." }, 403));
+  vi.stubGlobal("fetch", fetchMock);
+  await renderComponent("/email-actions/assignment-transfer/?token=signed&candidate=next");
+
+  expect(container.textContent).toContain("该操作需要邮件接收人本人登录");
+  expect(linkByText("去登录")).not.toBeUndefined();
+});
+
 it("offers the native work-item route when the owner or candidate has changed", async () => {
   const fetchMock = vi.fn().mockResolvedValue(
     responseBody(

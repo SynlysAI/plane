@@ -108,7 +108,7 @@ export function AssignmentTransferConfirmation() {
             message: payload.message ?? "无法加载转派信息。",
             route: payload.route,
           },
-          needsLogin: response.status === 401,
+          needsLogin: response.status === 401 || (response.status === 403 && !payload.error_code),
         });
         return undefined;
       })
@@ -147,7 +147,7 @@ export function AssignmentTransferConfirmation() {
           message: payload.message ?? "转派未完成，请到原生网页处理。",
           route: payload.route,
         },
-        needsLogin: response.status === 401,
+        needsLogin: response.status === 401 || (response.status === 403 && !payload.error_code),
       });
     } catch {
       setState({
