@@ -185,7 +185,7 @@ def test_research_assignment_email_uses_shared_standard_template(db, settings, m
 
     class FakeConnection:
         def open(self):
-            return True
+            return None
 
         def close(self):
             return None
