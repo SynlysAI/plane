@@ -2,13 +2,12 @@
 
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import textwrap
 import unittest
-
+from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 DOCKER_STUB = """#!/usr/bin/env python3
@@ -26,6 +25,13 @@ if args[0] == "compose":
 elif args[0] == "inspect":
     if "ExitCode" in args[2]:
         print("0" if mode == "success" else "1")
+    elif "State.Status" in args[2]:
+        counter = os.environ["DEPLOY_TEST_CALLS"] + ".status-count"
+        with open(counter, "a", encoding="utf-8") as stream:
+            stream.write("1\\n")
+        with open(counter, encoding="utf-8") as stream:
+            first_status = len(stream.readlines()) == 1
+        print("running" if mode == "timeout" or not first_status else "exited")
     else:
         print("running" if mode == "timeout" else "exited")
 elif args[0] == "logs":
@@ -33,6 +39,25 @@ elif args[0] == "logs":
         print("logs unavailable", file=sys.stderr)
         sys.exit(7)
     print("AttributeError: historical model has no all_objects", file=sys.stderr)
+"""
+
+
+CURL_STUB = """#!/usr/bin/env python3
+import sys
+
+args = sys.argv[1:]
+url = next((value for value in args if value.startswith("http://")), "")
+output_format = ""
+if "-w" in args:
+    output_format = args[args.index("-w") + 1]
+if "assignment-transfer" in url and "%{http_code}" in output_format:
+    print("401")
+elif "Logo.png" in url and "%{content_type}" in output_format:
+    print("image/png")
+elif "%{content_type}" in output_format:
+    print("text/html")
+else:
+    print("200")
 """
 
 
@@ -58,7 +83,7 @@ class DeployMigrationTests(unittest.TestCase):
             "docker": DOCKER_STUB,
             "git": "#!/bin/sh\nexit 0\n",
             "pnpm": "#!/bin/sh\nexit 0\n",
-            "curl": "#!/bin/sh\nprintf '200'\n",
+            "curl": CURL_STUB,
         }.items():
             path = self.bin / name
             path.write_text(textwrap.dedent(content), encoding="utf-8")
@@ -131,7 +156,16 @@ class DeployMigrationTests(unittest.TestCase):
         """迁移成功后应继续重建后端并通过健康检查。"""
         result, calls = self._deploy("success")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue(any("--force-recreate" in call and "api" in call for call in calls))
+        recreate_call = next((call for call in calls if "--force-recreate" in call), [])
+        self.assertTrue(
+            {
+                "api",
+                "worker",
+                "beat-worker",
+                "notification-generation-worker",
+                "notification-email-worker",
+            }.issubset(set(recreate_call))
+        )
         self.assertIn("all checks passed", result.stdout)
         self.assertFalse(any(call[0] == "logs" for call in calls))
 
