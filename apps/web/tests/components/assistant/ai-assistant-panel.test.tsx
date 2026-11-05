@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   getEvents: vi.fn(),
   streamEvents: vi.fn(),
   cancelRun: vi.fn(),
+  toggleProfileSettingsModal: vi.fn(),
 }));
 
 const routerPush = vi.fn();
@@ -52,6 +53,10 @@ vi.mock("next/link", () => ({
 vi.mock("@plane/i18n", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   useTranslation: () => ({ t: (key: string) => key }),
+}));
+
+vi.mock("@/hooks/store/use-command-palette", () => ({
+  useCommandPalette: () => ({ toggleProfileSettingsModal: mocks.toggleProfileSettingsModal }),
 }));
 
 const { AIAssistantPanel } = await import("@/components/assistant/ai-assistant-panel");
@@ -280,8 +285,17 @@ describe("AIAssistantPanel", () => {
     renderPanel(store);
     await waitForText("aiAssistant.status_personal_credential_required");
 
-    const setupLink = document.querySelector('a[href="/settings/profile/agent-configuration"]') as HTMLAnchorElement;
-    expect(setupLink).not.toBeNull();
+    const setupButton = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === "aiAssistant.configure_token"
+    ) as HTMLButtonElement;
+    expect(setupButton).toBeDefined();
+    await act(async () => {
+      setupButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(mocks.toggleProfileSettingsModal).toHaveBeenCalledWith({
+      activeTab: "agent-configuration",
+      isOpen: true,
+    });
     expect((document.querySelector("textarea") as HTMLTextAreaElement).disabled).toBe(true);
     expect(mocks.resolveContext).not.toHaveBeenCalled();
   });

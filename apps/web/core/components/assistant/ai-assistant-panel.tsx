@@ -49,6 +49,7 @@ import type { TAssistantStatus } from "@/services/assistant";
 import type { TAgentDockEvent, TAgentFocusRef } from "@/services/agent-dock";
 // store
 import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
+import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { AGENT_DOCK_MAX_WIDTH, AGENT_DOCK_MIN_WIDTH } from "@/store/ai-assistant";
 
 type Props = {
@@ -259,6 +260,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
 }: Props) {
   const { t } = useTranslation();
   const assistantStore = useAIAssistant();
+  const { toggleProfileSettingsModal } = useCommandPalette();
   const cloudReady = statusState === "ready";
   const cloud = useAssistantChat(workspaceSlug, { enabled: cloudReady, focusRef });
   const local = useWorkbenchChat(workspaceSlug, assistantStore.contextNodeId);
@@ -386,12 +388,13 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({
         <p className="mt-1.5 text-12 leading-relaxed text-secondary">{t(`aiAssistant.status_${statusState}_hint`)}</p>
       </div>
       {statusState === "personal_credential_required" && (
-        <Link
-          href="/settings/profile/agent-configuration"
+        <button
+          type="button"
           className="rounded-md border border-subtle px-3 py-1.5 text-12 text-primary transition hover:bg-surface-2"
+          onClick={() => toggleProfileSettingsModal({ activeTab: "agent-configuration", isOpen: true })}
         >
           {t("aiAssistant.configure_token")}
-        </Link>
+        </button>
       )}
       {statusState === "not_configured" && (
         <Link
