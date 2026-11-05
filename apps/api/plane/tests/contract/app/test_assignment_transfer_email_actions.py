@@ -8,10 +8,13 @@ from django.utils import timezone
 import pytest
 from rest_framework.test import APIClient
 
+from plane.bgtasks.issue_activities_task import process_notification_generation_outbox
 from plane.db.models import (
     Issue,
+    IssueActivity,
     IssueAssignee,
     Notification,
+    NotificationEmailDelivery,
     NotificationGenerationOutbox,
     Project,
     ProjectMember,
@@ -115,6 +118,7 @@ def test_administrative_transfer_requires_target_owner_login(administrative_env)
 
 @pytest.mark.django_db
 def test_administrative_transfer_updates_owner_and_queues_native_effects(administrative_env):
+    """转派后完整消费持久化通知，重试提交与消费都不产生重复记录。"""
     env = administrative_env
     token = build_assignment_transfer_token("issue", env["issue"].id, env["owner"].id, env["owner"].id)
     client = _client(env["owner"])
@@ -137,6 +141,27 @@ def test_administrative_transfer_updates_owner_and_queues_native_effects(adminis
     assert repeated.status_code == 200
     assert repeated.json()["status"] == "already_completed"
     assert NotificationGenerationOutbox.objects.filter(payload__issue_id=str(env["issue"].id)).count() == 1
+
+    process_notification_generation_outbox.run(outbox_id=str(outbox.pk))
+    outbox.refresh_from_db()
+    assert outbox.status == NotificationGenerationOutbox.Status.COMPLETED
+    assert outbox.payload["email_assignment_transfer"] is True
+    activities = IssueActivity.objects.filter(issue=env["issue"], field="assignees")
+    assert activities.filter(actor=env["owner"], new_identifier=env["candidate"].id).count() == 1
+    notifications = Notification.objects.filter(
+        entity_identifier=env["issue"].id, receiver=env["candidate"], sender="in_app:issue_activities:assigned"
+    )
+    assert notifications.count() == 1
+    deliveries = NotificationEmailDelivery.objects.filter(
+        event__entity_identifier=env["issue"].id, event__receiver=env["candidate"]
+    )
+    assert deliveries.count() == 1
+
+    activity_count = activities.count()
+    process_notification_generation_outbox.run(outbox_id=str(outbox.pk))
+    assert activities.count() == activity_count
+    assert notifications.count() == 1
+    assert deliveries.count() == 1
 
 
 @pytest.mark.django_db

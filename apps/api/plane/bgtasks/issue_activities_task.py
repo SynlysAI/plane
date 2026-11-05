@@ -1657,7 +1657,10 @@ def process_notification_generation_outbox(outbox_id=None):
     for row_id, payload, token, attempt in claims:
         try:
             with transaction.atomic():
-                issue_activity.run(**payload, durable_generation=True)
+                activity_payload = payload.copy()
+                # 保留转派审计标记，但不将其作为原生活动任务的参数。
+                activity_payload.pop("email_assignment_transfer", None)
+                issue_activity.run(**activity_payload, durable_generation=True)
                 completed = NotificationGenerationOutbox.objects.filter(
                     pk=row_id,
                     status=NotificationGenerationOutbox.Status.PROCESSING,
