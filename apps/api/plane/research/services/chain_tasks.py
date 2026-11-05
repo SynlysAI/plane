@@ -905,6 +905,80 @@ def update_task(*, task, actor, payload, request=None):
         raise ChainTaskConflictError("The task could not be updated consistently.") from error
 
 
+def transfer_task_by_current_assignee(*, task, actor, assignee_id, request=None):
+    """Let the current assignee hand a task to another valid chain member.
+
+    This path is intentionally narrower than ``update_task``: it accepts only the
+    next owner, is authorized by the current assignee rather than a chain writer,
+    and preserves the normal event, audit, and notification effects.
+
+    Args:
+        task: Research Chain node task selected by a signed email link.
+        actor: Authenticated current assignee who confirmed the transfer.
+        assignee_id: Server-validated next owner identifier.
+        request: Confirmation API request used for audit metadata.
+
+    Returns:
+        A tuple of the locked task and whether this call changed its owner.
+    """
+    with transaction.atomic():
+        locked_chain = ResearchChain.objects.select_for_update().get(pk=task.chain_id)
+        locked_node = ResearchChainNode.objects.select_for_update().get(pk=task.node_id)
+        _ensure_task_parent_writable(locked_chain, locked_node)
+        locked_task = ResearchChainNodeTask.objects.select_for_update().get(pk=task.pk)
+        if (
+            actor is None
+            or not getattr(actor, "is_authenticated", False)
+            or locked_task.assignee_id != actor.id
+            or locked_task.status
+            not in (ResearchChainNodeTask.Status.DRAFT, ResearchChainNodeTask.Status.ASSIGNED)
+        ):
+            raise ChainTaskPermissionError("Only the current assignee can transfer this task.")
+        if not validate_assignable_user(locked_task.workspace, locked_chain, assignee_id):
+            raise ChainTaskValidationError("The next assignee is outside the chain boundary.")
+
+        next_assignee = User.objects.get(pk=assignee_id, is_active=True)
+        if next_assignee.id == locked_task.assignee_id:
+            return locked_task, False
+
+        previous_assignee_id = locked_task.assignee_id
+        locked_task.assignee = next_assignee
+        locked_task.assigned_by = actor
+        locked_task.updated_by = actor
+        locked_task.save(update_fields=["assignee", "assigned_by", "updated_by", "updated_at"])
+
+        metadata = {
+            "fields": ["assignee"],
+            "previous_assignee": str(previous_assignee_id),
+            "assignee": str(next_assignee.id),
+            "email_assignment_transfer": True,
+        }
+        request_id = f"task-email-transfer-{locked_task.id}-{next_assignee.id}-{uuid4().hex[:12]}"
+        content = {
+            "task_id": str(locked_task.id),
+            "previous_assignee": str(previous_assignee_id),
+            "assignee": str(next_assignee.id),
+        }
+        _write_task_event(
+            task=locked_task,
+            actor=actor,
+            request_id=request_id[:128],
+            event_type="TASK_ASSIGNED",
+            summary=f"Assigned task: {locked_task.title}",
+            metadata=metadata,
+            content_hash=payload_hash(content),
+        )
+        _write_task_audit(
+            task=locked_task,
+            actor=actor,
+            action=ResearchAuditAction.TASK_UPDATE,
+            metadata=metadata,
+            request=request,
+        )
+        notify_task_assigned(locked_task, actor)
+        return locked_task, True
+
+
 def _run_task_action(*, task, actor, request_id, event_type, content_hash, action, request, metadata, guard):
     """Lock, replay, transition, and record one task state action."""
     with transaction.atomic():

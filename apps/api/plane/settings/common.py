@@ -293,6 +293,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_TIMEOUT = 15
 NOTIFICATION_EMAIL_DELIVERY_ENABLED = os.environ.get("NOTIFICATION_EMAIL_DELIVERY_ENABLED", "1") == "1"
+NOTIFICATION_ASSIGNMENT_TRANSFER_EMAIL_ENABLED = (
+    os.environ.get("NOTIFICATION_ASSIGNMENT_TRANSFER_EMAIL_ENABLED", "1") == "1"
+)
 
 # Storage Settings
 # Use Minio settings
