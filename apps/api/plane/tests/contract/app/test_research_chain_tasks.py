@@ -233,6 +233,83 @@ class TestResearchChainNodeTaskApi:
         assert ResearchAuditEvent.objects.filter(action="task.cancel").exists()
         assert Notification.objects.filter(entity_name="research_chain_task", data__action="cancelled").exists()
 
+    def test_task_creator_can_soft_delete_task_and_remove_it_from_todos(self, env):
+        task = _create(env, client=env["member_client"], assignee=str(env["advisor"].id))
+        assert task["capabilities"]["actions"]["delete"]["allowed"] is True
+
+        response = env["member_client"].delete(_url(env, task["id"]))
+
+        assert response.status_code == 204
+        assert not ResearchChainNodeTask.objects.filter(pk=task["id"]).exists()
+        deleted = ResearchChainNodeTask.all_objects.get(pk=task["id"])
+        assert deleted.deleted_at is not None
+        assert deleted.updated_by_id == env["group_member"].id
+        assert ResearchChainEvent.objects.filter(
+            chain=env["chain"], node=env["paper_node"], event_type="TASK_DELETED", request_id__startswith="task-delete-"
+        ).exists()
+        assert ResearchAuditEvent.objects.filter(
+            workspace=env["workspace"], resource_id=task["id"], action="task.delete"
+        ).exists()
+        assert Notification.objects.filter(
+            entity_name="research_chain_task", receiver=env["advisor"], data__action="deleted"
+        ).exists()
+
+        detail = env["member_client"].get(_url(env, task["id"]))
+        assert detail.status_code == 404
+        todos = (
+            env["admin_client"]
+            .get(f"/api/research/workspaces/{env['workspace'].slug}/research-todos/?scope=visible")
+            .json()["results"]
+        )
+        assert task["id"] not in {item["object_id"] for item in todos}
+
+    def test_non_creator_writer_cannot_delete_another_task(self, env):
+        task = _create(env, assignee=str(env["group_member"].id))
+        assert task["capabilities"]["actions"]["delete"]["allowed"] is True
+
+        denied = env["member_client"].get(_url(env, task["id"]))
+        assert denied.json()["data"]["capabilities"]["actions"]["delete"]["allowed"] is False
+
+        response = env["member_client"].delete(_url(env, task["id"]))
+
+        assert response.status_code == 403
+        assert response.json()["error_code"] == "research_permission_denied"
+        assert ResearchChainNodeTask.objects.filter(pk=task["id"]).exists()
+        assert not ResearchChainEvent.objects.filter(event_type="TASK_DELETED").exists()
+
+    def test_manager_can_delete_completed_and_cancelled_tasks(self, env):
+        completed = _create(env, assignee=str(env["group_member"].id))
+        _action(env, completed["id"], "complete", client=env["member_client"])
+        completed_delete = env["student_client"].delete(_url(env, completed["id"]))
+
+        cancelled = _create(env, assignee=str(env["group_member"].id))
+        env["student_client"].post(
+            _action_url(env, cancelled["id"], "cancel"),
+            {"request_id": f"cancel-delete-{uuid4()}", "reason": "重复创建的任务。"},
+            format="json",
+        )
+        cancelled_delete = env["student_client"].delete(_url(env, cancelled["id"]))
+
+        assert completed_delete.status_code == 204
+        assert cancelled_delete.status_code == 204
+        assert not ResearchChainNodeTask.objects.filter(pk__in=[completed["id"], cancelled["id"]]).exists()
+        assert (
+            ResearchChainNodeTask.all_objects.filter(
+                pk__in=[completed["id"], cancelled["id"]], deleted_at__isnull=False
+            ).count()
+            == 2
+        )
+
+    def test_archived_parent_rejects_task_deletion(self, env):
+        task = _create(env)
+        ResearchChainNode.objects.filter(pk=env["paper_node"].pk).update(status=ResearchChainNode.Status.ARCHIVED)
+
+        response = env["student_client"].delete(_url(env, task["id"]))
+
+        assert response.status_code == 409
+        assert response.json()["error_code"] == "INVALID_TRANSITION"
+        assert ResearchChainNodeTask.objects.filter(pk=task["id"]).exists()
+
     def test_create_is_idempotent_by_request_id(self, env):
         request_id = f"idempotent-{uuid4()}"
         payload = {"title": "幂等任务", "request_id": request_id}

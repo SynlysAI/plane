@@ -80,7 +80,8 @@ def project_add_user_email(current_site, project_member_id, invitor_id):
         # Attach the html content
         msg.attach_alternative(html_content, "text/html")
         # Send the email
-        send_account_email(msg)
+        if not send_account_email(msg):
+            return
         # Log the success
         logging.getLogger("plane.worker").info("Email sent successfully.")
         return

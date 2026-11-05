@@ -4,13 +4,21 @@
  * See the LICENSE file for details.
  */
 
-import { BrainCog, Users } from "lucide-react";
+import { BrainCog, MailX, Users } from "lucide-react";
 // plane imports
 import { ImageOutline, LockOutline, MailOutline, SettingsOutline, WorkspaceOutline } from "@makeplane/propel/icons";
 // types
 import type { TSidebarMenuItem } from "./types";
 
-export type TCoreSidebarMenuKey = "general" | "email" | "workspace" | "users" | "authentication" | "ai" | "image";
+export type TCoreSidebarMenuKey =
+  | "general"
+  | "email"
+  | "email-filters"
+  | "workspace"
+  | "users"
+  | "authentication"
+  | "ai"
+  | "image";
 
 export const coreSidebarMenuLinks: Record<TCoreSidebarMenuKey, TSidebarMenuItem> = {
   general: {
@@ -24,6 +32,12 @@ export const coreSidebarMenuLinks: Record<TCoreSidebarMenuKey, TSidebarMenuItem>
     name: "邮件服务",
     description: "配置系统邮件发送服务。",
     href: `/email/`,
+  },
+  "email-filters": {
+    Icon: MailX,
+    name: "邮箱过滤",
+    description: "管理实例邮件的收件邮箱与域名屏蔽规则。",
+    href: `/email-filters/`,
   },
   workspace: {
     Icon: WorkspaceOutline,

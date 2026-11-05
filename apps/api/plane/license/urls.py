@@ -6,6 +6,8 @@ from django.urls import path
 
 from plane.license.api.views import (
     EmailCredentialCheckEndpoint,
+    EmailRecipientFiltersEndpoint,
+    EmailRecipientFilterCheckEndpoint,
     InstanceAdminEndpoint,
     InstanceAdminSignInEndpoint,
     InstanceAdminSignUpEndpoint,
@@ -28,6 +30,12 @@ from plane.license.api.views import (
 )
 
 urlpatterns = [
+    path("email-recipient-filters/", EmailRecipientFiltersEndpoint.as_view(), name="email-recipient-filters"),
+    path(
+        "email-recipient-filters/check/",
+        EmailRecipientFilterCheckEndpoint.as_view(),
+        name="email-recipient-filter-check",
+    ),
     path("", InstanceEndpoint.as_view(), name="instance"),
     path("admins/", InstanceAdminEndpoint.as_view(), name="instance-admins"),
     path("admins/me/", InstanceAdminUserMeEndpoint.as_view(), name="instance-admins"),

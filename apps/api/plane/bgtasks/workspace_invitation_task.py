@@ -79,7 +79,8 @@ def workspace_invitation(email, workspace_id, token, current_site, inviter):
             connection=connection,
         )
         msg.attach_alternative(html_content, "text/html")
-        send_account_email(msg)
+        if not send_account_email(msg):
+            return
         logging.getLogger("plane.worker").info("Email sent successfully")
         return
     except (Workspace.DoesNotExist, WorkspaceMemberInvite.DoesNotExist):

@@ -8,6 +8,7 @@ import type { TAgentDockEvent } from "@/services/agent-dock";
 
 export type TRuntimeToolCall = {
   id: string;
+  runId: string;
   name: string;
   status: "running" | "completed" | "failed" | "waiting_approval";
   arguments: string;
@@ -66,9 +67,11 @@ export function mergeRuntimeToolCalls(events: TAgentDockEvent[]): TRuntimeToolCa
     const payload = event.payload ?? {};
     const request = payload.request as { id?: unknown } | undefined;
     const id = String(payload.tool_call_id ?? request?.id ?? event.seq);
+    const key = `${event.run_id}:${id}`;
     const status = String(payload.status ?? "RUNNING").toUpperCase();
-    const current: TRuntimeToolCall = calls.get(id) ?? {
+    const current: TRuntimeToolCall = calls.get(key) ?? {
       id,
+      runId: event.run_id,
       name: String(payload.name ?? "tool"),
       status: status === "WAITING_APPROVAL" ? "waiting_approval" : "running",
       arguments: safeRuntimePreview(payload.arguments ?? payload.input_summary ?? ""),
@@ -91,7 +94,7 @@ export function mergeRuntimeToolCalls(events: TAgentDockEvent[]): TRuntimeToolCa
       current.duration_ms = duration(startedAt, event.created_at);
     }
     current.seq = Math.min(current.seq, event.seq);
-    calls.set(id, current);
+    calls.set(key, current);
   }
   // eslint-disable-next-line unicorn/no-array-sort -- ES2022 lib target lacks Array#toSorted
   return [...calls.values()].sort((left, right) => left.seq - right.seq);

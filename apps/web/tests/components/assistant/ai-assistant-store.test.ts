@@ -100,4 +100,38 @@ describe("AIAssistantStore", () => {
     expect(raw).not.toContain("node-with-secret-material");
     expect(raw).not.toContain("token");
   });
+
+  it("keeps cloud and local workspace threads in independent persistent slots", () => {
+    const store = new AIAssistantStore();
+    store.hydrate("lab", "user");
+    store.setThreadId("lab", "cloud-thread");
+    store.setProvider("local");
+    expect(store.threadId).toBeNull();
+    expect(store.contextNodeId).toBeNull();
+    store.setThreadId("lab", "local-thread");
+    store.setProvider("cloud");
+    expect(store.threadId).toBe("cloud-thread");
+    store.setProvider("local");
+    const restored = new AIAssistantStore();
+    restored.hydrate("lab", "user");
+    expect(restored.activeProvider).toBe("local");
+    expect(restored.threadId).toBe("local-thread");
+    restored.clearThreadId("lab");
+    restored.setProvider("cloud");
+    expect(restored.threadId).toBe("cloud-thread");
+  });
+
+  it("does not replace the visible provider thread with another slot response", () => {
+    const store = new AIAssistantStore();
+    store.hydrate("lab", "user");
+    store.setThreadId("lab", "cloud-thread", "cloud");
+    store.setProvider("local");
+    store.setThreadId("lab", "local-thread");
+    store.setThreadId("lab", "late-cloud-thread", "cloud");
+    expect(store.threadId).toBe("local-thread");
+    store.setProvider("cloud");
+    expect(store.threadId).toBe("late-cloud-thread");
+    store.hydrate("other-lab", "user");
+    expect(store.threadId).toBeNull();
+  });
 });

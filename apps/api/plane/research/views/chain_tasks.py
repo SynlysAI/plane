@@ -17,6 +17,7 @@ from plane.research.services.chain_tasks import (
     cancel_task,
     complete_task,
     create_task,
+    delete_task,
     list_tasks,
     reopen_task,
     update_task,
@@ -229,6 +230,24 @@ class ResearchChainNodeTaskDetailEndpoint(ResearchAPIView):
                 schema_version=TASK_SCHEMA_VERSION,
             )
         )
+
+    def delete(self, request, slug, chain_id, node_id, task_id):
+        _, chain, _, task_or_error = self._context(request, slug, chain_id, node_id, task_id)
+        if isinstance(task_or_error, Response):
+            return task_or_error
+        readonly_error = _chain_readonly_error(chain)
+        if readonly_error:
+            return readonly_error
+        try:
+            delete_task(task=task_or_error, actor=request.user, request=request)
+        except (
+            ChainTaskPermissionError,
+            ChainTaskStateError,
+            ChainTaskConflictError,
+            ChainTaskValidationError,
+        ) as exception:
+            return _error_response(exception)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ResearchChainNodeTaskActionEndpoint(ResearchAPIView):

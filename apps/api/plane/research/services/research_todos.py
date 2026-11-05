@@ -30,6 +30,7 @@ from plane.db.models import (
 from plane.research.services.chain_tasks import (
     actor_can_cancel_task,
     actor_can_complete_task,
+    actor_can_delete_task,
     actor_can_reopen_task,
     chain_writer,
     chain_assignable_user_ids,
@@ -255,6 +256,7 @@ def collect_chain_task_todos(workspace, user, scope):
         can_complete = actor_can_complete_task(workspace, task, user, assignee_is_valid=assignee_is_valid)
         can_reopen = actor_can_reopen_task(workspace, task, user, assignee_is_valid=assignee_is_valid)
         can_cancel = actor_can_cancel_task(workspace, task, user)
+        can_delete = actor_can_delete_task(workspace, task, user)
         editable = task.status in (
             ResearchChainNodeTask.Status.DRAFT,
             ResearchChainNodeTask.Status.ASSIGNED,
@@ -267,6 +269,7 @@ def collect_chain_task_todos(workspace, user, scope):
             "complete": can_complete,
             "reopen": can_reopen,
             "cancel": can_cancel and task.status != ResearchChainNodeTask.Status.CANCELLED,
+            "delete": can_delete,
         }
         if can_complete:
             next_action = "COMPLETE"
@@ -294,7 +297,7 @@ def collect_chain_task_todos(workspace, user, scope):
             due_at=task.due_at,
             href=f"/{workspace.slug}/research/chains/{task.chain_id}?node={task.node_id}&task={task.id}",
             capabilities=capability_map(
-                ("view", "edit", "assign", "complete", "reopen", "cancel"),
+                ("view", "edit", "assign", "complete", "reopen", "cancel", "delete"),
                 decisions,
             ),
             trace_ref={

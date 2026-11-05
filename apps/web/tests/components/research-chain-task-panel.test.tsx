@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   createNodeTask: vi.fn(),
   updateNodeTask: vi.fn(),
   runNodeTaskAction: vi.fn(),
+  deleteNodeTask: vi.fn(),
   getNotificationRecipients: vi.fn(),
   updateNotificationRecipients: vi.fn(),
   updateNotificationSelfSubscription: vi.fn(),
@@ -59,6 +60,7 @@ vi.mock("@/services/research/chain-task.service", () => ({
     createNodeTask = mocks.createNodeTask;
     updateNodeTask = mocks.updateNodeTask;
     runNodeTaskAction = mocks.runNodeTaskAction;
+    deleteNodeTask = mocks.deleteNodeTask;
     getNotificationRecipients = mocks.getNotificationRecipients;
     updateNotificationRecipients = mocks.updateNotificationRecipients;
     updateNotificationSelfSubscription = mocks.updateNotificationSelfSubscription;
@@ -120,6 +122,7 @@ function task(overrides: Partial<TResearchChainNodeTask> = {}): TResearchChainNo
         complete: capability(true),
         reopen: capability(false),
         cancel: capability(false),
+        delete: capability(false),
       },
     },
     created_at: "2026-10-08T08:00:00Z",
@@ -310,6 +313,7 @@ it("lets the assignee directly complete and reopen a task without approval routi
         complete: capability(false),
         reopen: capability(true),
         cancel: capability(false),
+        delete: capability(false),
       },
     },
   });
@@ -689,6 +693,86 @@ it("keeps task cancellation in the header menu and requires a reason before canc
   expect(mocks.runNodeTaskAction).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1", "cancel", {
     reason: "重复创建的任务",
   });
+});
+
+it("requires confirmation before deleting a research task", async () => {
+  const deletable = task();
+  deletable.capabilities!.actions.complete = capability(false);
+  deletable.capabilities!.actions.reopen = capability(false);
+  deletable.capabilities!.actions.cancel = capability(false);
+  deletable.capabilities!.actions.delete = capability(true);
+  mocks.getNodeTasks.mockResolvedValue([deletable]);
+  mocks.deleteNodeTask.mockResolvedValue(undefined);
+  await renderPanel();
+  await act(async () => button("整理开题文献").click());
+
+  const peek = container.querySelector("aside");
+  const more = peek?.querySelector<HTMLButtonElement>('button[aria-label="更多"]');
+  if (!more) throw new Error("Peek 更多按钮未找到");
+  await act(async () => more.click());
+  const deleteAction = [...(peek?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])].find(
+    (item) => item.textContent === "删除任务"
+  );
+  if (!deleteAction) throw new Error("删除任务菜单项未找到");
+  expect(deleteAction.className).toContain("text-danger-primary");
+  await act(async () => deleteAction.click());
+
+  const dialog = container.querySelector("[data-delete-dialog]");
+  expect(dialog?.textContent).toContain("任务将从科研项目和行动项中移除，审计记录会保留。");
+  expect(mocks.deleteNodeTask).not.toHaveBeenCalled();
+
+  await act(async () => button("取消").click());
+  expect(container.querySelector("[data-delete-dialog]")).toBeNull();
+  expect(mocks.deleteNodeTask).not.toHaveBeenCalled();
+
+  await act(async () => more.click());
+  const deleteAgain = [...(peek?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])].find(
+    (item) => item.textContent === "删除任务"
+  );
+  await act(async () => deleteAgain?.click());
+  await act(async () => button("删除任务").click());
+
+  expect(mocks.deleteNodeTask).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1");
+  expect(container.textContent).not.toContain("整理开题文献");
+  expect(container.querySelector("aside")).toBeNull();
+});
+
+it("keeps a research task when deletion fails", async () => {
+  const deletable = task();
+  deletable.capabilities!.actions.complete = capability(false);
+  deletable.capabilities!.actions.reopen = capability(false);
+  deletable.capabilities!.actions.cancel = capability(false);
+  deletable.capabilities!.actions.delete = capability(true);
+  mocks.getNodeTasks.mockResolvedValue([deletable]);
+  mocks.deleteNodeTask.mockRejectedValueOnce({ error: "任务已被其他成员处理。" });
+  await renderPanel();
+  await act(async () => button("整理开题文献").click());
+
+  const peek = container.querySelector("aside");
+  const more = peek?.querySelector<HTMLButtonElement>('button[aria-label="更多"]');
+  await act(async () => more?.click());
+  const deleteAction = [...(peek?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])].find(
+    (item) => item.textContent === "删除任务"
+  );
+  await act(async () => deleteAction?.click());
+  await act(async () => button("删除任务").click());
+
+  expect(container.querySelector("[data-delete-dialog]")?.textContent).toContain("任务已被其他成员处理。");
+  expect(container.textContent).toContain("整理开题文献");
+  expect(container.querySelector("aside")).not.toBeNull();
+});
+
+it("hides research task deletion without server capability", async () => {
+  await renderPanel();
+  await act(async () => button("整理开题文献").click());
+
+  const peek = container.querySelector("aside");
+  const more = peek?.querySelector<HTMLButtonElement>('button[aria-label="更多"]');
+  await act(async () => more?.click());
+
+  expect([...(peek?.querySelectorAll('[role="menuitem"]') ?? [])].map((item) => item.textContent)).not.toContain(
+    "删除任务"
+  );
 });
 
 it("renders empty, forbidden, loading, refresh, and server rejection states", async () => {

@@ -9,6 +9,7 @@ from datetime import datetime, timezone as dt_timezone
 from uuid import UUID
 
 from django.http import StreamingHttpResponse
+from django.core import signing
 from rest_framework import status
 from rest_framework.negotiation import BaseContentNegotiation
 from rest_framework.response import Response
@@ -16,7 +17,8 @@ from django.utils import timezone
 
 from plane.app.permissions import ROLE, allow_permission
 from plane.app.views.base import BaseAPIView
-from plane.db.models import ResearchContextGrant, Workspace
+from django.db.models import Q
+from plane.db.models import ResearchAgentSession, ResearchContextGrant, Workspace
 from plane.research.services.agent_dock import (
     AgentDockContextError,
     AgentDockTarget,
@@ -71,6 +73,7 @@ class AgentDockContextResolveEndpoint(BaseAPIView):
                 selected_text=selected_text,
                 focus_ref=focus_ref,
                 attachment_ids=attachment_ids,
+                provider=str(request.data.get("provider") or ResearchAgentSession.Provider.SYNLORA),
             )
         except AgentDockContextError as exc:
             return Response(
@@ -205,7 +208,15 @@ class AgentDockSessionCollectionEndpoint(BaseAPIView):
         route = str(request.query_params.get("route") or "").strip()
         sessions = ResearchAgentSession.objects.select_related(
             "workspace", "project", "research_chain", "chain_node", "context_grant"
-        ).filter(workspace=workspace, user=request.user, deleted_at__isnull=True)
+        ).filter(workspace=workspace, user=request.user, deleted_at__isnull=True).filter(
+            Q(provider="SYNLORA")
+            | Q(provider="SCIENCE_DISCOVERY", target_type="WORKSPACE", assembly__persona="plane-agent-dock")
+        )
+        provider = request.query_params.get("provider")
+        if provider:
+            if provider not in ResearchAgentSession.Provider.values:
+                return Response({"error": "invalid_provider"}, status=status.HTTP_400_BAD_REQUEST)
+            sessions = sessions.filter(provider=provider)
         if target_type:
             sessions = sessions.filter(target_type=target_type)
         if route:
@@ -243,6 +254,7 @@ class AgentDockSessionCollectionEndpoint(BaseAPIView):
                 user=request.user,
                 context_id=str(request.data.get("context_id") or ""),
                 request_id=request_id_from(request),
+                provider=str(request.data.get("provider") or ResearchAgentSession.Provider.SYNLORA),
             )
         except AgentDockSessionError as exc:
             return Response({"error": exc.code, "message": exc.message}, status=exc.status_code)
@@ -295,6 +307,67 @@ class AgentDockSessionContextRefreshEndpoint(BaseAPIView):
         return Response(serialize_agent_dock_session(updated))
 
 
+class AgentDockSessionEventEndpoint(BaseAPIView):
+    """分页回放会话的全部轮次；读取本地事实，无需远端连接可用。"""
+
+    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    def get(self, request, slug, session_id):
+        """使用签名快照游标读取有序事件，保留每个事件的原始 run ID。"""
+        from plane.research.services.agent_dock_events import serialize_dock_events
+        from plane.research.services.agent_dock_sessions import serialize_agent_dock_session
+
+        workspace = _workspace_or_none(slug)
+        if workspace is None:
+            return Response({"error": "Workspace not found"}, status=status.HTTP_404_NOT_FOUND)
+        session = _session_or_none(workspace, request.user, session_id)
+        if session is None:
+            return Response({"error": "agent_session_not_found"}, status=status.HTTP_404_NOT_FOUND)
+        rows = session.run_events.all()
+        salt = "agent-dock.session-events.v1"
+        try:
+            limit = int(request.query_params.get("limit", 200))
+            if not 1 <= limit <= 500:
+                raise ValueError
+            raw_cursor = request.query_params.get("cursor")
+            if raw_cursor:
+                cursor = signing.loads(raw_cursor, salt=salt, max_age=3600)
+                if cursor["session_id"] != str(session.session_id):
+                    raise ValueError
+                after_at, after_seq, after_id = cursor["after"]
+                after_at, after_id = datetime.fromisoformat(after_at), UUID(after_id)
+                rows = rows.filter(
+                    Q(created_at__gt=after_at) | Q(created_at=after_at, seq__gt=after_seq)
+                    | Q(created_at=after_at, seq=after_seq, pk__gt=after_id)
+                )
+                upper = cursor["upper"]
+            else:
+                last = rows.order_by("-created_at", "-seq", "-id").first()
+                upper = [last.created_at.isoformat(), last.seq, str(last.pk)] if last else None
+            if upper:
+                upper_at, upper_seq, upper_id = upper
+                upper_at, upper_id = datetime.fromisoformat(upper_at), UUID(upper_id)
+                rows = rows.filter(
+                    Q(created_at__lt=upper_at) | Q(created_at=upper_at, seq__lt=upper_seq)
+                    | Q(created_at=upper_at, seq=upper_seq, pk__lte=upper_id)
+                )
+        except (signing.BadSignature, ValueError, TypeError, KeyError):
+            return Response({"error": "invalid_event_cursor"}, status=status.HTTP_400_BAD_REQUEST)
+        events = list(rows.order_by("created_at", "seq", "id")[:limit + 1]) if upper else []
+        has_more = len(events) > limit
+        events = events[:limit]
+        next_cursor = None
+        if has_more:
+            last = events[-1]
+            next_cursor = signing.dumps({
+                "session_id": str(session.session_id), "upper": upper,
+                "after": [last.created_at.isoformat(), last.seq, str(last.pk)],
+            }, salt=salt, compress=True)
+        return Response({
+            "results": serialize_dock_events(events, session.provider), "count": len(events),
+            "next_cursor": next_cursor, "has_more": has_more, "session": serialize_agent_dock_session(session),
+        })
+
+
 class AgentDockSessionMessageEndpoint(BaseAPIView):
     """``POST /api/workspaces/<slug>/agent-dock/sessions/<session_id>/messages/``."""
 
@@ -313,6 +386,8 @@ class AgentDockSessionMessageEndpoint(BaseAPIView):
         if session is None:
             return Response({"error": "agent_session_not_found"}, status=status.HTTP_404_NOT_FOUND)
         focus_ref = request.data.get("focus_ref")
+        if request.data.get("provider", session.provider) != session.provider:
+            return Response({"error": "agent_context_provider_mismatch"}, status=status.HTTP_409_CONFLICT)
         focus_ref = focus_ref if isinstance(focus_ref, dict) else None
         selected_text = str(request.data.get("selected_text") or "")
         try:
@@ -336,7 +411,7 @@ class AgentDockRunEventEndpoint(BaseAPIView):
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
     def get(self, request, slug, run_id):
-        from plane.research.serializers import ResearchAgentRunEventSerializer
+        from plane.research.services.agent_dock_events import serialize_dock_events
         from plane.research.services.agent_dock_sessions import (
             sync_agent_dock_events,
             serialize_agent_dock_session,
@@ -359,7 +434,7 @@ class AgentDockRunEventEndpoint(BaseAPIView):
         events = session.run_events.filter(run_id=run_uuid, seq__gt=after_seq).order_by("seq")
         return Response(
             {
-                "results": ResearchAgentRunEventSerializer(events, many=True).data,
+                "results": serialize_dock_events(events, session.provider),
                 "count": events.count(),
                 "latest_seq": events.order_by("-seq").values_list("seq", flat=True).first() or 0,
                 "session": serialize_agent_dock_session(session),
@@ -382,6 +457,40 @@ class AgentDockRunEventStreamEndpoint(BaseAPIView):
             return Response({"error": "agent_run_not_found"}, status=status.HTTP_404_NOT_FOUND)
         if session.context_grant.revoked_at is not None or session.context_grant.expires_at <= timezone.now():
             return Response({"error": "agent_context_expired"}, status=status.HTTP_403_FORBIDDEN)
+        if session.provider == ResearchAgentSession.Provider.SCIENCE_DISCOVERY:
+            from plane.research.services.agent_dock_science_discovery import (
+                sd_client_for_session, stream_sd_dock_events,
+            )
+            from plane.research.services.sciencediscovery import ScienceDiscoveryError
+
+            try:
+                after_seq = int(request.headers.get("Last-Event-ID", request.query_params.get("after_seq", 0)))
+                if after_seq < -1:
+                    raise ValueError
+            except (TypeError, ValueError):
+                return Response({"error": "invalid_event_cursor"}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                sd_client_for_session(session)
+            except ScienceDiscoveryError as exc:
+                return Response({"error": exc.code}, status=exc.status_code)
+
+            def sd_body():
+                """包装 SD HTTP 事件并把连接错误转成可重试状态帧。"""
+                try:
+                    yield from stream_sd_dock_events(session=session, run_id=UUID(str(run_id)), after_seq=after_seq)
+                except Exception as exc:
+                    envelope = {
+                        "schema_version": "agent-dock-event.v1", "run_id": str(run_id), "seq": 0,
+                        "source_seq": 0, "created_at": timezone.now().isoformat(), "event_type": "stream.error",
+                        "payload": {"code": getattr(exc, "code", "science_discovery_event_cursor_failed")},
+                    }
+                    yield f"event: stream.error\ndata: {json.dumps(envelope)}\n\n"
+
+            response = StreamingHttpResponse(sd_body(), content_type="text/event-stream")
+            response["Cache-Control"] = "no-cache, no-transform"
+            response["X-Accel-Buffering"] = "no"
+            response["Content-Encoding"] = "identity"
+            return response
         if not session.synlora_session_id:
             return Response({"error": "synlora_session_not_found"}, status=status.HTTP_409_CONFLICT)
         try:
@@ -588,6 +697,10 @@ class AgentDockRunCancelEndpoint(BaseAPIView):
             return Response({"error": "agent_run_not_found"}, status=status.HTTP_404_NOT_FOUND)
         if session.run_id != run_uuid:
             return Response(serialize_agent_dock_session(session))
+        if session.provider == ResearchAgentSession.Provider.SCIENCE_DISCOVERY:
+            from plane.research.services.agent_dock_science_discovery import cancel_sd_dock_run
+
+            return Response(serialize_agent_dock_session(cancel_sd_dock_run(session)))
         runtime = resolve_synlora_runtime(workspace, user=session.user)
         if session.synlora_run_id and runtime is None:
             return Response(
@@ -621,6 +734,27 @@ class AgentDockRunAnswerEndpoint(BaseAPIView):
         if session is None:
             return Response({"error": "agent_run_not_found"}, status=status.HTTP_404_NOT_FOUND)
         approved = request.data.get("approved") is True
+        if session.run_id != UUID(str(run_id)):
+            return Response({"error": "agent_run_not_current"}, status=status.HTTP_409_CONFLICT)
+        if session.provider == ResearchAgentSession.Provider.SCIENCE_DISCOVERY:
+            from plane.research.services.agent_dock_science_discovery import answer_sd_dock_run
+            from plane.research.services.agent_dock_sessions import AgentDockSessionError
+            from plane.research.services.sciencediscovery import ScienceDiscoveryError
+
+            try:
+                permission_request_id = request.data.get("permission_request_id")
+                if permission_request_id is not None and (
+                    not isinstance(permission_request_id, str)
+                    or not permission_request_id
+                    or len(permission_request_id) > 128
+                ):
+                    return Response({"error": "invalid_permission_request_id"}, status=status.HTTP_400_BAD_REQUEST)
+                updated = answer_sd_dock_run(
+                    session=session, approved=approved, permission_request_id=permission_request_id,
+                )
+            except (ScienceDiscoveryError, AgentDockSessionError) as exc:
+                return Response({"error": exc.code, "message": exc.message}, status=exc.status_code)
+            return Response(serialize_agent_dock_session(updated))
         runtime = resolve_synlora_runtime(workspace, user=session.user)
         if session.synlora_run_id and runtime is None:
             return Response({"error": "synlora_unavailable"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)

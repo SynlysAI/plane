@@ -1,5 +1,7 @@
 "use client";
 
+import { invalidateBackendAvailability } from "@/components/assistant/lib/backend-availability";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "@plane/i18n";
 // services
@@ -110,6 +112,7 @@ export function AgentBackendSettings({
         ...(token.trim() ? { token: token.trim() } : {}),
         is_enabled: true,
       });
+      invalidateBackendAvailability(workspaceSlug);
       if (sequence !== workspaceSequence.current) return;
       setToken("");
       setStatus(t("research.agent_backend.saved"));
@@ -143,6 +146,7 @@ export function AgentBackendSettings({
     } catch (failure) {
       if (sequence === workspaceSequence.current) setError(testFailureMessage(failure as TTestFailure));
     } finally {
+      invalidateBackendAvailability(workspaceSlug);
       if (sequence === workspaceSequence.current) setBusy(false);
     }
   }, [load, system, t, testFailureMessage, workspaceSlug]);
@@ -153,6 +157,7 @@ export function AgentBackendSettings({
     setError("");
     try {
       await agentService.deleteBackendConnection(workspaceSlug, system);
+      invalidateBackendAvailability(workspaceSlug);
       if (sequence !== workspaceSequence.current) return;
       setStatus(t("research.agent_backend.removed"));
       await load();

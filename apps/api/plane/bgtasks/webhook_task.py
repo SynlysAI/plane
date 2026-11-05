@@ -50,7 +50,7 @@ from plane.db.models import (
     IssueAssignee,
 )
 from plane.license.utils.instance_value import get_email_configuration
-from plane.utils.email import generate_plain_text_from_html
+from plane.utils.email import generate_plain_text_from_html, is_email_recipient_blocked
 from plane.utils.exception_logger import log_exception
 from plane.utils.url_security import pinned_fetch
 
@@ -180,6 +180,11 @@ def send_webhook_deactivation_email(webhook_id: str, receiver_id: str, current_s
         reason (str): Reason for webhook deactivation
     """
     try:
+        receiver = User.objects.get(pk=receiver_id)
+        if is_email_recipient_blocked(receiver.email):
+            logger.info("Webhook email suppressed: recipient_email_blocked")
+            return
+
         (
             EMAIL_HOST,
             EMAIL_HOST_USER,
@@ -190,7 +195,6 @@ def send_webhook_deactivation_email(webhook_id: str, receiver_id: str, current_s
             EMAIL_FROM,
         ) = get_email_configuration()
 
-        receiver = User.objects.get(pk=receiver_id)
         webhook = Webhook.objects.get(pk=webhook_id)
 
         # Get the webhook payload

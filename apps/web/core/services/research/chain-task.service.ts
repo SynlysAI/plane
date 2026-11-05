@@ -536,4 +536,16 @@ export class ResearchChainTaskService extends APIService {
         throw error?.response?.data ?? error;
       });
   }
+
+  /** 软删除一个科研任务，并通知行动项聚合刷新。 */
+  async deleteNodeTask(workspaceSlug: string, chainId: string, nodeId: string, taskId: string): Promise<void> {
+    return this.delete(researchEndpoints.chainNodeTask(workspaceSlug, chainId, nodeId, taskId))
+      .then(() => {
+        notifyWorkspaceTodosUpdated();
+        return undefined;
+      })
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
 }

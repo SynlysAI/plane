@@ -27,6 +27,8 @@ from plane.license.api.serializers import InstanceConfigurationSerializer
 from plane.license.utils.encryption import encrypt_data
 from plane.utils.cache import cache_response, invalidate_cache
 from plane.license.utils.instance_value import get_email_configuration
+from plane.utils.email import is_email_recipient_blocked
+from plane.utils.email_recipient_filters import EMAIL_RECIPIENT_FILTERS_KEY, EmailRecipientFilterConfigurationError
 
 
 class InstanceConfigurationEndpoint(BaseAPIView):
@@ -41,6 +43,11 @@ class InstanceConfigurationEndpoint(BaseAPIView):
     @invalidate_cache(path="/api/instances/configurations/", user=False)
     @invalidate_cache(path="/api/instances/", user=False)
     def patch(self, request):
+        if EMAIL_RECIPIENT_FILTERS_KEY in request.data:
+            return Response(
+                {"error": "email_recipient_filters_dedicated_endpoint_required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         configurations = InstanceConfiguration.objects.filter(key__in=request.data.keys())
 
         bulk_configurations = []
@@ -91,6 +98,19 @@ class EmailCredentialCheckEndpoint(BaseAPIView):
         if not receiver_email:
             return Response(
                 {"error": "Receiver email is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            blocked = is_email_recipient_blocked(receiver_email)
+        except EmailRecipientFilterConfigurationError:
+            return Response(
+                {"error": "email_recipient_filters_unavailable"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        if blocked:
+            return Response(
+                {"error": "recipient_email_blocked"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

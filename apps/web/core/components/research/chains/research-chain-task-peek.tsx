@@ -8,6 +8,7 @@ import {
   CloseOutline,
   CompletedAtOutline,
   CreatedAtOutline,
+  DeleteOutline,
   DueDateOutline,
   FileOutline,
   FullScreenPeekOutline,
@@ -58,7 +59,7 @@ type TTaskFormState = {
 };
 
 type TCandidateState = "loading" | "ready" | "forbidden" | "error";
-type TLifecycleAction = Extract<TResearchChainNodeTaskAction, "complete" | "reopen" | "cancel">;
+type TLifecycleAction = Extract<TResearchChainNodeTaskAction, "complete" | "reopen" | "cancel" | "delete">;
 type TActivityOrder = "asc" | "desc";
 
 type TActivityItem = {
@@ -94,7 +95,8 @@ type Props = {
   onAction: (action: TLifecycleAction) => void;
 };
 
-const LIFECYCLE_ACTIONS: TLifecycleAction[] = ["complete", "reopen", "cancel"];
+const WORKFLOW_ACTIONS: TLifecycleAction[] = ["complete", "reopen", "cancel"];
+const LIFECYCLE_ACTIONS: TLifecycleAction[] = ["complete", "reopen", "cancel", "delete"];
 
 const STATUS_KEYS: Record<TResearchChainNodeTask["status"], string> = {
   DRAFT: "research.chain_tasks.status.draft",
@@ -109,6 +111,7 @@ const EVENT_KEYS: Record<string, string> = {
   TASK_REOPENED: "research.chain_tasks.events.reopened",
   TASK_COMPLETED: "research.chain_tasks.events.completed",
   TASK_CANCELLED: "research.chain_tasks.events.cancelled",
+  TASK_DELETED: "research.chain_tasks.events.deleted",
 };
 
 const PEEK_MODES: { key: TWorkbenchPeekMode; icon: typeof SidePeekOutline; label: string }[] = [
@@ -136,6 +139,7 @@ const ACTION_ICONS = {
   reopen: ReplyOutline,
   complete: CheckDoneOutline,
   cancel: CloseOutline,
+  delete: DeleteOutline,
 } as const;
 
 /**
@@ -324,8 +328,9 @@ export function ResearchChainTaskPeek(props: Props) {
   const canEdit = kind === "create" || isAllowed(task, "edit");
   const isContentEditable = kind === "create" || (canEdit && isEditMode);
   const canAssign = kind === "create" || isAllowed(task, "edit") || isAllowed(task, "assign");
+  const workflowLifecycle = task ? WORKFLOW_ACTIONS.filter((action) => isAllowed(task, action)) : [];
   const lifecycle = task ? LIFECYCLE_ACTIONS.filter((action) => isAllowed(task, action)) : [];
-  const primaryLifecycle = lifecycle.filter((action) => action !== "cancel");
+  const primaryLifecycle = workflowLifecycle.filter((action) => action !== "cancel");
   const status = task?.status ?? "DRAFT";
   const title =
     kind === "create" ? t("research.chain_tasks.create") : task?.title || t("research.chain_tasks.panel_title");
@@ -504,7 +509,7 @@ export function ResearchChainTaskPeek(props: Props) {
               <StatusControl
                 status={status}
                 label={t(STATUS_KEYS[status])}
-                actions={lifecycle}
+                actions={workflowLifecycle}
                 disabled={Boolean(actionBusy)}
                 onAction={onAction}
               />
@@ -789,8 +794,8 @@ function TaskPeekHeader({
                     role="menuitem"
                     disabled={Boolean(actionBusy)}
                     className={cn(
-                      "block w-full rounded-sm px-2 py-1.5 text-left text-12",
-                      action === "cancel"
+                      "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-12",
+                      action === "cancel" || action === "delete"
                         ? "text-danger-primary hover:bg-danger-subtle"
                         : "text-primary hover:bg-surface-2"
                     )}
@@ -799,6 +804,10 @@ function TaskPeekHeader({
                       onAction(action);
                     }}
                   >
+                    {(() => {
+                      const Icon = ACTION_ICONS[action];
+                      return <Icon className="h-4 w-4" aria-hidden="true" />;
+                    })()}
                     {t(`research.chain_tasks.${action}`)}
                   </button>
                 ))}

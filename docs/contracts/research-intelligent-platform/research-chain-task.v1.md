@@ -14,6 +14,15 @@
 
 提交能力同时要求当前用户为负责人、具有有效成员资格，且任务处于 `ASSIGNED` 或 `NEEDS_REVISION`。资格失效不授予新权限，也不删除历史活动。
 
+## 任务删除
+
+- `DELETE /api/research/workspaces/{slug}/chains/{chain_id}/nodes/{node_id}/tasks/{task_id}/` 执行软删除，成功返回 `204 No Content`，不要求请求体。
+- 任务创建者和课题管理者可删除；其他课题写入者返回 `research_permission_denied`（HTTP 403）。
+- `DRAFT`、`ASSIGNED`、`COMPLETED`、`CANCELLED` 均可删除。归档或完成的研究链、归档节点保持只读，删除返回 HTTP 409。
+- 删除后任务从任务列表、详情、统一行动项和 Agent 读取范围消失；数据库记录保留并写入 `deleted_at`。
+- 删除同事务记录 Chain Event `TASK_DELETED` 和审计事件 `task.delete`，通知责任人与创建者。评论、附件和订阅记录不物理删除，但随任务失去可访问入口。
+- 已删除任务的后续详情访问或重复删除按不存在处理，返回 HTTP 404。
+
 ## 历史任务与待办
 
 - 待负责人处理的任务失效后，从负责人待办移除，发起人可见的待办标为 `BLOCKED`，下一步为 `ASSIGN`。

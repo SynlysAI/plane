@@ -139,6 +139,7 @@ class ResearchAuditAction:
     TASK_COMPLETE = "task.complete"
     TASK_REOPEN = "task.reopen"
     TASK_CANCEL = "task.cancel"
+    TASK_DELETE = "task.delete"
     TASK_INSTRUCTION_ATTACHMENT_ADD = "task.instruction.attachment.add"
     TASK_INSTRUCTION_ATTACHMENT_DELETE = "task.instruction.attachment.delete"
     TASK_INSTRUCTION_ATTACHMENT_DENIED = "task.instruction.attachment.denied"

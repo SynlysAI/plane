@@ -20,6 +20,7 @@ export type TAgentDockMode = "floating" | "docked";
 export type TAgentDockView = "conversation" | "context" | "runtime";
 
 type TAgentDockPreferences = {
+  activeProvider: TAssistantProvider;
   dockMode: TAgentDockMode;
   width: number;
   expanded: boolean;
@@ -48,8 +49,8 @@ export interface IAIAssistantStore {
   openWithLocal: (nodeId: string) => void;
   hydrate: (workspaceSlug: string, ownerKey?: string) => void;
   setStatus: (status: TAssistantStatus | null) => void;
-  setThreadId: (workspaceSlug: string, threadId: string) => void;
-  clearThreadId: (workspaceSlug: string) => void;
+  setThreadId: (workspaceSlug: string, threadId: string, provider?: TAssistantProvider) => void;
+  clearThreadId: (workspaceSlug: string, provider?: TAssistantProvider) => void;
   setProvider: (provider: TAssistantProvider) => void;
   setContextNodeId: (nodeId: string | null) => void;
   toggleExpanded: (value?: boolean) => void;
@@ -118,7 +119,7 @@ export class AIAssistantStore implements IAIAssistantStore {
 
   openWithLocal = (nodeId: string) => {
     this.contextNodeId = nodeId;
-    this.activeProvider = "local";
+    this.setProvider("local");
     this.activeView = "conversation";
     this.isOpen = true;
     this.persistCurrentPreferences();
@@ -135,6 +136,8 @@ export class AIAssistantStore implements IAIAssistantStore {
     const raw = storage.get(`${PREFERENCES_KEY_PREFIX}${workspaceSlug}`);
     try {
       const parsed = typeof raw === "string" ? (JSON.parse(raw) as Partial<TAgentDockPreferences>) : raw;
+      this.activeProvider = parsed?.activeProvider === "local" ? "local" : "cloud";
+      this.threadId = storage.get(this.threadStorageKey(workspaceSlug, nextOwnerKey, this.activeProvider)) ?? null;
       this.dockMode = parsed?.dockMode === "docked" ? "docked" : "floating";
       this.expanded = Boolean(parsed?.expanded);
       this.isOpen = Boolean(parsed?.isOpen);
@@ -158,18 +161,24 @@ export class AIAssistantStore implements IAIAssistantStore {
     this.status = status;
   };
 
-  setThreadId = (workspaceSlug: string, threadId: string) => {
+  /** 将会话保存在指定 provider 的工作区分槽内，异步响应不会覆盖另一个分槽。 */
+  setThreadId = (workspaceSlug: string, threadId: string, provider = this.activeProvider) => {
     runInAction(() => {
       this.threadWorkspaceSlug = workspaceSlug;
-      this.threadId = threadId;
+      if (provider === this.activeProvider) this.threadId = threadId;
     });
-    storage.set(this.threadStorageKey(workspaceSlug, this.threadOwnerKey), threadId);
-    this.persistPreferences(workspaceSlug, { activeSessionId: threadId });
+    storage.set(this.threadStorageKey(workspaceSlug, this.threadOwnerKey, provider), threadId);
+    this.persistCurrentPreferences();
   };
 
   setProvider = (provider: TAssistantProvider) => {
+    if (this.activeProvider === provider) return;
     this.activeProvider = provider;
+    this.threadId = this.threadWorkspaceSlug
+      ? (storage.get(this.threadStorageKey(this.threadWorkspaceSlug, this.threadOwnerKey, provider)) ?? null)
+      : null;
     if (provider === "cloud") this.contextNodeId = null;
+    this.persistCurrentPreferences();
   };
 
   setContextNodeId = (nodeId: string | null) => {
@@ -199,27 +208,29 @@ export class AIAssistantStore implements IAIAssistantStore {
     this.persistCurrentPreferences();
   };
 
-  clearThreadId = (workspaceSlug: string) => {
+  /** 清空当前 provider 的线程引用，保留另一个 provider 的工作区会话。 */
+  clearThreadId = (workspaceSlug: string, provider = this.activeProvider) => {
     runInAction(() => {
       this.threadWorkspaceSlug = workspaceSlug;
-      this.threadId = null;
+      if (provider === this.activeProvider) this.threadId = null;
     });
-    storage.remove(this.threadStorageKey(workspaceSlug, this.threadOwnerKey));
-    this.persistPreferences(workspaceSlug, { activeSessionId: null });
+    storage.remove(this.threadStorageKey(workspaceSlug, this.threadOwnerKey, provider));
+    this.persistCurrentPreferences();
   };
 
   private persistCurrentPreferences() {
     if (this.threadWorkspaceSlug) this.persistPreferences(this.threadWorkspaceSlug);
   }
 
-  private threadStorageKey(workspaceSlug: string, ownerKey: string | null) {
-    return ownerKey
-      ? `${THREAD_KEY_PREFIX}${workspaceSlug}:${ownerKey}`
-      : `${THREAD_KEY_PREFIX}${workspaceSlug}`;
+  /** 云端沿用旧键名，本地使用独立键名以兼容已保存的线程。 */
+  private threadStorageKey(workspaceSlug: string, ownerKey: string | null, provider: TAssistantProvider = "cloud") {
+    const key = ownerKey ? `${THREAD_KEY_PREFIX}${workspaceSlug}:${ownerKey}` : `${THREAD_KEY_PREFIX}${workspaceSlug}`;
+    return provider === "local" ? `${key}:local` : key;
   }
 
   private persistPreferences(workspaceSlug: string, overrides: Partial<TAgentDockPreferences> = {}) {
     const preferences: TAgentDockPreferences = {
+      activeProvider: this.activeProvider,
       dockMode: this.dockMode,
       width: this.width,
       expanded: this.expanded,

@@ -11,12 +11,14 @@ import {
   AgentDockService,
   type TAgentContextEnvelope,
   type TAgentDockEvent,
+  type TAgentDockProvider,
   type TAgentDockSession,
   type TAgentFocusRef,
 } from "@/services/agent-dock";
 import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
 import { addLaunchSession, getLaunchHistory } from "./lib/launch-history";
 import { createSSEParser } from "./lib/parse-sse";
+import { BACKEND_AVAILABILITY_CHANGED } from "./lib/backend-availability";
 
 export type TAssistantMessage = {
   id: string;
@@ -45,6 +47,7 @@ export type TAssistantStreamState = {
 
 type TUseAssistantChatOptions = {
   enabled?: boolean;
+  provider?: TAgentDockProvider;
   focusRef?: TAgentFocusRef | null;
 };
 
@@ -95,7 +98,7 @@ function runtimeEvent(event: TAgentDockEvent): TAgentDockEvent | null {
   const payload = { ...event.payload };
   if (event.event_type === "output.delta" && event.payload.final === true) return { ...event, event_type: "OUTPUT" };
   if (event.event_type.startsWith("run.")) return { ...event, event_type: "RUN_EVENT" };
-  if (event.event_type === "tool.started") {
+  if (event.event_type === "tool.started" || event.event_type === "tool.output") {
     payload.status = "RUNNING";
     return { ...event, event_type: "TOOL_CALL", payload };
   }
@@ -106,19 +109,21 @@ function runtimeEvent(event: TAgentDockEvent): TAgentDockEvent | null {
   }
   if (event.event_type === "context.accessed") return { ...event, event_type: "CONTEXT_ACCESSED" };
   if (event.event_type === "approval.required" || event.event_type === "approval.resolved") {
-    return { ...event, event_type: "APPROVAL" };
+    payload.approval_status = event.event_type === "approval.resolved" ? "resolved" : "required";
+    return { ...event, event_type: "APPROVAL", payload };
   }
   if (event.event_type === "context.bound") return { ...event, event_type: "CONTEXT_ASSEMBLED" };
+  if (event.event_type === "artifact.upserted") return { ...event, event_type: "INTERMEDIATE_ARTIFACT" };
   return null;
 }
 
 /**
- * 管理绑定到当前 Plane 目标的 Synlora 会话，并以 SSE 驱动逐轮状态。
+ * 管理当前 provider 的工作区会话，并以统一 SSE 驱动逐轮状态。
  * 每轮独立 generation 和 run id，关闭面板只中止浏览器订阅。
  */
 export const useAssistantChat = (
   workspaceSlug: string,
-  { enabled = true, focusRef: pageFocusRef = null }: TUseAssistantChatOptions = {}
+  { enabled = true, focusRef: pageFocusRef = null, provider = "SYNLORA" }: TUseAssistantChatOptions = {}
 ) => {
   const { t } = useTranslation();
   const pathname = usePathname();
@@ -128,6 +133,10 @@ export const useAssistantChat = (
   const [streamState, setStreamState] = useState<TAssistantStreamState>({ phase: "idle" });
   const [streamingAnswer, setStreamingAnswer] = useState("");
   const [contextEnvelope, setContextEnvelope] = useState<TAgentContextEnvelope | null>(null);
+  const [sdAvailability, setSdAvailability] = useState<{
+    scope: string;
+    connection: NonNullable<TAgentContextEnvelope["science_discovery"]>;
+  } | null>(null);
   const [selectedText, setSelectedText] = useState("");
   const [runtimeEvents, setRuntimeEvents] = useState<TAgentDockEvent[]>([]);
   const [inlineRunId, setInlineRunId] = useState<string | null>(null);
@@ -137,7 +146,16 @@ export const useAssistantChat = (
   const streamingAnswerRef = useRef("");
   const sessionTargetKeyRef = useRef<string | null>(null);
   const latestSeqRef = useRef(-1);
-  const processedSeqRef = useRef<Set<number>>(new Set());
+  const processedSeqRef = useRef<Set<string>>(new Set());
+  const pendingApprovalsRef = useRef(new Map<string, Record<string, unknown>>());
+  const [pendingApprovals, setPendingApprovals] = useState<Array<Record<string, unknown>>>([]);
+  const [availabilityRevision, setAvailabilityRevision] = useState(0);
+  const availabilityRequestRef = useRef(0);
+  const contextRequestRef = useRef(0);
+  const historyLoadRequestRef = useRef(0);
+  const historyRequestRef = useRef(0);
+  const scopeKeyRef = useRef("");
+  const phaseRef = useRef(streamState.phase);
   const generationRef = useRef(0);
   const pendingSendRef = useRef(false);
   const pendingSendGenerationRef = useRef<number | null>(null);
@@ -150,6 +168,92 @@ export const useAssistantChat = (
   const pendingContextKeyRef = useRef<string | null>(null);
   const resolvedContextKeyRef = useRef<string | null>(null);
   const pendingHistorySessionRef = useRef<TAgentDockSession | null>(null);
+  const slot = provider === "SCIENCE_DISCOVERY" ? "local" : "cloud";
+  const ownerScope = `${workspaceSlug}:${assistantStore.threadOwnerKey ?? ""}`;
+  const scopeKey = `${ownerScope}:${provider}`;
+  const canExecute =
+    enabled &&
+    (provider !== "SCIENCE_DISCOVERY" || (sdAvailability?.scope === ownerScope && sdAvailability.connection.available));
+  scopeKeyRef.current = scopeKey;
+  phaseRef.current = streamState.phase;
+
+  useEffect(() => {
+    generationRef.current += 1;
+    streamControllerRef.current?.abort();
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    reconnectTimerRef.current = null;
+    pendingSendRef.current = false;
+    pendingSendGenerationRef.current = null;
+    activeRunIdRef.current = null;
+    approvalPendingRef.current = false;
+    pendingApprovalsRef.current.clear();
+    setPendingApprovals([]);
+    pendingHistorySessionRef.current = null;
+    historyRequestRef.current += 1;
+    historyLoadRequestRef.current += 1;
+    availabilityRequestRef.current += 1;
+    contextRequestRef.current += 1;
+    setHistorySessions([]);
+    setHistoryLoading(false);
+    latestSeqRef.current = -1;
+    processedSeqRef.current = new Set();
+    streamingAnswerRef.current = "";
+    resolvedContextKeyRef.current = null;
+    pendingContextKeyRef.current = null;
+    setMessages([]);
+    setRuntimeEvents([]);
+    setInlineRunId(null);
+    setStreamingAnswer("");
+    setContextEnvelope(null);
+    setStreamState({ phase: "idle" });
+  }, [scopeKey]);
+
+  useEffect(() => {
+    if (!assistantStore.isOpen) return;
+    const invalidate = (event: Event) => {
+      const changedWorkspace = (event as CustomEvent<{ workspaceSlug?: string }>).detail?.workspaceSlug;
+      if (changedWorkspace && changedWorkspace !== workspaceSlug) return;
+      setAvailabilityRevision((revision) => revision + 1);
+    };
+    invalidate(new Event("open"));
+    window.addEventListener("focus", invalidate);
+    window.addEventListener(BACKEND_AVAILABILITY_CHANGED, invalidate);
+    return () => {
+      window.removeEventListener("focus", invalidate);
+      window.removeEventListener(BACKEND_AVAILABILITY_CHANGED, invalidate);
+    };
+  }, [assistantStore.isOpen, workspaceSlug]);
+
+  useEffect(() => {
+    if (!assistantStore.isOpen || !ACTIVE_PHASES.has(phaseRef.current)) return;
+    const request = ++availabilityRequestRef.current;
+    const scope = scopeKey;
+    let disposed = false;
+    // 运行中的配置重验只更新可用性，页面上下文仍在下一轮刷新。
+    void agentDockService
+      .resolveContext(workspaceSlug, pathname ?? `/${workspaceSlug}`, "", undefined, provider)
+      .then((envelope) => {
+        if (
+          !disposed &&
+          request === availabilityRequestRef.current &&
+          scopeKeyRef.current === scope &&
+          envelope.science_discovery
+        ) {
+          setSdAvailability({ scope: ownerScope, connection: envelope.science_discovery });
+        }
+        return null;
+      })
+      .catch(() => {
+        if (!disposed && request === availabilityRequestRef.current && scopeKeyRef.current === scope) {
+          setSdAvailability({ scope: ownerScope, connection: { available: false, reason: "context_unavailable" } });
+        }
+      });
+    return () => {
+      disposed = true;
+    };
+    // 聚焦、设置失效和作用域变化触发重验，运行阶段变化不触发请求。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assistantStore.isOpen, availabilityRevision, scopeKey]);
 
   useEffect(() => {
     translateRef.current = t;
@@ -172,11 +276,14 @@ export const useAssistantChat = (
     };
   }, [assistantStore.isOpen, enabled]);
 
-  const contextKey = `${pathname ?? `/${workspaceSlug}`}|${JSON.stringify(pageFocusRef ?? null)}|${selectedText}`;
+  const contextKey = `${scopeKey}|${pathname ?? `/${workspaceSlug}`}|${JSON.stringify(pageFocusRef ?? null)}|${selectedText}|${availabilityRevision}`;
 
   const refreshHistorySessions = useCallback(async () => {
-    if (!assistantStore.isOpen || !enabled) return;
+    if (!assistantStore.isOpen) return;
     const ownerKey = assistantStore.threadOwnerKey;
+    const requestScope = scopeKey;
+    const requestSequence = ++historyRequestRef.current;
+    const isCurrent = () => scopeKeyRef.current === requestScope && historyRequestRef.current === requestSequence;
     const history = getLaunchHistory(workspaceSlug, ownerKey);
     setHistoryLoading(true);
     try {
@@ -187,13 +294,13 @@ export const useAssistantChat = (
       const response = await agentDockService.listSessions(workspaceSlug, {
         sessionIds: history.sessionIds,
       });
-      setHistorySessions(response.results);
+      if (isCurrent()) setHistorySessions(response.results);
     } catch {
-      setHistorySessions([]);
+      if (isCurrent()) setHistorySessions([]);
     } finally {
-      setHistoryLoading(false);
+      if (isCurrent()) setHistoryLoading(false);
     }
-  }, [assistantStore.isOpen, assistantStore.threadOwnerKey, enabled, workspaceSlug]);
+  }, [assistantStore.isOpen, assistantStore.threadOwnerKey, scopeKey, workspaceSlug]);
 
   useEffect(() => {
     void refreshHistorySessions();
@@ -239,20 +346,26 @@ export const useAssistantChat = (
   }, []);
 
   const applyEvent = useCallback(
-    (event: TAgentDockEvent, runId: string, generation: number) => {
-      if (generationRef.current !== generation || activeRunIdRef.current !== runId || event.run_id !== runId) return;
+    (event: TAgentDockEvent, runId: string, generation: number, replayOnly = false) => {
+      if (
+        generationRef.current !== generation ||
+        (!replayOnly && (activeRunIdRef.current !== runId || event.run_id !== runId))
+      )
+        return;
       const sourceSeq = Number(event.source_seq ?? event.seq ?? 0);
-      if (sourceSeq > 0) {
-        latestSeqRef.current = Math.max(latestSeqRef.current, sourceSeq);
-        if (processedSeqRef.current.has(sourceSeq)) return;
-        processedSeqRef.current.add(sourceSeq);
+      if (sourceSeq > 0 || replayOnly) {
+        if (!replayOnly) latestSeqRef.current = Math.max(latestSeqRef.current, sourceSeq);
+        const key = `${event.run_id}:${sourceSeq > 0 ? sourceSeq : `local-${event.seq}`}`;
+        if (processedSeqRef.current.has(key)) return;
+        processedSeqRef.current.add(key);
       }
       const normalizedRuntime = runtimeEvent(event);
       if (normalizedRuntime) {
         setRuntimeEvents((previous) => {
-          const key = sourceSeq || event.seq;
+          const key = sourceSeq || `local-${event.seq}`;
           const eventKey = `${event.run_id}:${key}`;
-          if (previous.some((item) => `${item.run_id}:${item.source_seq ?? item.seq}` === eventKey)) return previous;
+          if (previous.some((item) => `${item.run_id}:${item.source_seq || `local-${item.seq}`}` === eventKey))
+            return previous;
           return [...previous, normalizedRuntime];
         });
       }
@@ -262,7 +375,9 @@ export const useAssistantChat = (
         if (toolCallId) {
           setRuntimeEvents((previous) =>
             previous.map((item) =>
-              item.event_type === "TOOL_CALL" && String(item.payload.tool_call_id ?? "") === toolCallId
+              item.run_id === event.run_id &&
+              item.event_type === "TOOL_CALL" &&
+              String(item.payload.tool_call_id ?? "") === toolCallId
                 ? {
                     ...item,
                     payload: {
@@ -279,6 +394,8 @@ export const useAssistantChat = (
         }
       }
 
+      if (replayOnly) return;
+
       if (event.event_type === "output.delta") {
         const content = String(event.payload.content ?? event.payload.reasoning ?? "");
         if (content) {
@@ -289,13 +406,22 @@ export const useAssistantChat = (
       } else if (event.event_type === "heartbeat") {
         setStreamState((previous) => (previous.phase === "disconnected" ? { phase: "running" } : previous));
       } else if (event.event_type === "approval.required") {
+        const permissionId = String(event.payload.permission_request_id ?? event.payload.tool_call_id ?? "");
+        if (permissionId)
+          pendingApprovalsRef.current.set(permissionId, { ...event.payload, permission_request_id: permissionId });
+        setPendingApprovals([...pendingApprovalsRef.current.values()]);
         approvalPendingRef.current = true;
         setStreamState({ phase: "waiting_approval" });
       } else if (event.event_type === "approval.resolved") {
-        approvalPendingRef.current = false;
-        setStreamState({ phase: "running" });
+        pendingApprovalsRef.current.delete(
+          String(event.payload.permission_request_id ?? event.payload.tool_call_id ?? "")
+        );
+        setPendingApprovals([...pendingApprovalsRef.current.values()]);
+        approvalPendingRef.current = pendingApprovalsRef.current.size > 0;
+        setStreamState({ phase: approvalPendingRef.current ? "waiting_approval" : "running" });
       } else if (event.event_type === "tool.completed") {
-        setStreamState((previous) => (previous.phase === "waiting_approval" ? { phase: "running" } : previous));
+        if (!approvalPendingRef.current)
+          setStreamState((previous) => (previous.phase === "waiting_approval" ? { phase: "running" } : previous));
       } else if (event.event_type === "run.progress") {
         setStreamState((previous) =>
           previous.phase === "connecting" || previous.phase === "disconnected" ? { phase: "running" } : previous
@@ -307,9 +433,11 @@ export const useAssistantChat = (
       const terminal = TERMINAL_EVENTS[event.event_type];
       if (terminal) {
         approvalPendingRef.current = false;
+        pendingApprovalsRef.current.clear();
+        setPendingApprovals([]);
         disconnectStream();
         if (terminal === "completed")
-          appendAssistantMessage(String(event.payload.content ?? streamingAnswerRef.current));
+          appendAssistantMessage(String(event.payload.content || streamingAnswerRef.current));
         else if (terminal === "failed") {
           setStreamState({ phase: "failed", error: String(event.payload.error ?? "run_failed"), canRetry: true });
           streamingAnswerRef.current = "";
@@ -349,6 +477,10 @@ export const useAssistantChat = (
           latestSeqRef.current,
           controller.signal
         );
+        if (controller.signal.aborted || generationRef.current !== generation || activeRunIdRef.current !== runId) {
+          void response.body?.cancel();
+          return;
+        }
         const reader = response.body?.getReader();
         if (!reader) throw new Error("SSE response body is unavailable");
         const decoder = new TextDecoder();
@@ -361,7 +493,7 @@ export const useAssistantChat = (
             return;
           }
           const event = normalizeEvent(value, frame.event, frame.id);
-          if (!event) return;
+          if (!event || event.run_id !== runId) return;
           if (
             event.event_type === "run.completed" ||
             event.event_type === "run.failed" ||
@@ -417,29 +549,38 @@ export const useAssistantChat = (
 
   const resolveContext = useCallback(
     async (nextFocusRef?: TAgentFocusRef) => {
+      const generation = generationRef.current;
+      const request = ++contextRequestRef.current;
+      const availabilityRequest = ++availabilityRequestRef.current;
       setStreamState({ phase: "connecting" });
       try {
         const envelope = await agentDockService.resolveContext(
           workspaceSlug,
           pathname ?? `/${workspaceSlug}`,
           selectedText,
-          nextFocusRef
+          nextFocusRef,
+          provider
         );
+        if (generation !== generationRef.current || request !== contextRequestRef.current) return null;
         setContextEnvelope(envelope);
+        if (envelope.science_discovery && availabilityRequest === availabilityRequestRef.current) {
+          setSdAvailability({ scope: ownerScope, connection: envelope.science_discovery });
+        }
         setStreamState({ phase: "idle" });
         return envelope;
       } catch {
+        if (generation !== generationRef.current || request !== contextRequestRef.current) return null;
         setContextEnvelope(null);
         setStreamState({ phase: "failed", error: "context_unavailable", canRetry: false });
         setToast({ type: TOAST_TYPE.ERROR, title: translateRef.current("aiAssistant.error_unavailable") });
         return null;
       }
     },
-    [pathname, selectedText, workspaceSlug]
+    [ownerScope, pathname, provider, selectedText, workspaceSlug]
   );
 
   useEffect(() => {
-    if (!assistantStore.isOpen || !enabled) return;
+    if (!assistantStore.isOpen) return;
     if (ACTIVE_PHASES.has(streamState.phase) || pendingSendRef.current) {
       if (contextKey !== resolvedContextKeyRef.current) pendingContextKeyRef.current = contextKey;
       return;
@@ -470,14 +611,25 @@ export const useAssistantChat = (
 
   const loadHistory = useCallback(async () => {
     const sessionId = assistantStore.threadId;
-    if (!sessionId || !contextEnvelope || pendingSendRef.current) return;
+    if (!sessionId || pendingSendRef.current) return;
     const historyGeneration = generationRef.current;
+    const request = ++historyLoadRequestRef.current;
+    const scope = scopeKey;
+    const isCurrent = () =>
+      generationRef.current === historyGeneration &&
+      historyLoadRequestRef.current === request &&
+      scopeKeyRef.current === scope &&
+      assistantStore.threadId === sessionId &&
+      !pendingSendRef.current;
     try {
       const session = await agentDockService.getSession(workspaceSlug, sessionId);
-      if (generationRef.current !== historyGeneration || pendingSendRef.current) return;
+      if (!isCurrent()) return;
       sessionTargetKeyRef.current = session.target_key;
-      if (session.target_key !== contextEnvelope.session_binding.target_key) {
-        assistantStore.clearThreadId(workspaceSlug);
+      if (
+        session.provider !== provider ||
+        (contextEnvelope && session.target_key !== contextEnvelope.session_binding.target_key)
+      ) {
+        assistantStore.clearThreadId(workspaceSlug, slot);
         activeRunIdRef.current = null;
         setMessages([]);
         setRuntimeEvents([]);
@@ -489,17 +641,50 @@ export const useAssistantChat = (
       }
       // Keep the route-fresh envelope: replacing it with the session's original
       // context would erase the just-resolved page snapshot on every navigation.
+      const history = await agentDockService.getSessionEvents(workspaceSlug, sessionId);
+      const historyEvents = [...history.results];
+      let cursor = history.next_cursor;
+      while (cursor) {
+        if (!isCurrent()) return;
+        // 下一页依赖服务端返回的签名游标。
+        // eslint-disable-next-line no-await-in-loop
+        const page = await agentDockService.getSessionEvents(workspaceSlug, sessionId, cursor);
+        historyEvents.push(...page.results);
+        cursor = page.next_cursor;
+      }
+      if (!isCurrent()) return;
+      const latestSession = history.session ?? session;
       const runStartCursor = Number(
-        session.run_start_cursor ?? (session.assembly as { run_start_cursor?: number }).run_start_cursor ?? -1
+        latestSession.run_start_cursor ??
+          (latestSession.assembly as { run_start_cursor?: number }).run_start_cursor ??
+          -1
       );
-      const lastConsumedCursor = activeRunIdRef.current === session.run_id ? latestSeqRef.current : runStartCursor;
-      activeRunIdRef.current = session.run_id;
-      setInlineRunId(session.run_id);
-      latestSeqRef.current = Math.max(runStartCursor, lastConsumedCursor);
-      const history = await agentDockService.getEvents(workspaceSlug, session.run_id, 0);
-      if (generationRef.current !== historyGeneration || pendingSendRef.current) return;
-      const isActive = session.status === "STREAMING" || session.status === "WAITING_APPROVAL";
-      for (const event of history.results) {
+      disconnectStream();
+      activeRunIdRef.current = latestSession.run_id;
+      setInlineRunId(latestSession.run_id);
+      latestSeqRef.current = runStartCursor;
+      const isActive = ["INITIALIZING", "STREAMING", "WAITING_APPROVAL"].includes(latestSession.status);
+      setMessages([]);
+      setRuntimeEvents([]);
+      processedSeqRef.current = new Set();
+      pendingApprovalsRef.current.clear();
+      setPendingApprovals([]);
+      approvalPendingRef.current = false;
+      streamingAnswerRef.current = "";
+      setStreamingAnswer("");
+      let replayAnswer = "";
+      let replayRun = "";
+      const seenHistory = new Set<string>();
+      for (const event of historyEvents) {
+        const eventKey = `${event.run_id}:${event.source_seq || event.payload.remote_seq || `local-${event.seq}`}`;
+        if (seenHistory.has(eventKey)) continue;
+        seenHistory.add(eventKey);
+        if (replayRun && replayRun !== event.run_id && replayAnswer) {
+          appendAssistantMessage(replayAnswer);
+          replayAnswer = "";
+        }
+        replayRun = event.run_id;
+        const isCurrentRun = event.run_id === latestSession.run_id;
         const remoteType = String(event.payload.remote_type ?? "");
         const toolName = String(event.payload.name ?? "")
           .toLowerCase()
@@ -508,7 +693,7 @@ export const useAssistantChat = (
           event.payload.context_access === true ||
           toolName.split(".").some((part) => ["list", "read", "context", "knowledge"].includes(part));
         const replayType =
-          remoteType === "user/message" || event.event_type === "user.message"
+          remoteType === "user/message" || event.event_type === "user.message" || event.event_type === "USER_MESSAGE"
             ? "user.message"
             : remoteType === "turn/end" || remoteType === "run.completed"
               ? "run.completed"
@@ -516,24 +701,56 @@ export const useAssistantChat = (
                 ? "run.failed"
                 : remoteType === "turn/aborted" || remoteType === "run.cancelled"
                   ? "run.cancelled"
-                  : remoteType === "assistant/message" || remoteType === "assistant.snapshot"
+                  : remoteType === "assistant/message" ||
+                      remoteType === "assistant.snapshot" ||
+                      remoteType === "assistant.delta"
                     ? "output.delta"
                     : remoteType === "tool/result" && event.event_type === "HUMAN_DECISION"
                       ? "approval.resolved"
-                      : isContextAccess && (event.event_type === "TOOL_CALL" || event.payload.context_access === true)
-                        ? "context.accessed"
-                        : event.event_type;
+                      : remoteType === "permission.required"
+                        ? "approval.required"
+                        : remoteType === "permission.resolved"
+                          ? "approval.resolved"
+                          : remoteType === "artifact.upserted"
+                            ? "artifact.upserted"
+                            : isContextAccess &&
+                                (event.event_type === "TOOL_CALL" || event.payload.context_access === true)
+                              ? "context.accessed"
+                              : event.event_type;
         const normalized = normalizeEvent(
           {
             ...event,
             source_seq: Number(event.payload.remote_seq ?? 0),
-            event_type: replayType,
+            event_type: event.normalized_event_type ?? replayType,
           },
           undefined,
           String(event.payload.remote_seq ?? event.seq)
         );
         if (normalized) {
-          normalized.run_id = session.run_id;
+          if (!event.normalized_event_type && remoteType.startsWith("tool.")) {
+            const trace = (normalized.payload.trace ?? {}) as Record<string, unknown>;
+            normalized.payload = {
+              ...normalized.payload,
+              tool_call_id: trace.id ?? normalized.payload.toolCallId,
+              name: trace.name,
+              arguments: trace.args ?? trace.input,
+              result: trace.summary ?? trace.output ?? normalized.payload.chunk,
+              status: trace.status,
+            };
+            normalized.event_type = remoteType;
+          }
+          if (!event.normalized_event_type && remoteType.startsWith("permission.")) {
+            const permission = (normalized.payload.request ?? {}) as Record<string, unknown>;
+            normalized.payload = {
+              ...normalized.payload,
+              permission_request_id: permission.id ?? normalized.payload.requestId,
+              tool_call_id: permission.toolCallId ?? normalized.payload.tool_call_id,
+              summary: permission.summary ?? normalized.payload.summary,
+              tool: permission.action,
+              resource: permission.resource,
+              args_preview: permission.resource,
+            };
+          }
           if (normalized.event_type === "OUTPUT") {
             normalized.event_type = "output.delta";
             normalized.payload = { ...normalized.payload, final: true };
@@ -549,43 +766,71 @@ export const useAssistantChat = (
           if (remoteType === "assistant/message") {
             normalized.payload = { ...normalized.payload, final: true };
           }
+          if (remoteType === "assistant.snapshot") normalized.payload = { ...normalized.payload, final: true };
           if (normalized.event_type === "user.message") {
             const sourceSeq = normalized.source_seq || normalized.seq;
             appendUserMessage(
               String(normalized.payload.content ?? normalized.payload.text ?? ""),
-              `${session.run_id}:${sourceSeq}`
+              `${normalized.run_id}:${sourceSeq}`
             );
             continue;
           }
-          if (!isActive && normalized.event_type === "output.delta") {
+          if ((!isActive || !isCurrentRun) && normalized.event_type === "output.delta") {
+            if (provider === "SCIENCE_DISCOVERY") {
+              replayAnswer =
+                normalized.payload.final === true
+                  ? String(normalized.payload.content ?? "")
+                  : replayAnswer + String(normalized.payload.content ?? "");
+              continue;
+            }
             appendAssistantMessage(String(normalized.payload.content ?? ""));
             continue;
           }
-          applyEvent(normalized, session.run_id, historyGeneration);
+          if (provider === "SCIENCE_DISCOVERY" && normalized.event_type === "run.completed" && replayAnswer) {
+            normalized.payload = { ...normalized.payload, content: normalized.payload.content || replayAnswer };
+            replayAnswer = "";
+          }
+          if (!isCurrentRun) {
+            if (normalized.event_type === "run.completed" && provider === "SCIENCE_DISCOVERY") {
+              appendAssistantMessage(String(normalized.payload.content ?? ""));
+            }
+            applyEvent(normalized, event.run_id, historyGeneration, true);
+          } else {
+            applyEvent(normalized, latestSession.run_id, historyGeneration);
+          }
         }
       }
       // Local history omits transient deltas, so it cannot advance the browser's
       // upstream cursor beyond the last position this browser actually consumed.
-      latestSeqRef.current = Math.max(runStartCursor, lastConsumedCursor);
-      if (isActive) {
-        connectRunRef.current(session.run_id, historyGeneration);
+      if (replayAnswer) appendAssistantMessage(replayAnswer);
+      latestSeqRef.current =
+        provider === "SCIENCE_DISCOVERY"
+          ? historyEvents
+              .filter((event) => event.run_id === latestSession.run_id)
+              .reduce((max, event) => Math.max(max, Number(event.payload.remote_seq ?? 0)), runStartCursor)
+          : runStartCursor;
+      if (isActive && canExecute) {
+        connectRunRef.current(latestSession.run_id, historyGeneration);
       } else {
         activeRunIdRef.current = null;
-        const hasTerminalEvent = history.results.some((event) =>
-          ["turn/end", "error", "turn/aborted", "run.completed", "run.failed", "run.cancelled"].includes(
-            String(event.payload.remote_type ?? event.event_type)
-          )
+        const hasTerminalEvent = historyEvents.some(
+          (event) =>
+            event.run_id === latestSession.run_id &&
+            ["turn/end", "error", "turn/aborted", "run.completed", "run.failed", "run.cancelled"].includes(
+              String(event.payload.remote_type ?? event.event_type)
+            )
         );
         if (!hasTerminalEvent) setStreamState({ phase: "idle" });
-        if (!hasTerminalEvent && (session.status === "DEGRADED" || session.last_error)) {
-          setStreamState({ phase: "failed", error: session.last_error || "run_failed", canRetry: true });
+        if (!hasTerminalEvent && (latestSession.status === "DEGRADED" || latestSession.last_error)) {
+          setStreamState({ phase: "failed", error: latestSession.last_error || "run_failed", canRetry: true });
         }
       }
     } catch (error) {
+      if (!isCurrent()) return;
       const status = Number((error as { status?: number }).status ?? 0);
       const code = String((error as { error?: string }).error ?? "");
       if (status === 404 || code === "agent_session_not_found") {
-        assistantStore.clearThreadId(workspaceSlug);
+        assistantStore.clearThreadId(workspaceSlug, slot);
         activeRunIdRef.current = null;
         setMessages([]);
         setRuntimeEvents([]);
@@ -595,20 +840,33 @@ export const useAssistantChat = (
         setStreamState({ phase: "idle" });
         return;
       }
-      assistantStore.clearThreadId(workspaceSlug);
       setStreamState({ phase: "failed", error: "session_unavailable", canRetry: true });
     }
-  }, [appendAssistantMessage, appendUserMessage, applyEvent, assistantStore, contextEnvelope, workspaceSlug]);
+  }, [
+    appendAssistantMessage,
+    appendUserMessage,
+    applyEvent,
+    assistantStore,
+    contextEnvelope,
+    disconnectStream,
+    canExecute,
+    provider,
+    slot,
+    scopeKey,
+    workspaceSlug,
+  ]);
 
   useEffect(() => {
-    if (assistantStore.isOpen && enabled && assistantStore.threadId && contextEnvelope) void loadHistory();
-  }, [assistantStore.isOpen, assistantStore.threadId, contextEnvelope, enabled, loadHistory]);
+    if (assistantStore.isOpen && assistantStore.threadId) void loadHistory();
+  }, [assistantStore.isOpen, assistantStore.threadId, loadHistory]);
 
   const resetForHistorySession = useCallback(
-    (sessionId: string) => {
+    (sessionId: string, nextProvider: TAgentDockProvider = provider) => {
       generationRef.current += 1;
       disconnectStream();
       approvalPendingRef.current = false;
+      pendingApprovalsRef.current.clear();
+      setPendingApprovals([]);
       activeRunIdRef.current = null;
       sessionTargetKeyRef.current = null;
       latestSeqRef.current = -1;
@@ -619,17 +877,19 @@ export const useAssistantChat = (
       setStreamingAnswer("");
       streamingAnswerRef.current = "";
       setStreamState({ phase: "idle" });
-      assistantStore.setThreadId(workspaceSlug, sessionId);
+      const nextSlot = nextProvider === "SCIENCE_DISCOVERY" ? "local" : "cloud";
+      assistantStore.setProvider(nextSlot);
+      assistantStore.setThreadId(workspaceSlug, sessionId, nextSlot);
     },
-    [assistantStore, disconnectStream, workspaceSlug]
+    [assistantStore, disconnectStream, provider, workspaceSlug]
   );
 
   useEffect(() => {
     const pendingSession = pendingHistorySessionRef.current;
-    if (!assistantStore.isOpen || !enabled || !pendingSession || !contextEnvelope) return;
+    if (!assistantStore.isOpen || !pendingSession || !contextEnvelope) return;
     if (pendingSession.target_key === contextEnvelope.session_binding.target_key) {
       pendingHistorySessionRef.current = null;
-      resetForHistorySession(pendingSession.session_id);
+      resetForHistorySession(pendingSession.session_id, pendingSession.provider);
       return;
     }
     const targetRoute = pendingSession.target_metadata?.page?.route || "";
@@ -650,10 +910,13 @@ export const useAssistantChat = (
 
   const ensureSession = useCallback(
     async (context: TAgentContextEnvelope): Promise<TAgentDockSession> => {
+      const generation = generationRef.current;
+      const ownerKey = assistantStore.threadOwnerKey;
       if (assistantStore.threadId) {
         try {
           const existing = await agentDockService.getSession(workspaceSlug, assistantStore.threadId);
-          if (existing.target_key === context.session_binding.target_key) {
+          if (generationRef.current !== generation) throw new Error("stale_session_request");
+          if (existing.provider === provider && existing.target_key === context.session_binding.target_key) {
             sessionTargetKeyRef.current = existing.target_key;
             if (existing.context.status !== "expired") return existing;
             const refreshed = await agentDockService.refreshSessionContext(
@@ -666,7 +929,8 @@ export const useAssistantChat = (
         } catch {
           // A stale local session id should be replaced with a fresh grant-bound session.
         }
-        assistantStore.clearThreadId(workspaceSlug);
+        if (generationRef.current !== generation) throw new Error("stale_session_request");
+        assistantStore.clearThreadId(workspaceSlug, slot);
         setMessages([]);
       }
       disconnectStream();
@@ -676,26 +940,29 @@ export const useAssistantChat = (
       processedSeqRef.current = new Set();
       latestSeqRef.current = -1;
       activeRunIdRef.current = null;
-      const created = await agentDockService.createSession(workspaceSlug, context.context_id);
-      assistantStore.setThreadId(workspaceSlug, created.session_id);
-      addLaunchSession(workspaceSlug, assistantStore.threadOwnerKey, created.session_id);
+      const created = await agentDockService.createSession(workspaceSlug, context.context_id, provider);
+      if (generationRef.current !== generation) throw new Error("stale_session_request");
+      assistantStore.setThreadId(workspaceSlug, created.session_id, slot);
+      addLaunchSession(workspaceSlug, ownerKey, created.session_id);
       void refreshHistorySessions();
       sessionTargetKeyRef.current = created.target_key;
       return created;
     },
-    [assistantStore, disconnectStream, refreshHistorySessions, workspaceSlug]
+    [assistantStore, disconnectStream, provider, refreshHistorySessions, slot, workspaceSlug]
   );
 
   const send = useCallback(
     async (rawQuery: string, messageFocusRef?: TAgentFocusRef) => {
       const query = rawQuery.trim();
-      if (!enabled || !query || ACTIVE_PHASES.has(streamState.phase) || pendingSendRef.current) return;
+      if (!canExecute || !query || ACTIVE_PHASES.has(streamState.phase) || pendingSendRef.current) return;
       generationRef.current += 1;
       const generation = generationRef.current;
       const optimisticUserId = `user-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`;
       pendingSendRef.current = true;
       pendingSendGenerationRef.current = generation;
       approvalPendingRef.current = false;
+      pendingApprovalsRef.current.clear();
+      setPendingApprovals([]);
       disconnectStream();
       streamingAnswerRef.current = "";
       setStreamingAnswer("");
@@ -719,9 +986,9 @@ export const useAssistantChat = (
           route: pathname ?? `/${workspaceSlug}`,
           focusRef: messageFocusRef,
           selectedText,
+          provider,
         });
         if (generationRef.current !== generation) {
-          await agentDockService.cancelRun(workspaceSlug, updated.run_id).catch(() => undefined);
           return;
         }
         activeRunIdRef.current = updated.run_id;
@@ -753,9 +1020,10 @@ export const useAssistantChat = (
     [
       contextEnvelope,
       disconnectStream,
-      enabled,
+      canExecute,
       ensureSession,
       pathname,
+      provider,
       resolveContext,
       selectedText,
       streamState.phase,
@@ -764,9 +1032,12 @@ export const useAssistantChat = (
   );
 
   const stop = useCallback(async () => {
+    if (!canExecute) return;
     const runId = activeRunIdRef.current;
     const generation = ++generationRef.current;
     approvalPendingRef.current = false;
+    pendingApprovalsRef.current.clear();
+    setPendingApprovals([]);
     disconnectStream();
     if (!runId) {
       setStreamState({ phase: "cancelled" });
@@ -781,17 +1052,24 @@ export const useAssistantChat = (
         setStreamState({ phase: "failed", error: "cancel_failed", canRetry: true });
       }
     } finally {
-      activeRunIdRef.current = null;
+      if (generationRef.current === generation && activeRunIdRef.current === runId) activeRunIdRef.current = null;
     }
-  }, [disconnectStream, workspaceSlug]);
+  }, [canExecute, disconnectStream, workspaceSlug]);
 
   const answerApproval = useCallback(
-    async (approved: boolean) => {
+    async (approved: boolean, permissionRequestId?: string) => {
       const runId = activeRunIdRef.current;
-      if (!runId) return;
+      if (!runId || !canExecute) return;
+      const generation = generationRef.current;
       try {
-        await agentDockService.answerRun(workspaceSlug, runId, approved);
+        await agentDockService.answerRun(workspaceSlug, runId, approved, permissionRequestId);
+        if (generationRef.current !== generation || activeRunIdRef.current !== runId) return;
+        if (permissionRequestId) pendingApprovalsRef.current.delete(permissionRequestId);
+        setPendingApprovals([...pendingApprovalsRef.current.values()]);
+        approvalPendingRef.current = pendingApprovalsRef.current.size > 0;
+        setStreamState({ phase: approvalPendingRef.current ? "waiting_approval" : "running" });
       } catch {
+        if (generationRef.current !== generation || activeRunIdRef.current !== runId) return;
         setStreamState((previous) =>
           previous.phase === "waiting_approval"
             ? { ...previous, error: "approval_answer_failed", canRetry: true }
@@ -799,7 +1077,7 @@ export const useAssistantChat = (
         );
       }
     },
-    [workspaceSlug]
+    [canExecute, workspaceSlug]
   );
 
   /** Close only the browser subscription; the Synlora run continues. */
@@ -812,6 +1090,8 @@ export const useAssistantChat = (
     generationRef.current += 1;
     disconnectStream();
     approvalPendingRef.current = false;
+    pendingApprovalsRef.current.clear();
+    setPendingApprovals([]);
     activeRunIdRef.current = null;
     sessionTargetKeyRef.current = null;
     latestSeqRef.current = -1;
@@ -822,15 +1102,15 @@ export const useAssistantChat = (
     setStreamingAnswer("");
     streamingAnswerRef.current = "";
     setStreamState({ phase: "idle" });
-    assistantStore.clearThreadId(workspaceSlug);
-  }, [assistantStore, disconnectStream, workspaceSlug]);
+    assistantStore.clearThreadId(workspaceSlug, slot);
+  }, [assistantStore, disconnectStream, slot, workspaceSlug]);
 
   /** Switch to one session from this browser launch batch. */
   const selectHistorySession = useCallback(
     (session: TAgentDockSession) => {
       if (ACTIVE_PHASES.has(streamState.phase) || pendingSendRef.current) return;
-      if (session.target_key === contextEnvelope?.session_binding.target_key) {
-        resetForHistorySession(session.session_id);
+      if (session.target_type === "WORKSPACE" || session.target_key === contextEnvelope?.session_binding.target_key) {
+        resetForHistorySession(session.session_id, session.provider);
         return true;
       }
       const route = session.target_metadata?.page?.route;
@@ -849,12 +1129,13 @@ export const useAssistantChat = (
   );
 
   useEffect(() => {
-    if (!assistantStore.isOpen || !enabled || !activeRunIdRef.current || !ACTIVE_PHASES.has(streamState.phase)) return;
+    if (!assistantStore.isOpen || !canExecute || !activeRunIdRef.current || !ACTIVE_PHASES.has(streamState.phase))
+      return;
     connectRunRef.current(activeRunIdRef.current, generationRef.current);
     return disconnectStream;
     // Phase changes must not run cleanup and abort the active stream.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assistantStore.isOpen, disconnectStream, enabled]);
+  }, [assistantStore.isOpen, canExecute, disconnectStream]);
 
   useEffect(
     () => () => {
@@ -874,6 +1155,8 @@ export const useAssistantChat = (
     streamingAnswer,
     streamState,
     contextEnvelope,
+    scienceDiscovery: sdAvailability?.scope === ownerScope ? sdAvailability.connection : null,
+    pendingApprovals,
     contextStatus,
     runtimeEvents,
     inlineRunId,

@@ -1200,6 +1200,8 @@ class ResearchAgentApprovalListEndpoint(AgentPluginMixin):
             .filter(
                 workspace=workspace,
                 status=ResearchAgentSession.Status.WAITING_APPROVAL,
+                target_type=ResearchAgentSession.TargetType.RESEARCH_CHAIN_NODE,
+                chain_node__isnull=False,
                 deleted_at__isnull=True,
                 context_grant__revoked_at__isnull=True,
                 context_grant__expires_at__gt=timezone.now(),

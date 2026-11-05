@@ -13,6 +13,8 @@ import type {
   IInstanceConfiguration,
   IInstanceInfo,
   TPage,
+  TEmailRecipientFilterPolicy,
+  TEmailRecipientFilterCheck,
 } from "@plane/types";
 // api service
 import { APIService } from "../api.service";
@@ -110,6 +112,36 @@ export class InstanceService extends APIService {
    */
   async configurations(): Promise<IInstanceConfiguration[]> {
     return this.get("/api/instances/configurations/")
+      .then((response) => response.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 读取实例邮件过滤策略，不依赖 SMTP 是否启用。 */
+  async emailRecipientFilters(): Promise<TEmailRecipientFilterPolicy> {
+    return this.get("/api/instances/email-recipient-filters/")
+      .then((response) => response.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 原子保存完整草稿，返回后端规范化后的策略。 */
+  async updateEmailRecipientFilters(policy: TEmailRecipientFilterPolicy): Promise<TEmailRecipientFilterPolicy> {
+    return this.put("/api/instances/email-recipient-filters/", policy)
+      .then((response) => response.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 用草稿检查单个邮箱，仅做匹配，不发送测试邮件。 */
+  async checkEmailRecipientFilters(
+    email: string,
+    policy: TEmailRecipientFilterPolicy
+  ): Promise<TEmailRecipientFilterCheck> {
+    return this.post("/api/instances/email-recipient-filters/check/", { email, policy })
       .then((response) => response.data)
       .catch((error) => {
         throw error?.response?.data;

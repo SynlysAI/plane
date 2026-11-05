@@ -483,7 +483,7 @@ export type TResearchChainNodeTaskResourceType =
   | "SNAPSHOT"
   | "EXTERNAL_REF";
 
-export type TResearchChainNodeTaskAction = "view" | "edit" | "assign" | "complete" | "reopen" | "cancel";
+export type TResearchChainNodeTaskAction = "view" | "edit" | "assign" | "complete" | "reopen" | "cancel" | "delete";
 
 export type TResearchTaskActionCapability = TResearchActionCapability;
 

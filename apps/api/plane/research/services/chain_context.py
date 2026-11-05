@@ -5,7 +5,7 @@ import json
 from uuid import UUID
 
 from django.core import signing
-from django.db.models import Q
+from django.db.models import F, Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
@@ -112,6 +112,28 @@ def normalise_reference(ref):
             **({"version": version} if type(version) is int and version > 0 else {})}
 
 
+def _reference_filters(kind, identity):
+    """构造事件和快照中同一资源引用的兼容查询。
+
+    Args:
+        kind: 已识别的资源类型。
+        identity: 资源的稳定 ID。
+
+    Returns:
+        事件与快照的 JSON 关联查询条件。
+    """
+    aliases = [name for name, target in ALIASES.items() if target == kind]
+    names = [kind, kind.upper(), *aliases, *[name.upper() for name in aliases]]
+    event_q, snapshot_q = Q(pk__in=[]), Q(pk__in=[])
+    for name in names:
+        for key in ("kind", "type", "resource_type"):
+            for id_key in ("id", "resource_id"):
+                value = [{key: name, id_key: str(identity)}]
+                event_q |= Q(refs__contains=value)
+                snapshot_q |= Q(resources__contains=value) | Q(source_versions__contains=value)
+    return event_q, snapshot_q
+
+
 class ResearchReadService:
     def __init__(self, *, workspace, user, grant=None, authorization=None):
         if grant is not None and authorization is not None:
@@ -155,7 +177,7 @@ class ResearchReadService:
             workspace=self.workspace, project_id__in=profiles.values("project_id"),
             project__deleted_at__isnull=True,
         ).exclude(status="DELETED").select_related("project", "project__research_profile")
-        if self.grant:
+        if self.grant and self.grant.target_type != "WORKSPACE":
             rows = rows.filter(project_id=self.grant.project_id)
             if self.grant.chain_node_id:
                 rows = rows.filter(nodes__id=self.grant.chain_node_id, nodes__deleted_at__isnull=True)
@@ -395,7 +417,13 @@ class ResearchReadService:
 
         def project(feedback):
             report_id = str(feedback.report_id)
-            expected_version = allowed.get(report_id)
+            if self._workspace_sd_grant():
+                if self._workspace_report_node(feedback.report) is None:
+                    return None
+                snapshot = feedback.report.official_snapshots.order_by("-version_no").first()
+                expected_version = snapshot.version_no if snapshot else None
+            else:
+                expected_version = allowed.get(report_id)
             if expected_version is None or feedback.thread.snapshot_version != expected_version:
                 return None
             if not check_access(self.user, "view", report_resource(feedback.report), context=self.actor):
@@ -424,6 +452,40 @@ class ResearchReadService:
             }
 
         return self._page(rows, project, cursor=cursor, limit=limit)
+
+    def _workspace_sd_grant(self):
+        """仅 SD Dock 的工作区授权使用实时报告范围。
+
+        Returns:
+            是否启用关联报告的实时授权规则。
+        """
+        return bool(self.grant and getattr(self.grant, "target_type", None) == "WORKSPACE"
+                    and getattr(self.grant, "policy_version", None) == "agent-dock-science-discovery.v1")
+
+    def _workspace_report_node(self, report):
+        """查找当前用户可见、明确关联报告的科研节点。
+
+        Args:
+            report: 待检查的正式报告。
+
+        Returns:
+            首个授权节点，无可见关联时返回 None。
+        """
+        key = ("workspace_report", str(report.pk))
+        if key not in self._reference_cache:
+            projects = list(report.team_projects.values_list("id", flat=True))
+            if report.project_id:
+                projects.append(report.project_id)
+            event_q, snapshot_q = _reference_filters("report", report.pk)
+            linked = (
+                Q(pk__in=ResearchChainEvent.objects.filter(event_q).values("node_id"))
+                | Q(pk__in=ResearchChainSnapshot.objects.filter(snapshot_q).values("node_id"))
+                | Q(pk__in=ResearchChainNodeTask.objects.filter(
+                    resource_type="REPORT", resource_id=report.pk, chain_id=F("node__chain_id"),
+                ).values("node_id"))
+            )
+            self._reference_cache[key] = self.nodes().filter(chain__project_id__in=projects).filter(linked).first()
+        return self._reference_cache[key]
 
     def _candidates(self, node, kind):
         rows = self._raw_candidates(node, kind)
@@ -470,16 +532,7 @@ class ResearchReadService:
     def _linked(self, node, kind, obj):
         if kind in {"analysis", "snapshot", "upload", "paper_review", "agent_event", "event", "task", "task_comment"}:
             return True  # _candidates already constrained the real foreign keys.
-        identity = str(obj.id)
-        aliases = [name for name, target in ALIASES.items() if target == kind]
-        names = [kind, kind.upper(), *aliases, *[name.upper() for name in aliases]]
-        event_q, snapshot_q = Q(pk__in=[]), Q(pk__in=[])
-        for name in names:
-            for key in ("kind", "type", "resource_type"):
-                for id_key in ("id", "resource_id"):
-                    value = [{key: name, id_key: identity}]
-                    event_q |= Q(refs__contains=value)
-                    snapshot_q |= Q(resources__contains=value) | Q(source_versions__contains=value)
+        event_q, snapshot_q = _reference_filters(kind, obj.id)
         task_kind = {"report": "REPORT", "stage_material": "STAGE_MATERIAL",
                      "external_reference": "EXTERNAL_REF"}.get(kind)
         if task_kind and ResearchChainNodeTask.objects.filter(
@@ -495,7 +548,9 @@ class ResearchReadService:
             return check_access(self.user, "view", experiment_resource(obj), context=self.actor) or can_manage_team_content(
                 self.user, obj.project.research_profile, obj)
         if kind == "report":
-            if self.grant and not any(str(item.get("report_id")) == str(obj.id) for item in self.grant.allowed_reports):
+            if self.grant and not self._workspace_sd_grant() and not any(
+                str(item.get("report_id")) == str(obj.id) for item in self.grant.allowed_reports
+            ):
                 return False
             return check_access(self.user, "view", report_resource(obj), context=self.actor)
         if kind == "stage_material":
@@ -520,7 +575,7 @@ class ResearchReadService:
             if self.authorization is not None:
                 current = obj.official_snapshots.order_by("-version_no").first()
                 report_version_changed = current is not None and current.version_no != version
-            if self.grant:
+            if self.grant and not self._workspace_sd_grant():
                 version = next(item["version_no"] for item in self.grant.allowed_reports if str(item.get("report_id")) == str(obj.id))
         title = (obj.file_name if kind == "upload" else f"{obj.period_key} {obj.report_type}" if kind == "report"
                  else (obj.attributes or {}).get("name") if kind == "topic_material"
@@ -600,7 +655,8 @@ class ResearchReadService:
         if kind == "report":
             if version is None:
                 raise ResearchReadError("version_required", "Select an explicit formal report version.")
-            if self.grant and not any(str(item.get("report_id")) == str(obj.id) and item.get("version_no") == version
+            if self.grant and not self._workspace_sd_grant() and not any(
+                                      str(item.get("report_id")) == str(obj.id) and item.get("version_no") == version
                                       for item in self.grant.allowed_reports):
                 raise ResearchReadError("scope_denied", "This formal report version is not granted.", 403)
             if self.authorization is not None and not self.authorization.report_versions(obj).filter(version_no=version).exists():

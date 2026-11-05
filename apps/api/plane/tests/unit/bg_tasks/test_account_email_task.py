@@ -4,6 +4,7 @@ import smtplib
 from unittest.mock import MagicMock
 
 import pytest
+from django.core.mail import EmailMultiAlternatives
 
 from plane.utils.account_email import (
     AccountEmailDeliveryError,
@@ -11,13 +12,50 @@ from plane.utils.account_email import (
     send_account_email,
 )
 
+pytestmark = pytest.mark.django_db
+
 
 def make_email_message():
     """Create a minimal email double with a separate SMTP connection double."""
-    message = MagicMock()
-    message.connection = MagicMock()
-    message.send.return_value = 1
+    message = EmailMultiAlternatives(to=["member@example.com"], connection=MagicMock())
+    message.send = MagicMock(return_value=1)
     return message
+
+
+@pytest.mark.parametrize("field", ["to", "cc", "bcc"])
+def test_blocked_account_email_is_skipped_without_smtp_or_retry(field, monkeypatch):
+    """账号邮件仅有被屏蔽收件人时，直接结束且不建立 SMTP 连接。
+
+    Args:
+        field: 被屏蔽地址所在的收件人列表。
+        monkeypatch: pytest 属性替换工具。
+    """
+    message = make_email_message()
+    message.to = []
+    setattr(message, field, ["Admin <ADMIN@AI4MS.LOCAL>"])
+    task = MagicMock()
+    monkeypatch.setattr("plane.utils.account_email.current_task", task)
+
+    assert send_account_email(message) == 0
+    assert message.recipients() == []
+    message.connection.open.assert_not_called()
+    message.connection.close.assert_not_called()
+    message.send.assert_not_called()
+    task.retry.assert_not_called()
+
+
+def test_mixed_account_email_sends_only_to_allowed_recipients():
+    """账号邮件移除被屏蔽地址后仍向其余收件人正常发送。"""
+    message = make_email_message()
+    message.to = ["admin@ai4ms.local"]
+    message.cc = ["ops.admin@ai4ms.local"]
+    message.bcc = ["Admin <ADMIN@AI4MS.LOCAL>", "member@example.com"]
+
+    assert send_account_email(message) == 1
+    assert message.recipients() == ["ops.admin@ai4ms.local", "member@example.com"]
+    message.connection.open.assert_called_once()
+    message.send.assert_called_once()
+    message.connection.close.assert_called_once()
 
 
 def test_connection_failure_is_retryable_before_submission():
