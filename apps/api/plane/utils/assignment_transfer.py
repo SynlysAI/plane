@@ -25,11 +25,12 @@ RESEARCH_TASK_ENTITY = "research_chain_task"
 class AssignmentTransferError(Exception):
     """Raised when an email assignment-transfer request cannot be executed."""
 
-    def __init__(self, code, message, status=400):
+    def __init__(self, code, message, status=400, route=""):
         super().__init__(message)
         self.code = code
         self.message = message
         self.status = status
+        self.route = route
 
 
 def build_assignment_transfer_token(entity_type, entity_id, receiver_id, current_owner_id):
@@ -252,15 +253,15 @@ def assignment_transfer_preview(token, candidate_id, actor):
         }
     if str(owner_id) != str(payload["receiver_id"]):
         raise AssignmentTransferError(
-            "assignment_changed", "负责人已变化，请到工作项详情页处理。", 409
+            "assignment_changed", "负责人已变化，请到工作项详情页处理。", 409, route
         )
     if candidate is None or not _candidate_is_valid(entity_type, entity, candidate):
         raise AssignmentTransferError(
-            "assignment_candidate_invalid", "候选负责人已失效，请在原生网页重新选择。", 422
+            "assignment_candidate_invalid", "候选负责人已失效，请在原生网页重新选择。", 422, route
         )
     owner = User.objects.filter(pk=owner_id, is_active=True).first()
     if owner is None:
-        raise AssignmentTransferError("assignment_changed", "负责人已变化。", 409)
+        raise AssignmentTransferError("assignment_changed", "负责人已变化。", 409, route)
     return common | {
         "status": "ready",
         "current_assignee": _user_payload(owner),

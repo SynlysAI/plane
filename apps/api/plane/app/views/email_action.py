@@ -50,7 +50,10 @@ class AssignmentTransferEndpoint(BaseAPIView):
             self._execute(request, preview, token)
             return Response(preview | {"status": "completed"})
         except AssignmentTransferError as exc:
-            return Response({"error_code": exc.code, "message": exc.message}, status=exc.status)
+            return Response(
+                {"error_code": exc.code, "message": exc.message, "route": exc.route},
+                status=exc.status,
+            )
         except Exception as exc:
             message = str(exc).lower()
             if "boundary" in message or "assignee" in message:
