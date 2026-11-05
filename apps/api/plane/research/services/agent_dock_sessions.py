@@ -28,6 +28,10 @@ from plane.research.services.agent_dock_mcp import (
     resolve_agent_dock_mcp_credentials,
     revoke_agent_dock_mcp_connection,
 )
+from plane.research.services.agent_metadata import (
+    build_plane_metadata,
+    target_title as _target_title,
+)
 from plane.research.services.agent_page_context import build_page_context
 from plane.research.services.agent_runtime import (
     SynloraRuntimeClient,
@@ -56,17 +60,6 @@ class AgentDockSessionError(Exception):
         self.code = code
 
 
-def _target_title(grant: ResearchContextGrant) -> str:
-    """Build a bounded Synlora session title from the authorized target."""
-    if grant.chain_node is not None:
-        return grant.chain_node.title[:120]
-    if grant.research_chain is not None:
-        return f"Research chain {grant.research_chain_id}"[:120]
-    if grant.project is not None:
-        return grant.project.name[:120]
-    return f"Plane · {grant.workspace.name}"[:120]
-
-
 def _assembly(grant: ResearchContextGrant) -> dict:
     return {
         "persona": "plane-agent-dock",
@@ -93,55 +86,10 @@ def _plane_mcp_metadata(grant: ResearchContextGrant, credential) -> dict:
     }
 
 
-def _plane_metadata(grant: ResearchContextGrant, page_context: dict | None = None) -> dict:
-    """Build the bounded Synlora workspace/page metadata for a grant."""
-
-    target_id = (
-        str(grant.chain_node_id or "")
-        or str(grant.research_chain_id or "")
-        or str(grant.project_id or "")
-        or str(grant.workspace_id)
-    )
-    hierarchy = [{"type": "WORKSPACE", "id": str(grant.workspace_id), "title": grant.workspace.name}]
-    if grant.project is not None:
-        hierarchy.append({"type": "PROJECT", "id": str(grant.project_id), "title": grant.project.name})
-    if grant.research_chain is not None:
-        hierarchy.append(
-            {"type": "RESEARCH_CHAIN", "id": str(grant.research_chain_id), "title": str(grant.research_chain_id)}
-        )
-    if grant.chain_node is not None:
-        hierarchy.append(
-            {"type": "RESEARCH_CHAIN_NODE", "id": str(grant.chain_node_id), "title": grant.chain_node.title}
-        )
-    page_context = page_context or (grant.context_manifest or {}).get("page_context") or {}
-    focus = page_context.get("focus") if isinstance(page_context.get("focus"), dict) else {}
-    return {
-        "workspace": {
-            "id": str(grant.workspace_id),
-            "slug": grant.workspace.slug,
-            "name": grant.workspace.name,
-        },
-        "target": {
-            "type": grant.target_type,
-            "id": target_id,
-            "title": _target_title(grant),
-            "hierarchy": hierarchy,
-        },
-        "page": {
-            "route": str(page_context.get("route") or ""),
-            "page_kind": str(page_context.get("page_kind") or ""),
-            "focus_id": str(focus.get("id") or target_id),
-            "focus_title": str(focus.get("title") or _target_title(grant)),
-            "hash": str(page_context.get("hash") or ""),
-            "generated_at": str(page_context.get("generated_at") or ""),
-        },
-    }
-
-
 def _serialized_target(grant: ResearchContextGrant) -> dict:
     """Return a browser-safe target projection for history lists."""
 
-    return _plane_metadata(grant)
+    return build_plane_metadata(grant)
 
 
 def _sync_page_focus_on_session(session: ResearchAgentSession, page_context: dict) -> None:
@@ -278,7 +226,7 @@ def create_agent_dock_session(
     except Exception as exc:
         raise AgentDockSessionError("Plane unified MCP is unavailable", 503, "agent_mcp_unavailable") from exc
     plane_mcp = _plane_mcp_metadata(grant, credential)
-    plane_metadata = _plane_metadata(grant)
+    plane_metadata = build_plane_metadata(grant)
     try:
         synlora_session_id = runtime.create_session(
             title=_target_title(grant),
@@ -512,7 +460,7 @@ def start_agent_dock_message(
         selected_text=selected_text,
     )
     plane_mcp = _plane_mcp_metadata(grant, credential)
-    plane_metadata = _plane_metadata(grant, page_context)
+    plane_metadata = build_plane_metadata(grant, page_context)
     _sync_page_focus_on_session(session, page_context)
     try:
         synlora_run_id = runtime.start_run(
