@@ -18,12 +18,14 @@ from plane.db.models import (
     ProjectMember,
     ResearchChain,
     ResearchChainNode,
+    ResearchChainNodeTask,
     ResearchContextGrant,
     ResearchProjectProfile,
     UnifiedMCPConnection,
 )
 from plane.research.services.agent_dock_mcp import AgentDockMcpCredential
 from plane.research.services.agent_dock import agent_context_v3_for_grant, resolve_agent_dock_context
+from plane.research.services.agent_metadata import build_plane_metadata
 from plane.tests.research_fixtures import (
     enable_research,
     make_org_member,
@@ -161,6 +163,12 @@ def test_node_route_issues_safe_v3_context_and_envelope(env, settings):
     assert metadata["target"]["chain_node_id"] is None
     assert metadata["policy"]["allowed_tools"] == envelope["capabilities"]["allowed_tools"]
     assert metadata["manifest"]["hash"] == grant.context_manifest["hash"]
+    grant.chain_node = env["node"]
+    grant.chain_node.title = "长" * 400
+    grant.context_manifest["page_context"]["route"] = "r" * 600
+    node_metadata = build_plane_metadata(grant)
+    assert len(node_metadata["target"]["hierarchy"][-1]["title"]) == 300
+    assert len(node_metadata["page"]["route"]) == 500
 
 
 def test_chain_home_falls_back_to_chain_context_without_inventing_node(env):
@@ -173,6 +181,39 @@ def test_chain_home_falls_back_to_chain_context_without_inventing_node(env):
     assert all(item["type"] != "research_chain_node" for item in envelope["target_hierarchy"])
     assert envelope["page_context"]["page_kind"] == "research_chain"
     assert envelope["page_context"]["focus"]["id"] == str(env["chain"].id)
+    assert envelope["page_context"]["focus"]["title"] == env["project"].name
+
+
+def test_workspace_home_uses_minimal_workspace_context(env):
+    """工作区首页保留最小上下文，不伪装成具体项目或研究链。"""
+    response = _resolve(env, f"/{env['workspace'].slug}")
+
+    assert response.status_code == 201, response.text
+    context = response.json()
+    assert context["page_context"]["page_kind"] == "workspace"
+    assert context["page_context"]["depth"] == "minimal"
+    assert context["page_context"]["focus"]["type"] == "WORKSPACE"
+
+
+def test_research_task_route_uses_task_title_as_page_focus(env):
+    """研究任务页显示任务名，而不是链或节点标识。"""
+    task = ResearchChainNodeTask.objects.create(
+        workspace=env["workspace"],
+        chain=env["chain"],
+        node=env["node"],
+        title="整理实验记录",
+        request_id=f"task-{uuid4().hex}",
+        payload_hash=_hash("task"),
+        created_by=env["owner"],
+    )
+    route = f"/{env['workspace'].slug}/research/chains/{env['chain'].id}/nodes/{env['node'].id}/tasks/{task.id}"
+    response = _resolve(env, route)
+
+    assert response.status_code == 201, response.text
+    context = response.json()
+    assert context["page_context"]["page_kind"] == "research_task"
+    assert context["page_context"]["focus"]["type"] == "RESEARCH_TASK"
+    assert context["page_context"]["focus"]["title"] == "整理实验记录"
 
 
 def test_administrative_issue_focus_returns_bounded_page_seed(env):
@@ -211,6 +252,41 @@ def test_administrative_issue_focus_returns_bounded_page_seed(env):
     assert context["page_context"]["focus"]["id"] == str(issue.id)
     assert "整理行政任务材料" in context["page_context"]["summary"]
     assert "任务描述正文" in context["page_context"]["summary"]
+
+
+def test_administrative_project_page_returns_bounded_project_seed(env):
+    """行政项目根路由获得项目页标签和有限的工作项摘要。"""
+    suffix = uuid4().hex[:6]
+    administrative_project = Project.objects.create(
+        workspace=env["workspace"],
+        name=f"行政项目 {suffix}",
+        identifier=f"AP{suffix}",
+        network=0,
+        created_by=env["owner"],
+    )
+    ProjectMember.objects.create(
+        workspace=env["workspace"],
+        project=administrative_project,
+        member=env["owner"],
+        role=20,
+        is_active=True,
+    )
+    Issue.objects.create(
+        workspace=env["workspace"],
+        project=administrative_project,
+        name="准备年度材料",
+        created_by=env["owner"],
+    )
+    response = _resolve(env, f"/{env['workspace'].slug}/projects/{administrative_project.id}")
+
+    assert response.status_code == 201, response.text
+    context = response.json()
+    assert context["page_context"]["page_kind"] == "administrative_project"
+    assert context["page_context"]["depth"] == "focused"
+    assert context["page_context"]["focus"]["type"] == "ADMIN_PROJECT"
+    assert context["page_context"]["focus"]["title"] == administrative_project.name
+    assert administrative_project.name in context["page_context"]["summary"]
+    assert "准备年度材料" in context["page_context"]["summary"]
 
 
 def test_unauthorized_node_hint_fails_closed(env):
@@ -326,6 +402,8 @@ def test_agent_dock_session_is_target_bound_and_projects_durable_events(env, mon
             context_token = kwargs["context_token"]
             assert research_context["schema_version"] == "agent-context.v3"
             assert research_context["target"]["type"] == "WORKSPACE"
+            assert kwargs["plane_meta"]["page"]["page_kind"] == "research_node"
+            assert kwargs["plane_meta"]["page"]["focus_title"] == "Dock node"
             assert context_token
             return "synlora-session-1"
 

@@ -47,6 +47,7 @@ export const coreRoutes: RouteConfigEntry[] = [
   // ALL APP ROUTES
   // ========================================================================
   layout("./(all)/layout.tsx", [
+    route("email-actions/assignment-transfer", "./(all)/email-actions/assignment-transfer/page.tsx"),
     route("mcp", "./(all)/mcp/page.tsx"),
     route("mcp/api-docs/project/:connectionId", "./(all)/mcp/api-docs/project/$connectionId/page.tsx"),
     route(

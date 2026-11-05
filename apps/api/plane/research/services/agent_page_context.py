@@ -149,12 +149,33 @@ def _research_chain_focus(workspace: Workspace, user, chain_id: UUID) -> tuple[P
         PageFocus(
             kind="RESEARCH_CHAIN",
             object_id=chain.id,
-            title=str(chain.id),
+            title=chain.project.name,
             status=chain.status,
             parent_kind="PROJECT",
             parent_id=chain.project_id,
         ),
         chain,
+    )
+
+
+def _administrative_project_focus(
+    workspace: Workspace, user, project_id: UUID
+) -> tuple[PageFocus, Project] | None:
+    """Resolve an administrative project only through the existing visibility helper."""
+    project = (
+        visible_administrative_projects(user, workspace.slug)
+        .filter(pk=project_id, workspace=workspace, archived_at__isnull=True)
+        .first()
+    )
+    if project is None:
+        return None
+    return (
+        PageFocus(
+            kind="ADMIN_PROJECT",
+            object_id=project.id,
+            title=project.name,
+        ),
+        project,
     )
 
 
@@ -204,6 +225,14 @@ def _route_focus(workspace: Workspace, user, route: str) -> tuple[PageFocus, Any
             resolved = resolver(value)
             if resolved is not None:
                 return resolved
+
+    # Fall back only to an administrative project root. The stable shape is
+    # ``/{slug}/projects/{id}/*``; research-project and settings-project routes
+    # intentionally do not match this position.
+    if len(segments) >= 3 and segments[1] == "projects":
+        project_id = _uuid(segments[2])
+        if project_id is not None:
+            return _administrative_project_focus(workspace, user, project_id)
     return None
 
 
@@ -221,6 +250,8 @@ def _requested_focus(workspace: Workspace, user, focus_ref: dict[str, Any] | Non
         return _research_node_focus(workspace, user, object_id)
     if kind == "RESEARCH_CHAIN":
         return _research_chain_focus(workspace, user, object_id)
+    if kind == "ADMIN_PROJECT":
+        return _administrative_project_focus(workspace, user, object_id)
     if kind == "ISSUE":
         return _issue_focus(workspace, user, object_id)
     return None
@@ -353,7 +384,7 @@ def _research_snapshot(focus: PageFocus, obj: Any) -> tuple[list[str], list[dict
         .values("id", "event_type", "summary", "occurred_at")[:12]
     )
     lines = [
-        f"Research chain: {chain.id} ({chain.status})",
+        f"Research chain: {chain.project.name} ({chain.status}, {chain.id})",
         f"Research project: {chain.project.name}",
         f"Visible nodes: {nodes.count()}",
         f"Current or next stage: {active_stage.stage_code if active_stage else 'not started'}",
@@ -420,6 +451,41 @@ def _issue_snapshot(issue: Issue) -> tuple[list[str], list[dict[str, Any]], list
     return lines, resources, actions
 
 
+def _administrative_project_snapshot(project: Project) -> tuple[list[str], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Build a bounded administrative project seed without loading page bodies."""
+    issues = (
+        Issue.objects.filter(
+            workspace=project.workspace,
+            project=project,
+            archived_at__isnull=True,
+            deleted_at__isnull=True,
+        )
+        .select_related("state")
+        .order_by("-updated_at")[:20]
+    )
+    lines = [
+        f"Administrative project: {project.name} ({project.identifier})",
+        f"Visible recent work items: {len(issues)}",
+        "Recent work item titles:",
+        *[issue.name or str(issue.id) for issue in issues],
+    ]
+    resources = [
+        {
+            "kind": "issue",
+            "id": str(issue.id),
+            "title": issue.name or "",
+            "status": issue.state.name if issue.state_id else "",
+        }
+        for issue in issues
+    ]
+    actions = [
+        {"label": "List project tasks", "tool": "plane_list_tasks"},
+        {"label": "Read project context", "tool": "plane_get_context"},
+        {"label": "Open project", "route": f"projects/{project.id}"},
+    ]
+    return lines, resources, actions
+
+
 def build_page_context(
     *,
     workspace: Workspace,
@@ -460,6 +526,10 @@ def build_page_context(
     elif focus is not None and focus.kind == "ISSUE":
         lines, resources, actions = _issue_snapshot(obj)
         page_kind = "administrative_task"
+        depth = "focused"
+    elif focus is not None and focus.kind == "ADMIN_PROJECT":
+        lines, resources, actions = _administrative_project_snapshot(obj)
+        page_kind = "administrative_project"
         depth = "focused"
     else:
         lines, resources = _workspace_summary(workspace, user)

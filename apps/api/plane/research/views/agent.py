@@ -42,6 +42,7 @@ from plane.research.services.agent_identity import (
     ensure_synlora_identity_binding,
     revoke_synlora_identity_connection,
 )
+from plane.research.services.agent_metadata import build_plane_metadata
 from plane.research.services.agent_orchestrator import (
     AgentAssembly,
     create_science_discovery_session,
@@ -140,10 +141,12 @@ def create_synlora_runtime_session(
         request_id=f"agent:{request_id}",
     )
     context = synlora_research_context(workspace, user, node, grant)
+    plane_metadata = build_plane_metadata(grant)
     thread_id = runtime.create_session(
         title=node.title or "Research agent",
         research_context=context,
         context_token=_token,
+        plane_meta=plane_metadata,
     )
     return {
         "grant": grant,

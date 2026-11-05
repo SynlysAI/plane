@@ -110,9 +110,11 @@ def synlora_orchestration(env, monkeypatch):
         def __init__(self):
             self.pulled = False
 
-        def create_session(self, *, title, research_context=None, context_token=None):
-            assert research_context["schema_version"] == "agent-context.v3"
-            assert context_token
+        def create_session(self, **kwargs):
+            plane_meta = kwargs["plane_meta"]
+            assert kwargs["research_context"]["schema_version"] == "agent-context.v3"
+            assert plane_meta["target"]["type"] == "RESEARCH_CHAIN_NODE"
+            assert kwargs["context_token"]
             return "synlora-thread-1"
 
         def start_run(
