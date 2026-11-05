@@ -984,8 +984,7 @@ def _send_email_notification(issue_id, notification_data, receiver_id, email_not
     message.attach_alternative(html_content, "text/html")
 
     try:
-        # Django's SMTP backend signals connection failures with exceptions;
-        # ``open()`` itself intentionally returns ``None`` on success.
+        # 连接失败由异常报告，open() 返回值不代表邮件是否投递成功。
         connection.open()
     except Exception as exc:
         logging.getLogger("plane.worker").exception("Notification SMTP connection failed", exc_info=exc)
@@ -1630,8 +1629,7 @@ def send_research_notification_email(delivery_ids, lease_token):
     )
     message.attach_alternative(html_content, "text/html")
     try:
-        # Django's SMTP backend signals connection failures with exceptions;
-        # ``open()`` itself intentionally returns ``None`` on success.
+        # 连接失败由异常报告，open() 返回值不代表邮件是否投递成功。
         connection.open()
     except Exception as exc:
         _research_smtp_failure(

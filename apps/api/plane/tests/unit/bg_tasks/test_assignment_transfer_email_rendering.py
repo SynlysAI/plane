@@ -127,7 +127,9 @@ def test_shared_template_has_visible_text_fallbacks_and_no_external_images():
 
 @pytest.mark.django_db
 def test_research_assignment_email_uses_shared_standard_template(db, settings, monkeypatch):
+    """使用标准模板发送科研指派邮件，兼容不返回状态值的邮件后端。"""
     settings.RESEARCH_MODULE_ENABLED = True
+    settings.WEB_URL = "https://plane.example"
     fixture = make_research_boundary_fixture()
     for key in ("group_member", "advisor"):
         ProjectMember.objects.create(project=fixture["project"], member=fixture[key], role=15)
