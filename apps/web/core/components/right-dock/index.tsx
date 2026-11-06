@@ -99,10 +99,11 @@ export function RightDockPortal({
   if (!registerDetail || !unregisterDetail) {
     return (
       <aside
-        className={
+        className={cn(
           fallbackClassName ??
-          "fixed inset-y-0 right-0 z-30 flex w-full flex-col border-l border-subtle bg-surface-1 md:w-[420px]"
-        }
+            "fixed inset-y-0 right-0 z-30 flex w-full flex-col border-l border-subtle bg-surface-1 md:w-[420px]",
+          "isolate min-w-0 overflow-hidden"
+        )}
       >
         {children}
       </aside>
@@ -120,7 +121,9 @@ export function RightDockOutlet({ compact }: { compact: boolean }) {
   return (
     <aside
       data-right-dock-detail={activeDetail.id}
-      className={cn("@container flex h-full min-w-0 flex-col overflow-hidden border-l border-subtle bg-surface-1")}
+      className={cn(
+        "@container relative isolate flex h-full min-w-0 flex-col overflow-hidden border-l border-subtle bg-surface-1"
+      )}
       style={{
         flexBasis: compact ? "min(34%, 520px)" : "min(45%, 720px)",
         minWidth: "min(320px, 100%)",
@@ -140,7 +143,7 @@ export function RightDockOutlet({ compact }: { compact: boolean }) {
           <X className="size-3.5" />
         </button>
       </header>
-      <div id="plane-right-detail-dock-body" className="min-h-0 flex-1 overflow-hidden" />
+      <div id="plane-right-detail-dock-body" className="relative min-h-0 flex-1 overflow-hidden" />
     </aside>
   );
 }

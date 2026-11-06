@@ -132,15 +132,20 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
 
   const toggleEditMode = (value: boolean) => setIsEditMode(value);
 
+  // 右侧详情 Dock 自带面板结构；side-peek 必须参与普通流式布局，避免覆盖并列的 Agent 列。
+  const isRightDockSidePeek = !embedIssue && peekMode === "side-peek";
   const peekOverviewIssueClassName = cn(
-    !embedIssue
-      ? "absolute z-[25] flex flex-col overflow-hidden rounded-sm border border-subtle bg-surface-1 transition-all duration-300"
-      : "flex h-full w-full flex-col",
-    !embedIssue && {
-      "h-full w-full border-0": peekMode === "side-peek",
-      "top-[8.33%] left-[8.33%] size-5/6": peekMode === "modal",
-      "absolute inset-0 m-4": peekMode === "full-screen",
-    }
+    embedIssue
+      ? "flex h-full w-full flex-col"
+      : isRightDockSidePeek
+        ? "flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-surface-1"
+        : cn(
+            "absolute z-[25] flex flex-col overflow-hidden rounded-sm border border-subtle bg-surface-1 transition-all duration-300",
+            {
+              "top-[8.33%] left-[8.33%] size-5/6": peekMode === "modal",
+              "absolute inset-0 m-4": peekMode === "full-screen",
+            }
+          )
   );
 
   const shouldUsePortal = !embedIssue;
@@ -151,12 +156,17 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
     <div className="w-full text-body-sm-regular">
       {issueId && (
         <div
+          data-issue-peek-frame=""
           ref={issuePeekOverviewRef}
           className={peekOverviewIssueClassName}
-          style={{
-            boxShadow:
-              "0px 4px 8px 0px rgba(0, 0, 0, 0.12), 0px 6px 12px 0px rgba(16, 24, 40, 0.12), 0px 1px 16px 0px rgba(16, 24, 40, 0.12)",
-          }}
+          style={
+            isRightDockSidePeek
+              ? undefined
+              : {
+                  boxShadow:
+                    "0px 4px 8px 0px rgba(0, 0, 0, 0.12), 0px 6px 12px 0px rgba(16, 24, 40, 0.12), 0px 1px 16px 0px rgba(16, 24, 40, 0.12)",
+                }
+          }
         >
           {isError ? (
             <div className="relative h-screen w-full overflow-hidden">
