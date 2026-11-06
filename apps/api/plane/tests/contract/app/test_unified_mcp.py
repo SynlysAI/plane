@@ -15,6 +15,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db import models as db
+from plane.mcp.catalog import READ_TOOL_NAMES
 from plane.tests.contract.app.test_research_chain_mvp import env  # noqa: F401
 from plane.tests.contract.app.test_research_machine_access import machine, scoped_client  # noqa: F401
 from plane.tests.research_fixtures import make_workspace
@@ -705,7 +706,9 @@ def test_workbuddy_configuration_transport_catalogue_and_call(unified):
     )
     listed = client.post("/api/mcp", {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}, format="json")
     tools = listed.json()["result"]["tools"]
-    assert len(tools) == 6 and "nextCursor" not in listed.json()["result"]
+    assert READ_TOOL_NAMES <= {tool["name"] for tool in tools}
+    assert len(tools) == len({tool["name"] for tool in tools})
+    assert "nextCursor" not in listed.json()["result"]
 
     def schemas(value):
         if isinstance(value, dict):
@@ -743,7 +746,7 @@ def test_workbuddy_configuration_transport_catalogue_and_call(unified):
     old_page = client.post(
         "/api/mcp", {"jsonrpc": "2.0", "id": 4, "method": "tools/list", "params": {"cursor": cursor}}, format="json"
     )
-    assert len(old_page.json()["result"]["tools"]) == 5
+    assert len(old_page.json()["result"]["tools"]) == len(tools) - 1
     assert "nextCursor" not in old_page.json()["result"]
     called = client.post(
         "/api/mcp",
@@ -798,7 +801,7 @@ def test_real_sdk_single_configuration_two_projects_two_nodes_readback_and_revoc
                             cursor = page.nextCursor
                             if not cursor:
                                 break
-                        assert len(names) == 6 and "plane_read_resource" in names
+                        assert READ_TOOL_NAMES <= set(names) and len(names) == len(set(names))
 
                         async def call(name, args):
                             response = await session.call_tool(name, args)

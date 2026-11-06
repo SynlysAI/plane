@@ -212,6 +212,9 @@ def validate_office_container(file_name, content):
         有效容器返回 True，伪造、加密或损坏容器返回 False。
     """
     extension = extension_of(file_name)
+    # 同时接受可 seek 的临时文件，供大文件传输复用现有容器校验。
+    source = content if hasattr(content, "read") else io.BytesIO(content)
+    source.seek(0)
     try:
         if extension in {".docx", ".xlsx", ".pptx"}:
             required = {
@@ -219,7 +222,7 @@ def validate_office_container(file_name, content):
                 ".xlsx": "xl/workbook.xml",
                 ".pptx": "ppt/presentation.xml",
             }[extension]
-            with zipfile.ZipFile(io.BytesIO(content)) as container:
+            with zipfile.ZipFile(source) as container:
                 names = set(container.namelist())
                 if required not in names or "[Content_Types].xml" not in names:
                     return False
@@ -235,14 +238,15 @@ def validate_office_container(file_name, content):
                     ".pptx": b"presentationml.presentation.main+xml",
                 }[extension] in content_types
         if extension in {".doc", ".xls", ".ppt"}:
-            with olefile.OleFileIO(io.BytesIO(content)) as container:
+            with olefile.OleFileIO(source) as container:
                 required = {
                     ".doc": ("WordDocument",),
                     ".xls": ("Workbook", "Book"),
                     ".ppt": ("PowerPoint Document",),
                 }[extension]
                 return any(container.exists(name) for name in required)
-        return b"\x00" not in content[:512]
+        source.seek(0)
+        return b"\x00" not in source.read(512)
     except (OSError, ValueError, KeyError, RuntimeError, zipfile.BadZipFile):
         return False
 

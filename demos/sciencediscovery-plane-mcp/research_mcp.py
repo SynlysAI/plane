@@ -20,6 +20,7 @@ READ_TOOLS = frozenset({
     "list_research_chains", "get_research_chain", "list_research_nodes", "get_research_node_context",
     "list_research_node_events", "list_research_node_snapshots", "list_research_node_tasks",
     "list_research_task_comments", "list_research_node_resources", "read_research_resource",
+    "list_research_report_feedback",
 })
 
 

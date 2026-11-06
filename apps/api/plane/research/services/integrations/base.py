@@ -233,7 +233,18 @@ class BaseIntegrationClient:
             degraded_mode=(degraded_mode or getattr(self.connection, "degraded_mode", "LINK_ONLY")),
         )
 
-    def request(self, *, path, params=None, operation=None, request=None, method="GET", data=None, files=None):
+    def request(
+        self,
+        *,
+        path,
+        params=None,
+        operation=None,
+        request=None,
+        method="GET",
+        data=None,
+        files=None,
+        retry_writes=True,
+    ):
         """Perform one external call and always answer with a result envelope."""
         operation = operation or self.operation
         request_id = uuid.uuid4().hex
@@ -291,7 +302,12 @@ class BaseIntegrationClient:
                 request_kwargs["files"] = files
             request_fn = httpx.post if method.upper() == "POST" else httpx.get
             response = None
-            max_attempts = int(getattr(settings, "RESEARCH_INTEGRATION_MAX_RETRIES", 2)) + 1
+            # 对端未确认写入结果时，调用方可关闭重试以避免重复创建文件。
+            max_attempts = (
+                int(getattr(settings, "RESEARCH_INTEGRATION_MAX_RETRIES", 2)) + 1
+                if method.upper() != "POST" or retry_writes
+                else 1
+            )
             for attempt in range(max_attempts):
                 response = request_fn(url, **request_kwargs)
                 if response.status_code not in (429, 500, 502, 503, 504) or attempt == max_attempts - 1:
@@ -379,6 +395,57 @@ class BaseIntegrationClient:
                 degraded=True,
                 reason=error_code,
                 latency_ms=latency_ms,
+            )
+
+    def request_file_into(self, *, path, params, output, max_bytes, operation="download_original", request=None):
+        """将原文件有界流式写入调用方临时文件，不在内存中聚合全文。"""
+        import httpx
+
+        request_id = uuid.uuid4().hex
+        started = time.monotonic()
+        if not self.enabled:
+            return IntegrationFileResult(
+                degraded=True,
+                degraded_reason=IntegrationErrorCode.NOT_CONFIGURED,
+                request_id=request_id,
+            )
+        query = "&".join(f"{key}={value}" for key, value in sorted(params.items()))
+        try:
+            with httpx.stream("GET", f"{self.connection.base_url.rstrip('/')}{path}", params=params,
+                              headers=self.request_headers(path=path, query=query, request=request),
+                              timeout=max(self.timeout_seconds, 60.0), follow_redirects=False) as response:
+                if response.status_code != 200:
+                    raise ValueError("upstream_http_error")
+                size = 0
+                for block in response.iter_bytes(1024 * 1024):
+                    size += len(block)
+                    if size > max_bytes:
+                        raise ValueError("file_size_exceeded")
+                    output.write(block)
+                self._log(
+                    operation=operation,
+                    outcome="SUCCESS",
+                    request_id=request_id,
+                    status_code=response.status_code,
+                    latency_ms=int((time.monotonic() - started) * 1000),
+                )
+                return IntegrationFileResult(
+                    content_type=response.headers.get("content-type", "application/octet-stream"),
+                    status_code=200,
+                    request_id=request_id,
+                )
+        except Exception:
+            self._log(
+                operation=operation,
+                outcome="DEGRADED",
+                request_id=request_id,
+                error_code=IntegrationErrorCode.TRANSPORT_ERROR,
+                latency_ms=int((time.monotonic() - started) * 1000),
+            )
+            return IntegrationFileResult(
+                degraded=True,
+                degraded_reason=IntegrationErrorCode.TRANSPORT_ERROR,
+                request_id=request_id,
             )
 
     def request_file(self, *, path, params=None, operation=None, request=None):

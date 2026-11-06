@@ -59,6 +59,17 @@ class ResearchProxyTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(PlaneError):
             await self.proxy.discover()
 
+    async def test_existing_report_feedback_read_does_not_block_discovery(self):
+        """服务端现有的报告反馈只读工具不阻断旧代理发现目录。"""
+        feedback = read_tool()
+        feedback["name"] = "list_research_report_feedback"
+        self.client.tools.return_value = [read_tool(), feedback]
+        await self.proxy.discover()
+        self.assertEqual(
+            {tool.name for tool in self.proxy.list_tools()},
+            {"get_research_node_context", "list_research_report_feedback"},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

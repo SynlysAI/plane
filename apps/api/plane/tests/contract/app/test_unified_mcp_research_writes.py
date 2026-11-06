@@ -187,7 +187,7 @@ def test_research_project_chain_and_node_lifecycle(scientific):
 
 
 def test_full_project_document_catalog_marks_all_apis_available_for_both_write_domains(scientific):
-    """行政与科研双读写连接的完整 30 个 API 均应显示可用。"""
+    """行政与科研双读写连接的完整 MCP 目录均应显示可用。"""
     e = scientific
     client = APIClient()
     client.force_login(e["owner"])
@@ -195,9 +195,9 @@ def test_full_project_document_catalog_marks_all_apis_available_for_both_write_d
     assert response.status_code == 200, response.data
     payload = response.json()
     assert payload["catalog_mode"] == "full"
-    assert len(payload["catalog"]) == 30
+    assert len(payload["catalog"]) == 38
     assert all(tool["availability"]["enabled"] for tool in payload["catalog"])
-    assert payload["catalog_summary"] == {"total": 30, "available": 30, "unavailable": 0}
+    assert payload["catalog_summary"] == {"total": 38, "available": 38, "unavailable": 0}
     assert e["connection"]["secret"] not in response.content.decode()
 
 
@@ -867,7 +867,7 @@ def test_real_sdk_one_config_two_research_nodes_proposals_edits_and_states(
                             cursor = page.nextCursor
                             if not cursor:
                                 break
-                        assert len(names) == 30
+                        assert len(names) == 38
 
                         async def call(name, args):
                             result = await session.call_tool(name, args)

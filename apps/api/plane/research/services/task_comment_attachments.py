@@ -100,7 +100,13 @@ def sync_task_comment_attachments(comment, assets, *, task, user, request=None):
             resource_type="research_chain_node_task",
             resource_id=task.pk,
             actor=user,
-            metadata={"comment": str(comment.pk), "assets": [str(asset.pk) for asset in added]},
+            metadata={
+                "comment": (comment.comment_stripped or "")[:240],
+                "files": [
+                    str(asset.attributes.get("name") or asset.asset.name.rsplit("/", 1)[-1])[:255]
+                    for asset in added
+                ],
+            },
             request=request,
         )
     if removed:
@@ -110,7 +116,10 @@ def sync_task_comment_attachments(comment, assets, *, task, user, request=None):
             resource_type="research_chain_node_task",
             resource_id=task.pk,
             actor=user,
-            metadata={"comment": str(comment.pk), "assets": [str(row.asset_id) for row in removed]},
+            metadata={
+                "comment": (comment.comment_stripped or "")[:240],
+                "files": [row.file_name[:255] for row in removed],
+            },
             request=request,
         )
 
@@ -134,6 +143,9 @@ def soft_delete_task_comment_attachments(comment, *, task, user, request=None):
             resource_type="research_chain_node_task",
             resource_id=task.pk,
             actor=user,
-            metadata={"comment": str(comment.pk), "assets": [str(row.asset_id) for row in rows]},
+            metadata={
+                "comment": (comment.comment_stripped or "")[:240],
+                "files": [row.file_name[:255] for row in rows],
+            },
             request=request,
         )

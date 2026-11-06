@@ -21,7 +21,6 @@ from plane.db.models import (
     ResearchChainStageMaterialItem,
 )
 from plane.research.services.group_knowledge import (
-    SCOPE_GROUP,
     SCOPE_UNASSIGNED,
     describe_ragportal_candidates,
     knowledge_scope_for_chain,
@@ -513,75 +512,19 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
                 status.HTTP_502_BAD_GATEWAY,
             )
 
-        item = result.items[0]
-        raw_status = str(item.get("metadata", {}).get("parse_status") or "pending").lower()
-        upload.status = UPLOAD_STATUS_MAP.get(raw_status, ResearchChainUpload.Status.PROCESSING)
-        upload.external_upload_id = str(item.get("metadata", {}).get("upload_id") or "")
-        upload.knowledge_id = str(item.get("external_id") or "")
-        upload.knowledge_base_id = str(item.get("external_parent_id") or knowledge_base_id)
-        upload.task_id = str(item.get("metadata", {}).get("task_id") or "")
-        source_path = item.get("source_url") or f"/api/uploads/{upload.external_upload_id}"
-        existing_reference = ResearchExternalReference.objects.filter(
-            workspace=workspace,
-            system="RAGPORTAL",
-            external_type=ResearchExternalReference.ExternalType.KNOWLEDGE_ENTRY,
-            external_id=upload.knowledge_id,
-        ).first()
-        existing_chain = str((existing_reference.metadata or {}).get("chain_id") or "") if existing_reference else ""
-        if existing_chain and existing_chain != str(chain.id):
-            upload.status = ResearchChainUpload.Status.FAILED
-            upload.error_code = "cross_chain_reference"
-            upload.save(update_fields=["status", "error_code", "updated_at"])
-            return research_error(
-                ResearchErrorCode.CHAIN_ACCESS_DENIED,
-                "The knowledge entry belongs to another research chain.",
-                status.HTTP_403_FORBIDDEN,
+        from plane.research.services.chain_files import register_chain_file
+        from plane.research.services.mcp_catalog import ResearchReadError
+
+        try:
+            upload = register_chain_file(
+                upload=upload, item=result.items[0], connection=connection,
+                scope=scope, actor=request.user,
             )
-        reference, _ = ResearchExternalReference.objects.update_or_create(
-            workspace=workspace,
-            system="RAGPORTAL",
-            external_type=ResearchExternalReference.ExternalType.KNOWLEDGE_ENTRY,
-            external_id=upload.knowledge_id,
-            defaults={
-                "external_parent_id": upload.knowledge_base_id,
-                "title": item.get("title") or file_name,
-                "summary": item.get("summary") or "",
-                "source_url": (
-                    f"{connection.base_url.rstrip('/')}{source_path}" if source_path.startswith("/") else source_path
-                ),
-                "acl_hint": {
-                    "workspace": workspace.slug,
-                    "research_project_id": str(chain.project_id),
-                    "chain_id": str(chain.id),
-                    "chain_node_id": str(node.id),
-                    **({"org_units": [scope.org_unit_id]} if scope.scope == SCOPE_GROUP and scope.org_unit_id else {}),
-                },
-                "metadata": {
-                    **upload.metadata,
-                    "upload_id": upload.external_upload_id,
-                    "task_id": upload.task_id,
-                    "parse_status": raw_status,
-                },
-                "content_hash": file_hash,
-                "synced_at": timezone.now(),
-                "status": ResearchExternalReference.Status.ACTIVE,
-            },
-        )
-        upload.reference = reference
-        upload.save()
-        event = _append_event(
-            chain=chain,
-            node=node,
-            request=request,
-            event_type="DATA_CHANGE",
-            summary=f"Uploaded research file: {file_name}",
-            refs=[{"kind": "knowledge", "id": upload.knowledge_id, "version": 1}],
-            metadata={"upload_id": str(upload.id), "kb_id": upload.knowledge_base_id, "sha256": file_hash},
-            request_id=request_id,
-            digest=digest,
-        )
-        if event is None:
-            return conflict_response()
+        except ResearchReadError as exc:
+            upload.status = ResearchChainUpload.Status.FAILED
+            upload.error_code = exc.code
+            upload.save(update_fields=["status", "error_code", "updated_at"])
+            return research_error(exc.code, str(exc), exc.status)
         return Response(
             {"data": ResearchChainUploadSerializer(upload).data, "degraded": False},
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,

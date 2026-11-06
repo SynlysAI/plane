@@ -188,6 +188,12 @@ class ResearchOperationService:
                 raise ResearchReadError("state_conflict", "Only an editable task without a binding can receive a resource.", 409)
             value["task"] = row_digest(task)
             value["target"].update(task_id=str(task.pk), task_title=task.title)
+            if action == "append_task_comment" and "attachment_ids" in payload:
+                from plane.research.services.task_comment_attachments import lock_task_comment_attachments
+
+                # 仅新附件提案增加此字段；旧提案的摘要与签名保持原值。
+                assets = lock_task_comment_attachments(payload["attachment_ids"], task=task, user=self.user)
+                value["attachments"] = [{"id": str(asset.pk), "row_hash": row_digest(asset)} for asset in assets]
         sources = list(refs)
         if action == "attach_task_resource":
             sources.append({"kind": RESOURCE_TYPES[payload["resource_type"]], "id": payload["resource_id"],
@@ -372,7 +378,8 @@ class ResearchOperationService:
         elif action == "append_task_comment":
             task = ResearchChainNodeTask.objects.get(pk=payload["task_id"], node=node)
             target, _ = append_task_comment(task=task, actor=self.user, request_id=request_id,
-                                           html="<p>" + html.escape(payload["text"]).replace("\n", "<br>") + "</p>")
+                                           html="<p>" + html.escape(payload.get("text", "")).replace("\n", "<br>") + "</p>",
+                                           attachment_ids=payload.get("attachment_ids", []))
             kind = "task_comment"
         elif action == "save_analysis_draft":
             target, _ = save_analysis_draft(workspace=self.workspace, node=node, actor=self.user,
@@ -418,11 +425,15 @@ class ResearchOperationService:
                 matches = (target.title == payload["title"] and target.instruction == payload.get("instruction", "")
                            and target.status == "DRAFT" and target.assignee_id is None and target.due_at is None)
             elif operation.action == "append_task_comment":
-                expected = "<p>" + html.escape(payload["text"]).replace("\n", "<br>") + "</p>"
+                expected = "<p>" + html.escape(payload.get("text", "")).replace("\n", "<br>") + "</p>"
                 from plane.research.serializers.task_comment import ResearchTaskCommentSerializer
-                serializer = ResearchTaskCommentSerializer(data={"comment_html": expected})
+                serializer = ResearchTaskCommentSerializer(data={"comment_html": expected, "attachment_ids": payload.get("attachment_ids", [])}, context={"task": target.task})
                 serializer.is_valid(raise_exception=True)
                 matches = target.comment_html == serializer.validated_data["comment_html"]
+                if "attachment_ids" in payload:
+                    from plane.research.services.task_comment_attachments import attachment_ids_for_comment
+
+                    matches = matches and sorted(str(value) for value in attachment_ids_for_comment(target)) == sorted(payload["attachment_ids"])
             elif operation.action == "save_analysis_draft":
                 matches = (target.method == payload["method"] and target.summary == payload["summary"]
                            and target.conclusion == payload.get("conclusion", "") and target.status == "DRAFT")

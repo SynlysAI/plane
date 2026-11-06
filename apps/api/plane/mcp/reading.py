@@ -28,8 +28,9 @@ from plane.mcp.authorization import (
     workspace_access,
 )
 from plane.mcp.catalog import validate
-from plane.research.services.chain_context import ResearchReadService, _instruction_text
-from plane.research.services.mcp_catalog import ResearchReadError
+from plane.research.services.chain_context import ResearchReadService, _instruction_text, participant_data
+from plane.research.services.mcp_attachment_content import ATTACHMENT_KINDS
+from plane.research.services.mcp_catalog import RESOURCE_KINDS, ResearchReadError
 from plane.research.utils.role_resolution import resolve_role_context
 from plane.research.utils.audit import record_audit_event
 from plane.utils.administrative_projects import active_issue_assignees
@@ -118,7 +119,7 @@ class UnifiedReadService:
     def cursor(self, **state):
         return signing.dumps({"binding": self.binding, **state}, salt=SALT, compress=True)
 
-    def page(self, groups):
+    def page(self, groups, *, newest_first=False):
         """Seek in querysets before projection; advance past denied references."""
         result, used, scanned, more, anchor = [], 0, 0, False, None
         limit = self.args.get("limit", 20)
@@ -133,13 +134,17 @@ class UnifiedReadService:
                         raise ValueError()
                 except (ValueError, KeyError, TypeError):
                     raise ResearchReadError("invalid_cursor", "Invalid pagination position.") from None
-                rows = rows.filter(Q(created_at__gt=created) | Q(created_at=created, pk__gt=identity))
+                rows = rows.filter(
+                    Q(created_at__lt=created) | Q(created_at=created, pk__lt=identity)
+                    if newest_first else Q(created_at__gt=created) | Q(created_at=created, pk__gt=identity)
+                )
             if len(result) >= limit:
                 more = rows.exists()
                 if more:
                     break
                 continue
-            candidates = list(rows.order_by("created_at", "pk")[:201])
+            ordering = ("-created_at", "-pk") if newest_first else ("created_at", "pk")
+            candidates = list(rows.order_by(*ordering)[:201])
             for index, row in enumerate(candidates):
                 if scanned >= 200:
                     more = True
@@ -447,6 +452,9 @@ class UnifiedReadService:
             "node_id": str(task.node_id),
             "project_id": str(task.chain.project_id),
             "assignee_id": str(task.assignee_id) if task.assignee_id else None,
+            "assignee": participant_data(task.assignee),
+            "node_status": task.node.status,
+            "node_assignee": participant_data(task.node.assignee),
             "due_at": task.due_at,
             "updated_at": task.updated_at.isoformat(),
         }
@@ -616,7 +624,7 @@ class UnifiedReadService:
                 rows = self.cutoff(
                     ResearchChainNodeTask.objects.filter(
                         workspace=workspace, chain__in=reader.chains(), node__in=reader.nodes()
-                    ).select_related("node", "chain__project")
+                    ).select_related("node__assignee", "assignee", "chain__project")
                 )
         target = rows.filter(pk=identity).first()
         if target is None:
@@ -670,7 +678,9 @@ class UnifiedReadService:
                 )
             project = partial(self.issue_data, workspace=workspace)
         else:
-            rows = self.reader(workspace)._candidates(parent, "task").select_related("node", "chain__project")
+            rows = self.reader(workspace)._candidates(parent, "task").select_related(
+                "node__assignee", "assignee", "chain__project"
+            )
             for key, field in (("status", "status"), ("assignee_id", "assignee_id")):
                 if key in self.args:
                     rows = rows.filter(**{field: self.args[key]})
@@ -753,8 +763,10 @@ class UnifiedReadService:
         section = self.args["section"]
         if "query" in self.args and section != "capabilities":
             raise ResearchReadError("invalid_arguments", "query is only supported for assignee candidates.")
-        if "resource_kind" in self.args and not (kind == "ResearchChainNode" and section == "resources"):
-            raise ResearchReadError("invalid_arguments", "resource_kind is only supported for node resources.")
+        if "resource_kind" in self.args and not (
+            kind in {"ResearchChainNode", "ResearchChainNodeTask"} and section == "resources"
+        ):
+            raise ResearchReadError("invalid_arguments", "resource_kind is only supported for research resources.")
         if section == "details":
             projections = {
                 "Project": self.project_data,
@@ -777,6 +789,17 @@ class UnifiedReadService:
                     instruction_truncated=len(instruction) > 2000,
                     content_ref={"kind": "task", "id": str(target.pk), "node_id": str(target.node_id)},
                 )
+            if kind in {"ResearchChainNode", "ResearchChainNodeTask"}:
+                node = target if kind == "ResearchChainNode" else target.node
+                task = target if kind == "ResearchChainNodeTask" else None
+                target_ref = self.reference("research", kind, target, workspace)
+                data["content_summary"] = self.reader(workspace).content_summary(node, task)
+                data["next_calls"] = [
+                    {"name": "plane_get_context", "arguments": {"target": target_ref, "section": section_name}}
+                    for section_name in ("comments", "resources")
+                ]
+                if task is None:
+                    data["next_calls"].insert(0, {"name": "plane_list_tasks", "arguments": {"parent": target_ref}})
             return {"data": data}
         if section == "capabilities":
             if kind in {"Project", "Issue"}:
@@ -838,8 +861,10 @@ class UnifiedReadService:
         if kind in ("ResearchChainNode", "ResearchChainNodeTask"):
             reader = self.reader(workspace)
             node = target if kind == "ResearchChainNode" else target.node
-            if section == "comments" and kind == "ResearchChainNodeTask":
-                rows = reader._candidates(node, "task_comment").filter(task=target).select_related("actor")
+            if section == "comments":
+                rows = reader._candidates(node, "task_comment")
+                if kind == "ResearchChainNodeTask":
+                    rows = rows.filter(task=target)
                 return self.page(
                     [
                         (
@@ -847,12 +872,10 @@ class UnifiedReadService:
                             rows,
                             lambda row: {
                                 **self.research_resource_data(reader, node, "task_comment", row, workspace),
-                                "text": row.comment_stripped[:2000],
-                                "text_truncated": len(row.comment_stripped) > 2000,
-                                "actor_id": str(row.actor_id),
                             },
                         )
-                    ]
+                    ],
+                    newest_first=kind == "ResearchChainNode",
                 )
             if section in ("resources", "events", "snapshots"):
                 resource_kind = {"events": "event", "snapshots": "snapshot"}.get(
@@ -860,31 +883,36 @@ class UnifiedReadService:
                 )
                 if kind == "ResearchChainNodeTask" and section == "snapshots":
                     return {"data": [], "applicability": "not_applicable"}
+                bound = None
                 if kind == "ResearchChainNodeTask" and section == "resources":
                     from plane.research.services.chain_context import normalise_reference
 
                     bound = normalise_reference({"kind": target.resource_type, "id": str(target.resource_id)})
-                    if bound is None:
-                        return {"data": [], "page": {"has_more": False, "next_cursor": None}}
-                    resource_kind = bound["kind"]
-                if resource_kind is None:
-                    raise ResearchReadError("invalid_arguments", "Select resource_kind for node resources.")
-                rows = reader._candidates(node, resource_kind)
-                if kind == "ResearchChainNodeTask":
-                    rows = (
-                        rows.filter(refs__contains=[{"kind": "task", "id": str(target.pk)}])
-                        if section == "events"
-                        else rows.filter(**{"snapshot_id" if resource_kind == "snapshot" else "pk": bound["id"]})
-                    )
-                return self.page(
-                    [
-                        (
-                            resource_kind,
-                            rows,
-                            lambda row: self.research_resource_data(reader, node, resource_kind, row, workspace),
-                        )
-                    ]
-                )
+                if resource_kind is not None:
+                    kinds = {resource_kind}
+                elif kind == "ResearchChainNodeTask":
+                    kinds = ATTACHMENT_KINDS | ({bound["kind"]} if bound else set())
+                else:
+                    kinds = RESOURCE_KINDS
+                groups = []
+                for selected_kind in sorted(kinds):
+                    rows = reader._candidates(node, selected_kind)
+                    if kind == "ResearchChainNodeTask":
+                        if section == "events":
+                            rows = rows.filter(refs__contains=[{"kind": "task", "id": str(target.pk)}])
+                        elif selected_kind == "task_attachment":
+                            rows = rows.filter(task=target)
+                        elif selected_kind == "task_comment_attachment":
+                            rows = rows.filter(comment__task=target)
+                        elif bound and selected_kind == bound["kind"]:
+                            field = "snapshot_id" if selected_kind == "snapshot" else "pk"
+                            rows = rows.filter(**{field: bound["id"]})
+                        else:
+                            rows = rows.none()
+                    groups.append((selected_kind, rows, partial(
+                        self.research_resource_data, reader, node, selected_kind, workspace=workspace,
+                    )))
+                return self.page(groups)
         if section == "operations":
             if kind in {"ResearchChainNode", "ResearchChainNodeTask"}:
                 from plane.db.models import ResearchAgentOperation

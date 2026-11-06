@@ -1,12 +1,13 @@
 """The implemented read contract stays aligned with the frozen phase-1 inputs."""
 
 import json
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from plane.mcp.catalog import CREATE_SCHEMA, SCHEMAS, matches, tools_for, validate
+from plane.mcp.catalog import CREATE_SCHEMA, READ_TOOL_NAMES, SCHEMAS, matches, tools_for, validate
 from plane.mcp.schema_compat import project_schema
 from plane.research.services.mcp_catalog import ResearchReadError
 
@@ -14,19 +15,41 @@ pytestmark = pytest.mark.unit
 
 
 def test_frozen_read_inputs_and_connection_schema_match_the_implementation():
+    """保留冻结 v1 契约，并仅允许新增两种附件资源枚举。"""
     contract = json.loads(
         (Path(__file__).resolve().parents[6] / "docs/plans/unified-mcp-v1.schemas.json").read_text(encoding="utf-8")
     )
     assert CREATE_SCHEMA == contract["connection_create_schema"]
     for tool in contract["tools"]:
-        if tool["name"] in SCHEMAS:
+        if tool["name"] in READ_TOOL_NAMES:
             expected = tool["inputSchema"]
-            assert SCHEMAS[tool["name"]] == expected
+            current = deepcopy(SCHEMAS[tool["name"]])
+
+            def without_new_attachment_kinds(value):
+                """仅移除新增附件枚举，以验证历史请求边界没有其他漂移。
+
+                Args:
+                    value: 当前输入 Schema 的任一节点。
+                """
+                if isinstance(value, dict):
+                    if "enum" in value:
+                        value["enum"] = [
+                            item for item in value["enum"]
+                            if item not in {"task_attachment", "task_comment_attachment"}
+                        ]
+                    for child in value.values():
+                        without_new_attachment_kinds(child)
+                elif isinstance(value, list):
+                    for child in value:
+                        without_new_attachment_kinds(child)
+
+            without_new_attachment_kinds(current)
+            assert current == expected
     for example in contract["valid_examples"]:
-        if example["tool"] in SCHEMAS:
+        if example["tool"] in READ_TOOL_NAMES:
             validate(example["tool"], example["arguments"])
     for example in contract["invalid_examples"]:
-        if example["tool"] in SCHEMAS:
+        if example["tool"] in READ_TOOL_NAMES:
             with pytest.raises(ResearchReadError):
                 validate(example["tool"], example["arguments"])
 
@@ -35,6 +58,14 @@ def test_bools_unknown_fields_and_missing_future_semantics_are_rejected():
     assert not matches(SCHEMAS["plane_list_workspaces"], {"limit": True})
     assert not matches(SCHEMAS["plane_list_workspaces"], {"arbitrary_sql": "SELECT 1"})
     assert not matches(CREATE_SCHEMA, {"name": "Connection", "workspaces": []})
+
+
+@pytest.mark.parametrize("tool", ["plane_get_context", "plane_read_resource"])
+def test_research_content_examples_match_incremental_read_schema(tool):
+    """代码内示例可直接通过当前输入校验。"""
+    from plane.mcp.api_documentation import UNIFIED_EXAMPLES
+
+    validate(tool, UNIFIED_EXAMPLES[tool])
 
 
 def test_full_catalogue_is_complete_client_safe_and_still_strictly_validated():

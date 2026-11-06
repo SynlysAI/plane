@@ -14,6 +14,7 @@ from django.conf import settings as django_settings
 from rest_framework.test import APIClient
 
 from plane.db import models as db
+from plane.mcp.catalog import READ_TOOL_NAMES, SCHEMAS
 from plane.tests.contract.app.test_unified_mcp import (
     MANAGEMENT,
     collect,
@@ -97,7 +98,7 @@ def test_real_sdk_one_configuration_both_domains_and_live_scope_changes(
                             cursor = page.nextCursor
                             if not cursor:
                                 break
-                        assert len(names) == 30
+                        assert set(names) == set(SCHEMAS) and len(names) == len(set(names))
 
                         async def call(name, args, error=None):
                             result = await session.call_tool(name, args)
@@ -413,7 +414,7 @@ def test_codex_progress_metadata_keeps_catalogue_paging_and_closed_business_argu
         cursor = result.get("nextCursor")
         if not cursor:
             break
-    assert len(names) == len(set(names)) == 6
+    assert READ_TOOL_NAMES <= set(names) and len(names) == len(set(names))
     response = rpc(
         client, "tools/call", {"name": "plane_list_workspaces", "arguments": {}, "_meta": {"progressToken": 42}}
     ).json()

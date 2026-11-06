@@ -115,6 +115,7 @@ class RagPortalClient(BaseIntegrationClient):
             method="POST",
             data=data,
             files={"file": (file_name, file_content)},
+            retry_writes=False,
         )
 
     def upload_detail(self, upload_id, *, request=None):
@@ -134,6 +135,8 @@ class RagPortalClient(BaseIntegrationClient):
         kb_id,
         file_hash,
         request=None,
+        output=None,
+        max_bytes=None,
     ):
         """Download one original file after RAGPortal rechecks research scope.
 
@@ -148,7 +151,10 @@ class RagPortalClient(BaseIntegrationClient):
         Returns:
             A binary integration result envelope.
         """
-        return self.request_file(
+        download = self.request_file if output is None else self.request_file_into
+        extra = {} if output is None else {"output": output, "max_bytes": max_bytes}
+        return download(
+            **extra,
             path=f"/api/integrations/research/files/{knowledge_id}",
             params={
                 "chain_id": str(chain_id),

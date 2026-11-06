@@ -4,6 +4,7 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 from plane.mcp.catalog import tools_for as unified_tools_for
+from plane.mcp.file_catalog import FILE_DESCRIPTIONS, FILE_READ_NAMES, FILE_SCHEMAS
 from plane.research.services.weekly_report_catalog import tools_for as weekly_tools_for
 
 ZERO_UUID = "00000000-0000-4000-8000-000000000000"
@@ -68,9 +69,18 @@ UNIFIED_RESEARCH_TOOLS = {
     "plane_update_research_node",
     "plane_transition_research_node",
 }
-UNIFIED_ADMIN_TOOLS = set(UNIFIED_GROUPS) - UNIFIED_READ_TOOLS - UNIFIED_RESEARCH_TOOLS - {"plane_get_write_result"}
+UNIFIED_GROUPS.update({name: "file_transfer" for name in FILE_SCHEMAS})
+UNIFIED_READ_TOOLS.update(FILE_READ_NAMES)
+UNIFIED_ADMIN_TOOLS = (
+    set(UNIFIED_GROUPS)
+    - UNIFIED_READ_TOOLS
+    - UNIFIED_RESEARCH_TOOLS
+    - set(FILE_SCHEMAS)
+    - {"plane_get_write_result"}
+)
 
 OBJECT_PERMISSIONS = {
+    "file_transfer": "实时连接权限、业务父对象归属、文件版本及原生附件或评论权限",
     "administrative_project": "workspace/project administrative role",
     "administrative_task": "native project task role; deletion also requires creator or project admin",
     "research_lifecycle": "research project owner/admin or chain writer",
@@ -82,10 +92,16 @@ OBJECT_PERMISSIONS = {
 WHEN_TO_USE = {
     "plane_list_workspaces": "定位连接授权的工作区，并检查实时访问状态。",
     "plane_list_containers": "查找行政项目或科研链，获得后续调用所需稳定 ID。",
-    "plane_list_nodes": "列出科研链下可用节点。",
-    "plane_list_tasks": "按项目、Issue 或科研节点查找任务。",
-    "plane_get_context": "读取对象详情、能力、评论、资源、事件或操作列表。",
-    "plane_read_resource": "读取一个有界授权资源正文；不读取外部 URL 或文件字节。",
+    "plane_list_nodes": "列出科研节点及节点负责人；节点状态与任务状态分别返回。",
+    "plane_list_tasks": "按真实父级查找任务，再读取评论和附件；任务执行人与节点负责人分别返回。",
+    "plane_get_context": (
+        "读取详情、评论和资源；节点详情包含内容数量与后续调用，"
+        "节点评论汇总任务讨论，资源可含任务及评论附件。"
+    ),
+    "plane_read_resource": (
+        "分页读取授权资源或任务附件正文；支持文本、Markdown、DOCX、PDF，"
+        "其他 Office 格式使用匹配源版本的已有 PDF 预览。"
+    ),
     "plane_create_project": "创建行政项目并初始化原生成员和默认状态。",
     "plane_update_project": "更新行政项目的名称、描述、负责人或默认处理人。",
     "plane_archive_project": "归档行政项目并清理项目收藏。",
@@ -121,6 +137,23 @@ WHEN_TO_USE = {
 }
 
 UNIFIED_EXAMPLES = {
+    "plane_get_context": {
+        "target": {
+            "domain": "research", "object_type": "ResearchChainNode",
+            "workspace_slug": "public", "id": ZERO_UUID,
+        },
+        "section": "comments",
+        "limit": 20,
+    },
+    "plane_read_resource": {
+        "parent": {
+            "domain": "research", "object_type": "ResearchChainNode",
+            "workspace_slug": "public", "id": ZERO_UUID,
+        },
+        "kind": "task_comment_attachment",
+        "resource_id": ZERO_UUID,
+        "max_chars": 8000,
+    },
     "plane_create_project": {
         "workspace_slug": "public",
         "request_id": "create-project-001",
@@ -177,6 +210,7 @@ UNIFIED_EXAMPLES = {
         "request_id": "create-node-001",
     },
 }
+WHEN_TO_USE.update(FILE_DESCRIPTIONS)
 
 WEEKLY_EXAMPLES = {
     "get_weekly_report_context": {"period_offset": 0},
@@ -236,7 +270,14 @@ WEEKLY_ACTION_EXAMPLES = {
 
 
 def _usage(name, group):
-    if group == "research_proposal":
+    if group == "file_transfer":
+        workflow = [
+            "列出文件并读取当前权限，明确文件父对象及版本。",
+            "优先使用返回的临时 HTTP 请求自动传输；不可用时由 Agent 文件工具完成 Base64 分块和续传。",
+            "确认文件总摘要与 file_complete，再通过评论附件关联或显式论文提交完成业务发布。",
+            "超时用原 request_id 查询；下载使用 download:<session_id>。上游待确认时不要重复上传。",
+        ]
+    elif group == "research_proposal":
         workflow = [
             "先读取对象 capabilities 和当前上下文。",
             "调用 prepare 生成不可变提案。",
@@ -271,10 +312,16 @@ def _usage(name, group):
 def unified_availability(name, scope, active, available_names):
     """Return connection-level availability for one unified API."""
     group = UNIFIED_GROUPS[name]
-    if group == "general_read":
+    if group == "general_read" or name in FILE_READ_NAMES:
         required = "administrative:read or research:read"
     elif group == "receipt":
-        required = "administrative:read_write or research:read_write"
+        required = "administrative:read or research:read（文件会话）；写入回执沿用原权限"
+    elif group == "file_transfer":
+        required = (
+            "research:read_write"
+            if name == "plane_submit_paper_version"
+            else "administrative:read_write or research:read_write"
+        )
     elif name in {"plane_update_task", "plane_transition_task"}:
         required = "administrative:read_write or research:read_write"
     elif name in UNIFIED_RESEARCH_TOOLS:
