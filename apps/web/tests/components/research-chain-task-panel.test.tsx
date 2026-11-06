@@ -678,8 +678,8 @@ it("distinguishes no assignable members from a filtered search in the create pee
   const assigneeButton = [...container.querySelectorAll<HTMLButtonElement>('button[aria-label="责任人"]')].at(-1);
   await act(async () => assigneeButton?.click());
 
-  expect(container.textContent).toContain("本课题暂无可指派成员，请先到成员页添加。");
-  expect(container.querySelector('a[href="/lab/research/chains/chain-1?tab=members"]')).not.toBeNull();
+  expect(container.textContent).toContain("当前课题暂无可指派成员，请联系课题管理员维护授权。");
+  expect(container.querySelector('a[href="/lab/research/chains/chain-1?tab=members"]')).toBeNull();
   expect(container.textContent).not.toContain("没有匹配的可指派成员，请调整搜索条件。");
 });
 
@@ -907,7 +907,7 @@ it("retains an invalid assignee name and explains how to restore membership", as
   const peek = container.querySelector("aside");
   expect(peek?.textContent).toContain("李同学");
   expect(peek?.textContent).toContain("负责人已不具备有效课题成员资格，请补充成员或重新指派");
-  expect(peek?.textContent).toContain("请先在课题成员中添加负责人");
+  expect(peek?.textContent).toContain("当前课题暂无可指派成员，请联系课题管理员维护授权。");
   const select = peek?.querySelector('button[aria-label="责任人"]') as HTMLButtonElement;
   await act(async () => select.click());
   expect(container.querySelectorAll('[role="option"]')).toHaveLength(0);

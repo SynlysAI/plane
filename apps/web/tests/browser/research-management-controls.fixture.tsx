@@ -195,7 +195,7 @@ APIService.prototype.delete = async () => {
 };
 
 const screens = {
-  members: <ResearchChainDetail workspaceSlug={workspaceSlug} chainId="chain-1" />,
+  chain: <ResearchChainDetail workspaceSlug={workspaceSlug} chainId="chain-1" />,
   org: <ResearchOrgTreeEditor workspaceSlug={workspaceSlug} />,
   templates: <ResearchTemplateList workspaceSlug={workspaceSlug} />,
   identity: <ResearchIdentityMappingTable workspaceSlug={workspaceSlug} />,
@@ -214,14 +214,14 @@ const screens = {
   integrations: <IntegrationSettings workspaceSlug={workspaceSlug} />,
   feedback: <FeedbackDialog workspaceSlug={workspaceSlug} managementOnly />,
 };
-const requested = new URLSearchParams(window.location.search).get("screen") ?? "members";
-const screen = requested in screens ? screens[requested as keyof typeof screens] : screens.members;
+const requested = new URLSearchParams(window.location.search).get("screen") ?? "chain";
+const screen = requested in screens ? screens[requested as keyof typeof screens] : screens.chain;
 await initPromise;
 await store.research.fetchIdentity(workspaceSlug);
 createRoot(document.getElementById("root")!).render(
   <StoreProvider>
     <TranslationProvider>
-      <MemoryRouter initialEntries={["/sample/research/chains/chain-1?tab=members"]}>
+      <MemoryRouter initialEntries={["/sample/research/chains/chain-1?tab=overview"]}>
         <main className="h-screen min-w-0 overflow-hidden bg-canvas">{screen}</main>
       </MemoryRouter>
     </TranslationProvider>

@@ -5,7 +5,6 @@ import { setLanguage, TranslationProvider } from "@plane/i18n";
 import type {
   TResearchChain,
   TResearchChainEvent,
-  TResearchChainMember,
   TResearchChainNode,
   TResearchChainNodeTask,
   TResearchChainStageApproval,
@@ -166,13 +165,6 @@ const fixtureChain: TResearchChain = {
   created_at: "2026-09-01T01:00:00Z",
   updated_at: "2026-10-28T09:30:00Z",
 };
-
-const fixtureMembers: TResearchChainMember[] = [
-  { user_id: "owner", display_name: "研究负责人", role: "OWNER", is_owner: true },
-  { user_id: "advisor", display_name: "直接导师", role: "ADMIN", is_owner: false },
-  { user_id: "pi", display_name: "主 PI", role: "ADMIN", is_owner: false },
-  { user_id: "student", display_name: "王同学", role: "MEMBER", is_owner: false },
-];
 
 const fixtureEvents: TResearchChainEvent[] = [
   {
@@ -386,12 +378,10 @@ createRoot(document.getElementById("root")!).render(
           chainId="fixture-chain"
           chain={fixtureChain}
           nodes={scenario.nodes}
-          members={fixtureMembers}
           currentNode={currentNode}
           stages={workflow.stages}
           stageApprovalSummary={stageApprovalSummary}
           onOpenStage={() => undefined}
-          onOpenMembers={() => undefined}
           onCreateNode={() => undefined}
           onOpenAgent={() => undefined}
           onRefresh={() => undefined}

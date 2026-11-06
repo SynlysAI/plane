@@ -237,15 +237,17 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 
-it("renders member columns and keeps role selection accessible", async () => {
+it("redirects the hidden members tab to the chain overview", async () => {
   const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
   mocks.query = "tab=members";
   await act(async () => root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />));
-  const headings = [...container.querySelectorAll("th")].map((heading) => heading.textContent);
-  expect(headings).toEqual(["成员", "权限", "操作"]);
-  const role = container.querySelector("select")!;
-  expect(role.labels?.[0]?.textContent).toContain("权限");
-  expect(role.value).toBe("15");
+  await act(async () => undefined);
+
+  expect(container.querySelector("[data-research-overview-command]")).not.toBeNull();
+  expect(container.querySelectorAll("th")).toHaveLength(0);
+  expect([...container.querySelectorAll("nav a")].map((link) => link.textContent)).not.toContain("成员");
+  expect(container.textContent).not.toContain("管理成员");
+  expect(mocks.getChainMembers).not.toHaveBeenCalled();
 });
 
 it("ignores historical operation review parameters on the selected node", async () => {
@@ -409,7 +411,7 @@ it("opens node evidence and runs lifecycle actions through the service", async (
     container.querySelector('a[href="/lab/research/chains/chain-1?tab=nodes"]')?.getAttribute("aria-current")
   ).toBe("page");
   expect(container.querySelector('button[aria-pressed="true"]')).not.toBeNull();
-  expect([...container.querySelectorAll("nav a")].map((item) => item.textContent)).toEqual(["概览", "节点", "成员"]);
+  expect([...container.querySelectorAll("nav a")].map((item) => item.textContent)).toEqual(["概览", "节点"]);
   const openAssistant = container.querySelector<HTMLButtonElement>('button[aria-label="请智能体分析"]');
   expect(openAssistant).not.toBeNull();
   await act(async () => openAssistant!.click());
@@ -464,10 +466,6 @@ it("renders the authoritative stage approval summary and material gaps", async (
 it("aggregates the chain overview and jumps straight into the current stage", async () => {
   const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
   mocks.query = "tab=overview";
-  mocks.getChainMembers.mockResolvedValue([
-    { user_id: "user-1", display_name: "李四", role: "OWNER", is_owner: true },
-    { user_id: "user-2", display_name: "张三", role: "MEMBER", is_owner: false },
-  ]);
   mocks.getNodeTasks.mockResolvedValue([
     {
       id: "task-1",
@@ -493,7 +491,8 @@ it("aggregates the chain overview and jumps straight into the current stage", as
   expect(container.textContent).toContain("创建节点");
   expect(container.textContent).toContain("关键指标");
   expect(container.textContent).toContain("阶段审批 3/13");
-  expect(container.textContent).toContain("李四 · 张三");
+  expect(container.textContent).not.toContain("李四 · 张三");
+  expect(container.textContent).not.toContain("管理成员");
   expect(container.textContent).toContain("快捷入口");
 
   await act(async () => {
@@ -787,7 +786,7 @@ it("shows the scoped knowledge upload below the selected node tasks", async () =
   const panel = container.querySelector('[data-testid="chain-knowledge-panel"]');
   expect(panel?.getAttribute("data-chain")).toBe("chain-1");
   expect(panel?.getAttribute("data-node")).toBe("node-1");
-  expect(container.querySelectorAll("nav a").length).toBe(3);
+  expect(container.querySelectorAll("nav a").length).toBe(2);
 });
 
 it("navigates to an empty stage through the workflow itself", async () => {
@@ -938,7 +937,7 @@ it("removes the topic materials tab and redirects legacy links to the node works
 
   expect(container.querySelector('[data-testid="chain-knowledge-panel"]')?.getAttribute("data-node")).toBe("node-1");
   expect(container.textContent).not.toContain("experiment-list");
-  expect(container.querySelectorAll("nav a").length).toBe(3);
+  expect(container.querySelectorAll("nav a").length).toBe(2);
   expect(
     [...container.querySelectorAll("nav a")]
       .find((item) => item.textContent === "课题资料")

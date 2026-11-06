@@ -7,7 +7,6 @@ import { Button } from "@plane/propel/button";
 import type {
   TResearchChain,
   TResearchChainEvent,
-  TResearchChainMember,
   TResearchChainNode,
   TResearchChainNodeTask,
   TResearchChainStageApproval,
@@ -31,7 +30,6 @@ type Props = {
   chainId: string;
   chain: TResearchChain | null;
   nodes: TResearchChainNode[];
-  members: TResearchChainMember[];
   currentNode: TResearchChainNode | null;
   stages: TResearchWorkflowStage[];
   stageApprovalSummary: TResearchChainStageApprovalSummary | null;
@@ -40,7 +38,6 @@ type Props = {
     nodeId: string | null,
     options?: { taskId?: string | null; approval?: boolean }
   ) => void;
-  onOpenMembers: () => void;
   onCreateNode: () => void;
   onOpenAgent: (nodeId: string) => void;
   onRefresh: () => Promise<void> | void;
@@ -81,12 +78,10 @@ export function ResearchChainOverviewCommand({
   chainId,
   chain,
   nodes,
-  members,
   currentNode,
   stages,
   stageApprovalSummary,
   onOpenStage,
-  onOpenMembers,
   onCreateNode,
   onOpenAgent,
   onRefresh,
@@ -154,13 +149,6 @@ export function ResearchChainOverviewCommand({
     (reviewer.reason_code === "research_chain_stage_reviewer_not_configured"
       ? t("research.errors.research_chain_stage_reviewer_not_configured")
       : t(fallbackKey));
-  // Owner 置前并截断展示，其余成员以计数折叠。
-  const summaryMembers = useMemo(
-    () => sortCopy(members, (left, right) => Number(right.is_owner) - Number(left.is_owner)).slice(0, 5),
-    [members]
-  );
-  const hiddenMemberCount = Math.max(members.length - summaryMembers.length, 0);
-
   useEffect(() => {
     if (!currentNode) {
       setEvents([]);
@@ -517,8 +505,7 @@ export function ResearchChainOverviewCommand({
               <div className="flex items-center justify-between gap-3">
                 <dt className="text-tertiary">{t("research.chains.overview.node_summary")}</dt>
                 <dd className="text-right text-13 font-medium text-primary tabular-nums">
-                  {t("research.chains.overview.node_count", { count: nodes.length })} ·{" "}
-                  {t("research.chains.overview.member_count", { count: members.length })}
+                  {t("research.chains.overview.node_count", { count: nodes.length })}
                 </dd>
               </div>
               <div className="flex items-center justify-between gap-3">
@@ -531,28 +518,6 @@ export function ResearchChainOverviewCommand({
           </section>
 
           <section>
-            <h4 className="text-12 font-semibold text-primary">{t("research.chains.overview.members_title")}</h4>
-            {members.length > 0 ? (
-              <>
-                <p className="mt-2 truncate text-13 text-primary">
-                  {summaryMembers.map((member) => member.display_name).join(" · ")}
-                  {hiddenMemberCount > 0 &&
-                    ` ${t("research.chains.overview.more_members", { count: hiddenMemberCount })}`}
-                </p>
-                <button
-                  type="button"
-                  className="mt-1.5 text-12 text-secondary transition-colors duration-150 hover:text-accent-primary"
-                  onClick={onOpenMembers}
-                >
-                  {t("research.chains.overview.manage_members")}
-                </button>
-              </>
-            ) : (
-              <p className="mt-2 text-12 text-tertiary">{t("research.chains.members.empty")}</p>
-            )}
-          </section>
-
-          <section>
             <h4 className="text-12 font-semibold text-primary">{t("research.chains.overview.quick_entries")}</h4>
             <div className="mt-2 flex flex-wrap gap-2">
               {currentStage && (
@@ -562,9 +527,6 @@ export function ResearchChainOverviewCommand({
               )}
               <Button variant="secondary" size="sm" onClick={onCreateNode}>
                 {t("research.chains.overview.create_node_entry")}
-              </Button>
-              <Button variant="secondary" size="sm" onClick={onOpenMembers}>
-                {t("research.chains.overview.manage_members")}
               </Button>
               <Button variant="secondary" size="sm" onClick={() => void onRefresh()}>
                 {t("research.chains.refresh")}
