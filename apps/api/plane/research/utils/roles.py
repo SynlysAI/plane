@@ -12,6 +12,7 @@ principal is ``WorkspaceResearchSetting.main_pi``.
 """
 
 from plane.db.models import WorkspaceMember, WorkspaceResearchSetting
+from plane.research.utils.todo_context import reuse_todo_query
 
 DEV_ADMIN = "DEV_ADMIN"
 OPS_ADMIN = "OPS_ADMIN"
@@ -62,6 +63,7 @@ def is_system_admin(user) -> bool:
     return is_instance_admin(user)
 
 
+@reuse_todo_query
 def configured_main_pi_id(workspace):
     """Return the business principal configured for a research workspace."""
     workspace_id = _workspace_id(workspace)
@@ -103,6 +105,7 @@ def _workspace_id(workspace):
     return getattr(workspace, "id", workspace)
 
 
+@reuse_todo_query
 def is_research_admin(user, workspace) -> bool:
     """Return whether a seated actor is an instance or workspace administrator.
 

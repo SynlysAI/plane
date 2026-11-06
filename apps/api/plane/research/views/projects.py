@@ -43,6 +43,7 @@ from plane.research.utils.errors import (
 from plane.research.utils.org import active_membership_q, is_workspace_member
 from plane.research.utils.roles import configured_main_pi_id, is_research_admin
 from plane.research.services.stage_service import ensure_stage_instances
+from plane.research.utils.todo_context import reuse_todo_query
 from plane.research.views.base import ResearchAPIView, parse_date, resolve_user
 from plane.utils.project_identifier import identifier_from, unique_identifier
 
@@ -204,6 +205,7 @@ def visible_profile_queryset(workspace, user):
     return profile_queryset(workspace).filter(visibility).distinct()
 
 
+@reuse_todo_query
 def can_read_project_research_metadata(workspace, user, profile):
     """Project-level gate used by metadata aggregations.
 

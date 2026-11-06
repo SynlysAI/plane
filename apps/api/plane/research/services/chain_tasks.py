@@ -70,6 +70,7 @@ class ChainTaskConflictError(Exception):
     """Raised when an idempotency key is reused with another payload."""
 
 
+@reuse_todo_query
 def chain_manager(workspace, user, chain) -> bool:
     """Return whether the caller owns or administers the chain project.
 
@@ -163,6 +164,7 @@ def review_only_actor(workspace, user, chain) -> bool:
     return check_access(user, "review", chain_resource(chain), context=context)
 
 
+@reuse_todo_query
 def chain_writer(workspace, user, chain) -> bool:
     """Return whether a caller may append mutable Chain data.
 

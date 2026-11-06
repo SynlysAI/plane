@@ -10,6 +10,7 @@ from django.db.models import Q
 # Module imports
 from .project import ProjectBaseModel
 from plane.db.mixins import SoftDeletionManager
+from plane.db.todo_queryset import TodoInvalidationQuerySet
 
 class StateGroup(models.TextChoices):
     BACKLOG = "backlog", "Backlog"
@@ -93,7 +94,7 @@ class State(ProjectBaseModel):
     external_id = models.CharField(max_length=255, blank=True, null=True)
 
     objects = StateManager()
-    all_state_objects = models.Manager()
+    all_state_objects = models.Manager.from_queryset(TodoInvalidationQuerySet)()
     triage_objects = TriageStateManager()
 
     def __str__(self):

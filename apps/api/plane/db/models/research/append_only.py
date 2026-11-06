@@ -15,9 +15,10 @@ history (P1-STG-10, P1-REV-07, P1-EXP-09, T-02).
 import uuid
 
 from django.db import models
+from plane.db.todo_queryset import TodoInvalidationQuerySet
 
 
-class AppendOnlyQuerySet(models.QuerySet):
+class AppendOnlyQuerySet(TodoInvalidationQuerySet):
     """Reject bulk updates and deletes on append-only tables."""
 
     def update(self, **kwargs):

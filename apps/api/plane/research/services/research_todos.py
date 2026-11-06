@@ -10,14 +10,22 @@ common ``research-todo.v2`` envelope.
 """
 
 import logging
+from collections import defaultdict
 from datetime import date, datetime, time, timedelta
+from time import perf_counter
 
+from django.db.models import OuterRef, Prefetch, Q, Subquery
 from django.db.models import TextChoices
 from django.utils import timezone
 
 from plane.db.models import (
+    ApprovalFlowStep,
     ApprovalRequest,
     PeriodicReport,
+    PeriodicReportReadReceipt,
+    PeriodicReportSnapshot,
+    ReportAccessGrant,
+    ResearchAgentRunEvent,
     ResearchAgentSession,
     ResearchChainStage,
     ResearchChainNodeTask,
@@ -35,7 +43,7 @@ from plane.research.services.chain_tasks import (
     chain_writer,
     chain_assignable_user_ids,
 )
-from plane.research.services.approval_routes import actor_can_review_route, active_approval_route
+from plane.research.services.approval_routes import active_approval_route_map
 from plane.research.services.chain_stage_approvals import (
     ChainStageRuleError,
     resolve_advisor,
@@ -46,15 +54,20 @@ from plane.research.services.paper_review import (
     actor_can_submit_paper,
     actor_can_withdraw_paper,
 )
-from plane.research.services.review_service import research_owner_id
 from plane.research.utils.action_capabilities import capability_map
 from plane.research.utils.acl import build_actor_context, check_access
-from plane.research.utils.approvals import can_act_on_current_step, pending_approver_users
+from plane.research.utils.approvals import step_approver_ids
 from plane.research.utils.reports import report_resource, visible_reports_queryset
 from plane.research.utils.chain_stage_notifications import STAGE_TITLES
-from plane.research.utils.settings import workspace_research_sections
+from plane.research.utils.settings import (
+    get_workspace_research_settings,
+    workspace_research_enabled,
+    workspace_research_sections,
+)
+from plane.research.utils.todo_context import todo_query_context
 from plane.research.utils.stages import stage_resource
 from plane.research.views.projects import can_read_project_research_metadata
+from plane.utils.todo_metrics import count_todo_queries
 
 logger = logging.getLogger("plane.api")
 
@@ -192,8 +205,7 @@ def _todo(
 
 
 def _chain_feature_enabled(workspace):
-    from plane.research.utils.settings import workspace_research_enabled
-
+    """沿用科研模块原有的全局和工作区开关。"""
     return workspace_research_enabled(workspace)
 
 
@@ -237,7 +249,29 @@ def collect_chain_task_todos(workspace, user, scope):
             "created_by",
             "assignee",
             "assigned_by",
-            "completed_by",
+        )
+        .only(
+            "status",
+            "title",
+            "due_at",
+            "updated_at",
+            "metadata",
+            "request_id",
+            "created_by__display_name",
+            "created_by__username",
+            "assignee__display_name",
+            "assignee__username",
+            "assigned_by__display_name",
+            "assigned_by__username",
+            "node__title",
+            "node__status",
+            "chain__workspace_id",
+            "chain__visibility",
+            "chain__status",
+            "chain__project__name",
+            "chain__project__research_profile",
+            "chain__owner__display_name",
+            "chain__owner__username",
         )
         .order_by("-updated_at", "-created_at")
     )
@@ -317,15 +351,18 @@ def collect_chain_task_todos(workspace, user, scope):
     return result
 
 
-def _latest_snapshot_version(report):
-    return report.official_snapshots.all().order_by("-version_no").values_list("version_no", flat=True).first()
+def _report_assignees(report, route=None):
+    """根据批量加载的有效路由解析报告当前承办人。
 
+    Args:
+        report: 当前报告。
+        route: 报告当前的有效审批路由。
 
-def _report_assignees(report):
-    """Resolve the current formal report handler from its active route."""
+    Returns:
+        当前审批人或报告所有者组成的列表。
+    """
     if report.status != PeriodicReport.Status.SUBMITTED:
         return [report.owner]
-    route = active_approval_route("PERIODIC_REPORT", report.id, report.workspace_id)
     return [route.reviewer] if route is not None else [report.owner]
 
 
@@ -335,6 +372,9 @@ def collect_report_todos(workspace, user, scope):
         return []
     context = build_actor_context(user, workspace.id)
     confidential_cache = {}
+    latest_snapshot_version = (
+        PeriodicReportSnapshot.objects.filter(report_id=OuterRef("pk")).order_by("-version_no").values("version_no")[:1]
+    )
     statuses = (
         PeriodicReport.Status.DRAFT,
         PeriodicReport.Status.SUBMITTED,
@@ -343,31 +383,66 @@ def collect_report_todos(workspace, user, scope):
     queryset = (
         PeriodicReport.objects.filter(workspace=workspace, status__in=statuses, deleted_at__isnull=True)
         .select_related("owner", "org_unit", "page", "project")
-        .prefetch_related("access_grants", "official_snapshots", "read_receipts")
+        .only(
+            "workspace_id",
+            "status",
+            "visibility",
+            "submitted_at",
+            "report_type",
+            "period_key",
+            "period_end",
+            "updated_at",
+            "created_at",
+            "owner__display_name",
+            "owner__username",
+            "org_unit__workspace_id",
+            "org_unit__path",
+            "page__name",
+            "project__name",
+        )
+        .annotate(_todo_snapshot_version=Subquery(latest_snapshot_version))
+        .prefetch_related(
+            Prefetch(
+                "access_grants",
+                queryset=ReportAccessGrant.objects.only(
+                    "report_id", "grantee_user_id", "grantee_org_unit_id", "is_revoked", "expires_at"
+                ),
+            ),
+            Prefetch(
+                "read_receipts",
+                queryset=PeriodicReportReadReceipt.objects.filter(reader=user).only("report_id", "snapshot_version"),
+            ),
+        )
         .order_by("-updated_at", "-created_at")
     )
     if scope == "mine":
         queryset = queryset.filter(owner=user)
     else:
         queryset = visible_reports_queryset(queryset, context, confidential_cache=confidential_cache)
+    reports = list(queryset)
+    routes_by_report = active_approval_route_map(
+        "PERIODIC_REPORT",
+        [report.id for report in reports if report.status == PeriodicReport.Status.SUBMITTED],
+        workspace.id,
+    )
+    is_workspace_admin = context.is_workspace_admin
     result = []
-    for report in queryset:
-        report_handlers = _report_assignees(report)
+    for report in reports:
+        route = routes_by_report.get(report.id)
+        report_handlers = _report_assignees(report, route)
         is_formal_reviewer = any(handler.id == user.id for handler in report_handlers)
-        snapshot_version = _latest_snapshot_version(report)
+        snapshot_version = report._todo_snapshot_version
+        receipt_versions = {receipt.snapshot_version for receipt in report.read_receipts.all()}
         read_allowed = (
             report.status == PeriodicReport.Status.SUBMITTED
             and is_formal_reviewer
             and snapshot_version is not None
-            and not report.read_receipts.filter(
-                reader=user,
-                snapshot_version=snapshot_version,
-            ).exists()
+            and snapshot_version not in receipt_versions
         )
         editable = report.status in (PeriodicReport.Status.DRAFT, PeriodicReport.Status.NEEDS_REVISION)
         can_edit = editable and check_access(user, "edit", report_resource(report, confidential_cache), context=context)
-        can_review = report.status == PeriodicReport.Status.SUBMITTED and actor_can_review_route(
-            workspace, "PERIODIC_REPORT", report.id, user
+        can_review = report.status == PeriodicReport.Status.SUBMITTED and (
+            is_workspace_admin or (route is not None and route.reviewer_id == user.id)
         )
         can_return = can_review
         can_accept = can_review
@@ -407,7 +482,7 @@ def collect_report_todos(workspace, user, scope):
             title=title,
             context=f"{project_name} · {report.period_key}",
             requester=_participant(report.owner),
-            assignees=_participants(_report_assignees(report)),
+            assignees=_participants(report_handlers),
             business_status=report.status,
             handling_status=handling,
             next_action=next_action,
@@ -443,11 +518,29 @@ def collect_paper_review_todos(workspace, user, scope):
     reviews = (
         ResearchPaperReview.objects.filter(workspace=workspace, status__in=statuses, deleted_at__isnull=True)
         .select_related(
-            "chain__project__research_profile",
+            "chain__project__research_profile__org_unit",
             "chain__project",
             "node",
             "owner",
             "final_reviewer",
+        )
+        .only(
+            "workspace_id",
+            "status",
+            "due_at",
+            "updated_at",
+            "request_id",
+            "node__title",
+            "owner__display_name",
+            "owner__username",
+            "final_reviewer__display_name",
+            "final_reviewer__username",
+            "chain__owner_id",
+            "chain__workspace_id",
+            "chain__visibility",
+            "chain__status",
+            "chain__project__name",
+            "chain__project__research_profile",
         )
         .order_by("-updated_at", "-created_at")
     )
@@ -530,46 +623,83 @@ def collect_stage_review_todos(workspace, user, scope):
             status=ResearchStageInstance.Status.SUBMITTED,
             deleted_at__isnull=True,
         )
-        .select_related("project", "project__research_profile", "org_unit")
+        .select_related("project", "project__created_by", "project__research_profile__owner")
+        .only(
+            "workspace_id",
+            "status",
+            "stage",
+            "org_unit_id",
+            "updated_at",
+            "project__name",
+            "project__created_by__display_name",
+            "project__created_by__username",
+            "project__research_profile__owner__display_name",
+            "project__research_profile__owner__username",
+            "project__research_profile__research_type",
+            "project__research_profile__workspace_id",
+            "project__research_profile__deleted_at",
+        )
         .order_by("-updated_at", "-created_at")
     )
+    stages = list(stages)
+    stage_ids = [stage.id for stage in stages]
+    if not stage_ids:
+        return []
+
+    now = timezone.now()
+    assignments_by_stage = defaultdict(list)
+    assignments = (
+        StageReviewerAssignment.objects.filter(
+            stage_instance_id__in=stage_ids,
+            is_active=True,
+            superseded_at__isnull=True,
+            deleted_at__isnull=True,
+        )
+        .filter(Q(valid_until__isnull=True) | Q(valid_until__gt=now))
+        .select_related("reviewer")
+        .only("stage_instance_id", "valid_until", "reviewer__display_name", "reviewer__username")
+    )
+    for assignment in assignments:
+        assignments_by_stage[assignment.stage_instance_id].append(assignment)
+
+    reviewed_by_stage = defaultdict(set)
+    reviews = StageReview.objects.filter(
+        stage_instance_id__in=stage_ids,
+        is_superseded=False,
+        deleted_at__isnull=True,
+    ).values_list("stage_instance_id", "reviewer_id")
+    for stage_id, reviewer_id in reviews:
+        reviewed_by_stage[stage_id].add(reviewer_id)
+
+    actor_context = build_actor_context(user, workspace.id)
+    settings = get_workspace_research_settings(workspace)
+    stage_visibility = settings.get("default_report_visibility") or "DIRECT_ADVISOR"
     result = []
     for stage in stages:
-        if not check_access(
-            user, "view", stage_resource(stage, with_reviewers=True), context=build_actor_context(user, workspace.id)
-        ):
-            continue
-        if scope == "mine" and research_owner_id(stage) != user.id:
-            continue
-        now = timezone.now()
-        assignments = [
-            assignment
-            for assignment in StageReviewerAssignment.objects.filter(
-                stage_instance=stage,
-                is_active=True,
-                superseded_at__isnull=True,
-                deleted_at__isnull=True,
-            ).select_related("reviewer")
-            if assignment.valid_until is None or assignment.valid_until > now
-        ]
-        reviewed_ids = set(
-            StageReview.objects.filter(
-                stage_instance=stage,
-                is_superseded=False,
-                deleted_at__isnull=True,
-            ).values_list("reviewer_id", flat=True)
+        profile = getattr(stage.project, "research_profile", None)
+        owner_id = profile.owner_id if profile and profile.deleted_at is None else None
+        current_assignments = assignments_by_stage.get(stage.id, [])
+        reviewed_ids = reviewed_by_stage.get(stage.id, set())
+        resource = stage_resource(
+            stage,
+            owner_id=owner_id,
+            visibility=stage_visibility,
+            reviewer_ids=[assignment.reviewer_id for assignment in current_assignments],
         )
+        if not check_access(user, "view", resource, context=actor_context):
+            continue
+        if scope == "mine" and owner_id != user.id:
+            continue
         current_assignment = next(
-            (assignment for assignment in assignments if assignment.reviewer_id == user.id),
+            (assignment for assignment in current_assignments if assignment.reviewer_id == user.id),
             None,
         )
         can_review = current_assignment is not None and current_assignment.reviewer_id not in reviewed_ids
         can_revise = current_assignment is not None and current_assignment.reviewer_id in reviewed_ids
-        due_dates = [assignment.valid_until for assignment in assignments if assignment.valid_until]
-        owner_id = research_owner_id(stage)
+        due_dates = [assignment.valid_until for assignment in current_assignments if assignment.valid_until]
         requester = stage.project.created_by if stage.project.created_by_id == owner_id else None
         if requester is None and owner_id:
-            requester = User.objects.filter(pk=owner_id).first()
+            requester = profile.owner if profile else None
         todo = _todo(
             source="STAGE_REVIEW",
             project_id=stage.project_id,
@@ -578,10 +708,14 @@ def collect_stage_review_todos(workspace, user, scope):
             context=stage.get_stage_display() if hasattr(stage, "get_stage_display") else stage.stage,
             requester=_participant(requester),
             assignees=_participants(
-                [assignment.reviewer for assignment in assignments if assignment.reviewer_id not in reviewed_ids]
+                [
+                    assignment.reviewer
+                    for assignment in current_assignments
+                    if assignment.reviewer_id not in reviewed_ids
+                ]
             ),
             business_status=stage.status,
-            handling_status="BLOCKED" if not assignments else "IN_PROGRESS",
+            handling_status="BLOCKED" if not current_assignments else "IN_PROGRESS",
             next_action="REVIEW",
             due_at=min(due_dates) if due_dates else None,
             href=f"/{workspace.slug}/research/projects/{stage.project_id}/stages/{stage.stage}",
@@ -601,6 +735,10 @@ def collect_agent_approval_todos(workspace, user, scope):
     setting = getattr(workspace, "research_setting", None)
     if not setting or not setting.research_agent_enabled or not _chain_feature_enabled(workspace):
         return []
+    latest_event = ResearchAgentRunEvent.objects.filter(
+        session_id=OuterRef("pk"),
+        event_type__in=("TOOL_CALL", "AI_ACTION"),
+    ).order_by("-seq")
     sessions = (
         ResearchAgentSession.objects.filter(
             workspace=workspace,
@@ -617,6 +755,10 @@ def collect_agent_approval_todos(workspace, user, scope):
             "chain_node__chain__project__research_profile",
             "context_grant",
         )
+        .annotate(
+            _todo_latest_event_id=Subquery(latest_event.values("id")[:1]),
+            _todo_latest_event_payload=Subquery(latest_event.values("payload")[:1]),
+        )
         .order_by("-updated_at", "-created_at")
     )
     result = []
@@ -630,8 +772,7 @@ def collect_agent_approval_todos(workspace, user, scope):
         if not visible or (scope == "mine" and session.user_id != user.id):
             continue
         can_decide = session.user_id == user.id and session.context_grant.scope_kind != "REVIEW"
-        latest_event = session.run_events.filter(event_type__in=("TOOL_CALL", "AI_ACTION")).order_by("-seq").first()
-        payload = latest_event.payload if latest_event is not None else {}
+        payload = session._todo_latest_event_payload or {}
         summary = next(
             (
                 str(value)
@@ -665,7 +806,7 @@ def collect_agent_approval_todos(workspace, user, scope):
             trace_ref={
                 "resource_type": "research_agent_session",
                 "resource_id": str(session.session_id),
-                "event_id": str(latest_event.id) if latest_event is not None else None,
+                "event_id": str(session._todo_latest_event_id) if session._todo_latest_event_id else None,
             },
             updated_at=session.updated_at,
         )
@@ -689,10 +830,40 @@ def collect_office_approval_todos(workspace, user, scope):
     )
     if scope == "mine":
         requests = requests.filter(requested_by=user)
+    requests = list(requests)
+    flow_ids = {request.flow_id for request in requests}
+    steps_by_flow = defaultdict(dict)
+    for step in (
+        ApprovalFlowStep.objects.filter(
+            flow_id__in=flow_ids,
+            is_required=True,
+            deleted_at__isnull=True,
+        )
+        .only("flow_id", "order", "approver_user_id", "approver_org_role")
+        .order_by("flow_id", "order")
+    ):
+        steps_by_flow[step.flow_id][step.order] = step
+
+    approver_cache = {}
+    approver_ids_by_request = {}
+    all_approver_ids = set()
+    current_steps = {}
+    for request in requests:
+        step = steps_by_flow.get(request.flow_id, {}).get(request.current_step_order)
+        current_steps[request.id] = step
+        approver_ids = step_approver_ids(request, step, cache=approver_cache) if step else set()
+        approver_ids_by_request[request.id] = approver_ids
+        all_approver_ids.update(approver_ids)
+    active_approvers = {
+        approver.id: approver
+        for approver in User.objects.filter(id__in=all_approver_ids, is_active=True).only("display_name", "username")
+    }
+
     result = []
     for request in requests:
-        approvers = pending_approver_users(request)
-        can_decide, _step = can_act_on_current_step(request, user)
+        approver_ids = approver_ids_by_request[request.id]
+        approvers = [approver for approver_id, approver in active_approvers.items() if approver_id in approver_ids]
+        can_decide = current_steps[request.id] is not None and user.id in approver_ids
         todo = _todo(
             source="OFFICE_APPROVAL",
             project_id=request.issue.project_id,
@@ -747,6 +918,7 @@ def collect_chain_stage_approval_todos(workspace, user, scope):
             "chain__project",
             "chain__owner",
         )
+        .select_related("chain__project__research_profile__owner")
         .order_by("-updated_at", "-created_at")
     )
     result = []
@@ -853,6 +1025,22 @@ def collect_research_todos(workspace, user, scope, request_id=None):
         A ``(todos, degraded_sources)`` tuple; source order in the degraded list
         is stable and one failed source never suppresses the other sources.
     """
+    with todo_query_context():
+        return _collect_research_todos(workspace, user, scope, request_id)
+
+
+def _collect_research_todos(workspace, user, scope, request_id):
+    """在请求级只读上下文内聚合各来源，并保留独立降级边界。
+
+    Args:
+        workspace: 待办所属工作区。
+        user: 接收权限过滤结果的当前用户。
+        scope: 原有的待办范围参数。
+        request_id: 关联请求与来源日志的标识。
+
+    Returns:
+        去重后的待办列表及发生降级的来源列表。
+    """
     collectors = (
         ("CHAIN_TASK", collect_chain_task_todos),
         ("REPORT", collect_report_todos),
@@ -865,9 +1053,16 @@ def collect_research_todos(workspace, user, scope, request_id=None):
     todos = []
     degraded = []
     for source, collector in collectors:
+        counter = {"query_count": 0}
+        source_todos = []
+        failed = False
+        started_at = perf_counter()
         try:
-            todos.extend(collector(workspace, user, scope))
+            with count_todo_queries() as counter:
+                source_todos = collector(workspace, user, scope)
+            todos.extend(source_todos)
         except Exception as error:
+            failed = True
             logger.exception(
                 "Research todo source degraded",
                 extra={
@@ -881,6 +1076,21 @@ def collect_research_todos(workspace, user, scope, request_id=None):
                 },
             )
             degraded.append(source)
+        finally:
+            logger.info(
+                "Research todo source measured",
+                extra={
+                    "event": "workspace_todo_source",
+                    "source": source,
+                    "workspace_id": str(workspace.id),
+                    "user_id": str(user.id),
+                    "request_id": request_id,
+                    "duration_ms": round((perf_counter() - started_at) * 1000, 2),
+                    "query_count": counter["query_count"],
+                    "result_count": len(source_todos),
+                    "degraded": failed,
+                },
+            )
     deduplicated = {}
     for todo in todos:
         existing = deduplicated.get(todo["id"])
