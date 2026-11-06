@@ -147,13 +147,17 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
             }
           )
   );
+  const peekOverviewContentClassName = cn(
+    "w-full text-body-sm-regular",
+    isRightDockSidePeek && "flex h-full min-h-0 w-full min-w-0 flex-col"
+  );
 
   const shouldUsePortal = !embedIssue;
 
   const portalContainer = document.getElementById("full-screen-portal") as HTMLElement;
 
   const content = (
-    <div className="w-full text-body-sm-regular">
+    <div className={peekOverviewContentClassName}>
       {issueId && (
         <div
           data-issue-peek-frame=""

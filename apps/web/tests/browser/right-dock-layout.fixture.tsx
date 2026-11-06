@@ -212,15 +212,35 @@ function Fixture() {
               title="科研采购审批-丙二醇甲醚醋酸酯等试剂耗材-80367.3元"
               onClose={() => setDetailKind("none")}
             >
-              <section data-administrative-detail className="vertical-scrollbar h-full overflow-y-auto p-4">
-                <h2 className="text-20 font-medium break-words">科研采购审批-丙二醇甲醚醋酸酯等试剂耗材-80367.3元</h2>
-                <SidebarPropertyListItem icon={UserOutline} label="创建人">
-                  <span className="min-w-0 text-body-xs-medium break-words">纪金朝</span>
-                </SidebarPropertyListItem>
-                <SidebarPropertyListItem icon={UserOutline} label="一个非常长的属性标签用于检查换行">
-                  <span className="min-w-0 text-body-xs-medium break-words">方奕凯</span>
-                </SidebarPropertyListItem>
-              </section>
+              <div
+                data-administrative-content
+                className="flex h-full min-h-0 w-full min-w-0 flex-col text-body-sm-regular"
+              >
+                <section
+                  data-administrative-detail
+                  className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden"
+                >
+                  <div
+                    data-administrative-scroll
+                    className="vertical-scrollbar min-h-0 w-full flex-1 overflow-y-auto p-4"
+                  >
+                    <h2 className="text-20 font-medium break-words">
+                      科研采购审批-丙二醇甲醚醋酸酯等试剂耗材-80367.3元
+                    </h2>
+                    <SidebarPropertyListItem icon={UserOutline} label="创建人">
+                      <span className="min-w-0 text-body-xs-medium break-words">纪金朝</span>
+                    </SidebarPropertyListItem>
+                    <SidebarPropertyListItem icon={UserOutline} label="一个非常长的属性标签用于检查换行">
+                      <span className="min-w-0 text-body-xs-medium break-words">方奕凯</span>
+                    </SidebarPropertyListItem>
+                    {Array.from({ length: 30 }, (_, index) => (
+                      <p key={index} className="mt-3 text-13 text-secondary">
+                        行政详情第 {index + 1} 段：用于检查右侧任务详情在 Dock 内独立滚动。
+                      </p>
+                    ))}
+                  </div>
+                </section>
+              </div>
             </RightDockPortal>
           )}
 

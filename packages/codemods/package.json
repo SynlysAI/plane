@@ -1,6 +1,6 @@
 {
   "name": "@plane/codemods",
-  "version": "9.19.1",
+  "version": "9.19.2",
   "private": true,
   "scripts": {
     "test": "vitest run",

@@ -268,7 +268,15 @@ it("keeps a standalone side peek inside the right detail dock flow", async () =>
   await act(async () => renderSidePeekView());
 
   const peekFrame = container.querySelector("[data-issue-peek-frame]");
+  const peekContent = peekFrame?.parentElement;
   expect(peekFrame).toBeTruthy();
+  expect(peekContent).toBeTruthy();
+  expect(peekContent?.classList.contains("flex")).toBe(true);
+  expect(peekContent?.classList.contains("h-full")).toBe(true);
+  expect(peekContent?.classList.contains("min-h-0")).toBe(true);
+  expect(peekContent?.classList.contains("w-full")).toBe(true);
+  expect(peekContent?.classList.contains("min-w-0")).toBe(true);
+  expect(peekContent?.classList.contains("flex-col")).toBe(true);
   expect(peekFrame?.classList.contains("absolute")).toBe(false);
   expect(peekFrame?.classList.contains("flex")).toBe(true);
   expect(peekFrame?.classList.contains("h-full")).toBe(true);
