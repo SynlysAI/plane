@@ -73,3 +73,31 @@ flowchart LR
 部署实际结果在生产验收记录中保留，只有健康检查和事务回滚验收完成后才算发布完成。
 
 生产已保留旧代码引用 `rollback/9.17.0-before-mentions-20261106`，备份目录为 `/home/fangyikai/plane-release-backups/mentions-20261106-1425`，包括旧源码和 Web/Admin 构建产物。
+
+## 生产验收结果
+
+2026 年 11 月 6 日 14:42（北京时间）完成发布验收。应用发布提交为 `26267cb1748b35c42ed8fd2b646c14cbb935cb9c`，生产 `main` 已快进到该提交。
+
+- API、普通 worker、beat、通知生成 worker、邮件 worker 的运行容器均读取到 `9.18.0`；实例接口返回 `instance.current_version = 9.18.0`。
+- 实际 HTTP 请求的 Web 资源 `assets/package-BgJGMqqm.js` 包含 `9.18.0`。Web、Admin、实例 API 均返回 `200`，文档转换服务为 `healthy`，相关容器均为 `running`。
+- 通知生成 worker 和邮件 worker 正常领取任务。验收仅检查提及的持久化邮件投递记录，没有实际发送验收邮件。
+- 原故障任务 `fbf7cc63-3d3c-4557-aafe-d71dbe175fcd` 仍为零订阅者。通过真实业务视图，以庄晟珏身份创建结构化 `@方奕凯` 评论，收到以下结果：
+
+```json
+{
+  "subscribers": 0,
+  "events": 1,
+  "notifications": 1,
+  "inbox_category": "mention",
+  "mention_unread_delta": 1,
+  "retry_deduplicated": true,
+  "pending_email_records": 1,
+  "rolled_back": true
+}
+```
+
+接收方真实收件箱接口可读取该通知，返回路由包含课题链、节点、任务及新评论 ID。相同请求重试仍只生成一条通知。验收在显式回滚事务内执行，结束后确认评论不存在，任务事件和通知数量恢复原值；原先漏发的两条评论没有补发。此项验证真实业务权限、保存及读取接口，不等同于生产双账号浏览器端到端测试。
+
+完整部署脚本已成功构建 Web/Admin，但重建 Caddy 镜像时，下载上游二进制发生网络超时（`curl 28`）。由于本次未修改 Caddy Dockerfile 或配置，使用原 `plane-caddy:2.11.4-local` 镜像重建 `web-prod` 加载新前端，再执行 `./scripts/deploy.sh --backend --skip-pull`。后端续部署退出码为 `0`，迁移与全部健康检查通过。原 Caddy 镜像摘要为 `sha256:fc073ca9d702db906306428319a0136d7ca6241805619c72d6861d196a857f86`。
+
+上述备份目录保留 `deploy-9.18.0.log`、`deploy-backend-9.18.0.log` 与 `verification-9.18.0.log`，分别记录完整部署、后端续部署和事务验收结果。原 `develop` 工作区的未提交变更未参与发布，也未被修改。
