@@ -55,7 +55,7 @@ def workspace_policy_map(workspace_ids):
     ).values("workspace_id", "category", "in_app_enabled", "email_enabled")
     for row in rows:
         policies[row["workspace_id"]][row["category"]] = {
-            "in_app_enabled": row["in_app_enabled"],
+            "in_app_enabled": row["in_app_enabled"] or row["category"] in {"mention", "research_mention"},
             "email_enabled": row["email_enabled"],
         }
     return policies
@@ -135,6 +135,9 @@ def persist_issue_notification_batch(notifications, email_logs):
             if project
             else ""
         )
+        if data.get("comment_id"):
+            route += f"#comment-{data['comment_id']}"
+        notification.data = {**data, "route": route}
         event, created = NotificationEvent.objects.get_or_create(
             idempotency_key=key,
             defaults=_event_defaults(
@@ -222,7 +225,12 @@ def _research_route(notification, data, workspace_slug):
     if data.get("issue_id"):
         return f"/{workspace_slug}/projects/{notification.project_id}/issues/{data['issue_id']}?tab=approvals"
     if data.get("report_id"):
-        return f"/{workspace_slug}/research/reports/{data['report_id']}"
+        query = (
+            f"?thread={data['thread_id']}&comment={data['comment_id']}"
+            if data.get("thread_id") and data.get("comment_id")
+            else ""
+        )
+        return f"/{workspace_slug}/research/reports/{data['report_id']}{query}"
     if data.get("experiment_id"):
         if data.get("amendment_id"):
             return (
@@ -232,6 +240,8 @@ def _research_route(notification, data, workspace_slug):
         return f"/{workspace_slug}/research/chains?view=experiments&experiment={data['experiment_id']}"
     if data.get("task_id") and data.get("chain_id"):
         query = f"node={data['node_id']}&task={data['task_id']}" if data.get("node_id") else f"task={data['task_id']}"
+        if data.get("comment_id"):
+            query += f"&comment={data['comment_id']}"
         return f"/{workspace_slug}/research/chains/{data['chain_id']}?{query}"
     if data.get("stage_id") and data.get("chain_id"):
         stage_code = str(data.get("stage_code") or "").lower()
@@ -309,6 +319,7 @@ def persist_research_notification_batch(notifications, *, category, email_policy
         )
         workspace_slug = workspace_slugs.get(notification.workspace_id, "")
         route = _research_route(notification, data, workspace_slug)
+        notification.data = {**data, "route": route}
         event, created = NotificationEvent.objects.get_or_create(
             idempotency_key=key,
             defaults={

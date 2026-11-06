@@ -22,18 +22,17 @@ from plane.db.models import (
     EmailNotificationLog,
     Notification,
     IssueComment,
-    IssueActivity,
     UserNotificationPreference,
     ProjectMember,
 )
 
 # Third Party imports
 from celery import shared_task
-from bs4 import BeautifulSoup
 from django.utils import timezone
 from django.db import transaction
 from plane.utils.administrative_projects import project_member_roster
 from plane.utils.notification_outbox import persist_issue_notification_batch
+from plane.utils.mentions import mentioned_user_ids, mention_receivers
 
 logger = logging.getLogger("plane.worker")
 
@@ -122,31 +121,17 @@ def extract_mentions_as_subscribers(project_id, issue_id, mentions):
 def extract_mentions(issue_instance):
     try:
         # issue_instance has to be a dictionary passed, containing the description_html and other set of activity data. # noqa: E501
-        mentions = []
         # Convert string to dictionary
         data = json.loads(issue_instance)
-        html = data.get("description_html")
-        soup = BeautifulSoup(html, "html.parser")
-        mention_tags = soup.find_all("mention-component", attrs={"entity_name": "user_mention"})
-
-        mentions = [mention_tag["entity_identifier"] for mention_tag in mention_tags]
-
-        return list(set(mentions))
+        return sorted(mentioned_user_ids(data.get("description_html")))
     except Exception:
         return []
 
 
 # =========== Comment Parsing and notification Functions ======================
 def extract_comment_mentions(comment_value):
-    try:
-        mentions = []
-        soup = BeautifulSoup(comment_value, "html.parser")
-        mentions_tags = soup.find_all("mention-component", attrs={"entity_name": "user_mention"})
-        for mention_tag in mentions_tags:
-            mentions.append(mention_tag["entity_identifier"])
-        return list(set(mentions))
-    except Exception:
-        return []
+    """逐个解析合法用户提及，异常 UUID 不影响其他通知。"""
+    return sorted(mentioned_user_ids(comment_value))
 
 
 def get_new_comment_mentions(new_value, old_value):
@@ -172,6 +157,7 @@ def create_mention_notification(project, notification_comment, issue, actor_id, 
         project=project,
         message=notification_comment,
         data={
+            **({"comment_id": str(activity["issue_comment"])} if activity.get("issue_comment") else {}),
             "issue": {
                 "id": str(issue_id),
                 "name": str(issue.name),
@@ -244,10 +230,15 @@ def notifications(
             # share the same notification boundary.
             project = Project.objects.get(pk=project_id)
             project_members = {UUID(row["member"]) for row in project_member_roster(project)}
+            source_issue = Issue.objects.filter(pk=issue_id, project=project).first()
 
             # Get new mentions from the newer instance
             new_mentions = get_new_mentions(requested_instance=requested_data, current_instance=current_instance)
-            new_mentions = list(set(new_mentions) & {str(member) for member in project_members})
+            new_mentions = (
+                [str(user.pk) for user in mention_receivers("issue", source_issue, new_mentions)]
+                if source_issue
+                else []
+            )
             removed_mention = get_removed_mentions(requested_instance=requested_data, current_instance=current_instance)
 
             comment_mentions = []
@@ -273,9 +264,11 @@ def notifications(
                         old_value=issue_comment_old_value,
                         new_value=issue_comment_new_value,
                     )
-                    valid_comment_mentions = [
-                        mention for mention in new_comment_mentions if UUID(mention) in project_members
-                    ]
+                    valid_comment_mentions = (
+                        [str(user.pk) for user in mention_receivers("issue", source_issue, new_comment_mentions)]
+                        if source_issue
+                        else []
+                    )
                     comment_mentions.extend(valid_comment_mentions)
                     for mention in valid_comment_mentions:
                         comment_mention_activities.setdefault(mention, []).append(issue_activity)

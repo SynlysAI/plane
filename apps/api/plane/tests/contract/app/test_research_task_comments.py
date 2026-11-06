@@ -50,6 +50,50 @@ def post_comment(env, task, client=None, **overrides):
     return (client or env["student_client"]).post(comments_url(env, task["id"]), payload, format="json")
 
 
+def test_direct_mention_without_subscribers_diff_retry_and_remention(env):
+    """无订阅者也接收提及，重试去重，普通编辑不重发，移除后重提再发。"""
+    from plane.db.models import Notification, NotificationEvent
+
+    task = _create(env)
+    mention = (
+        f'<mention-component entity_name="user_mention" entity_identifier="{env["advisor"].pk}"></mention-component>'
+    )
+    request_id = uuid4().hex
+    response = post_comment(env, task, comment_html=f"<p>请审阅{mention}{mention}</p>", request_id=request_id)
+    assert response.status_code == 201, response.data
+    rows = Notification.objects.filter(receiver=env["advisor"], sender="research:mentioned")
+    assert rows.count() == 1
+    assert NotificationEvent.objects.filter(category="research_mention", receiver=env["advisor"]).count() == 1
+    assert (
+        post_comment(env, task, comment_html=f"<p>请审阅{mention}{mention}</p>", request_id=request_id).status_code
+        == 200
+    )
+    assert rows.count() == 1
+    url = comments_url(env, task["id"]) + response.data["id"] + "/"
+    for html, count in [(f"<p>更新{mention}</p>", 1), ("<p>移除</p>", 1), (f"<p>再提及{mention}</p>", 2)]:
+        updated = env["student_client"].patch(url, {"comment_html": html}, format="json")
+        assert updated.status_code == 200, updated.data
+        assert rows.count() == count
+
+
+def test_mention_invalid_node_does_not_hide_valid_and_denied_member_rolls_back(env):
+    """坏节点不吞合法提及；无权成员使业务保存和通知一起回滚。"""
+    from plane.db.models import Notification
+
+    task = _create(env)
+    html = (
+        '<p>审阅<mention-component entity_name="user_mention" entity_identifier="bad"></mention-component>'
+        f'<mention-component entity_name="user_mention" entity_identifier="{env["advisor"].pk}">'
+        '</mention-component></p>'
+    )
+    response = post_comment(env, task, comment_html=html)
+    assert response.status_code == 201, response.data
+    assert Notification.objects.filter(receiver=env["advisor"], sender="research:mentioned").count() == 1
+    response = post_comment(env, task, comment_html=html.replace(str(env["advisor"].pk), str(uuid4())))
+    assert response.status_code == 400, response.data
+    assert ResearchTaskComment.objects.count() == 1
+
+
 def test_comments_survive_reload_without_overwriting_task_description(env):
     task = _create(env)
     response = post_comment(env, task)

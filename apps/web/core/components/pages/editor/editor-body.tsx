@@ -109,6 +109,7 @@ export const PageEditorBody = observer(function PageEditorBody(props: Props) {
   // use editor mention
   const { fetchMentions } = useEditorMention({
     enableAdvancedMentions: true,
+    source: { source_type: "page", source_id: pageId },
     searchEntity: handlers.fetchEntity,
   });
   // editor flaggings

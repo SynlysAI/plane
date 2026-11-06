@@ -7,6 +7,7 @@ import { DocumentEditor } from "@/components/editor/document/editor";
 import { PageToolbar } from "@/components/pages/editor/toolbar";
 import { templateSectionStats } from "@/components/research/common/template-section-stats";
 import { useResearch } from "@/hooks/store/use-research";
+import { WorkspaceService } from "@/services/workspace.service";
 
 export type ReportBodyRef = {
   focusComment: (threadId: string) => boolean;
@@ -40,6 +41,7 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
   ref
 ) {
   const research = useResearch();
+  const workspaceService = useMemo(() => new WorkspaceService(), []);
   const editor = useRef<EditorRefApi>(null);
   const imageInput = useRef<HTMLInputElement>(null);
   const markdownInput = useRef<HTMLInputElement>(null);
@@ -453,7 +455,13 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
             editorClassName="pl-0"
             editable={editable}
             disabledExtensions={["issue-embed"]}
-            searchMentionCallback={async () => ({})}
+            searchMentionCallback={(payload) =>
+              workspaceService.searchEntity(workspaceSlug, {
+                ...payload,
+                source_type: "research_report",
+                source_id: report.id,
+              })
+            }
             uploadFile={uploadImage}
             duplicateFile={async () => {
               throw new Error("请重新选择图片上传到此报告。");

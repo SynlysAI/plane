@@ -137,6 +137,7 @@ export function WorkspaceNotificationSettings({ workspaceSlug }: { workspaceSlug
               <div className="divide-y divide-subtle">
                 {group.items.map((item) => {
                   const policy = policies[item.key];
+                  const fixedMention = item.key === "mention" || item.key === "research_mention";
                   return (
                     <div
                       key={item.key}
@@ -151,11 +152,11 @@ export function WorkspaceNotificationSettings({ workspaceSlug }: { workspaceSlug
                           <input
                             type="checkbox"
                             name={`${item.key}-in-app`}
-                            checked={policy?.in_app_enabled ?? true}
-                            disabled={savingCategory === item.key}
+                            checked={fixedMention || (policy?.in_app_enabled ?? true)}
+                            disabled={fixedMention || savingCategory === item.key}
                             onChange={(event) => updatePolicy(item.key, "in_app_enabled", event.target.checked)}
                           />
-                          站内
+                          {fixedMention ? "站内（固定开启）" : "站内"}
                         </label>
                         {item.emailAvailable ? (
                           <label className="flex items-center gap-2">

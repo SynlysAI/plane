@@ -10,13 +10,12 @@ notification centre and email fan-out keep working (P0-RPT-12, P0-APR-06).
 """
 
 from django.utils import timezone
-from bs4 import BeautifulSoup
-from uuid import UUID
 
 from plane.db.models import Notification, NotificationEvent
 from plane.research.utils.acl import build_actor_context, check_access, direct_advisor_ids, org_unit_scope_ids
 from plane.research.utils.reports import report_resource
 from plane.utils.notification_outbox import persist_research_notification_batch
+from plane.utils.mentions import validate_new_mentions
 
 RESEARCH_REPORT_ENTITY = "research_report"
 RESEARCH_APPROVAL_ENTITY = "research_approval"
@@ -75,6 +74,7 @@ def _notify(
                     "period_key": report.period_key,
                     "report_type": report.report_type,
                     "status": report.status,
+                    **{key: message[key] for key in ("thread_id", "comment_id") if key in message},
                     **({"event_id": str(event_id)} if event_id else {}),
                 },
                 entity_identifier=report.id,
@@ -293,28 +293,7 @@ def notify_report_accepted(report, actor, route=None, event_id=None):
     ]
 
 
-def mentioned_user_ids(comment_html) -> set:
-    """Extract valid user mentions from sanitized report-comment HTML.
-
-    Args:
-        comment_html: Sanitized rich-text HTML submitted by a workspace member.
-
-    Returns:
-        A set of user IDs explicitly mentioned with ``entity_name=user_mention``.
-    """
-    identifiers = set()
-    for node in BeautifulSoup(comment_html or "", "html.parser").find_all("mention-component"):
-        if node.get("entity_name") != "user_mention":
-            continue
-        value = node.get("entity_identifier")
-        try:
-            identifiers.add(str(UUID(str(value))))
-        except (ValueError, TypeError):
-            continue
-    return identifiers
-
-
-def notify_report_comment(report, thread, comment, actor, *, action="created"):
+def notify_report_comment(report, thread, comment, actor, *, action="created", previous_html=None):
     """Notify only report-visible participants and users mentioned in a comment.
 
     Args:
@@ -331,8 +310,11 @@ def notify_report_comment(report, thread, comment, actor, *, action="created"):
 
     receiver_ids = {report.owner_id, thread.created_by_id}
     receiver_ids.update(thread.comments.exclude(actor_id=actor.id).values_list("actor_id", flat=True))
+    mentioned_ids = set()
     if action in {"created", "updated"}:
-        receiver_ids.update(mentioned_user_ids(comment.comment_html))
+        mentions = validate_new_mentions("research_report", report, comment.comment_html, previous_html)
+        mentioned_ids = {str(user.pk) for user in mentions}
+        receiver_ids.update(mentioned_ids)
     receiver_ids.discard(actor.id)
     users = User.objects.filter(id__in=receiver_ids, is_active=True)
     receivers = []
@@ -346,7 +328,6 @@ def notify_report_comment(report, thread, comment, actor, *, action="created"):
         "resolved": "批注已解决",
         "reopened": "批注重新开放",
     }
-    mentioned_ids = mentioned_user_ids(comment.comment_html) if action in {"created", "updated"} else set()
     return _notify(
         report,
         receivers,
@@ -363,4 +344,5 @@ def notify_report_comment(report, thread, comment, actor, *, action="created"):
         mentioned_ids=mentioned_ids,
         email_category=NotificationEvent.Category.RESEARCH_COMMENT,
         recipient_reason="comment_participant",
+        event_id=f"comment:{comment.pk}:{comment.updated_at.isoformat()}:{action}",
     )

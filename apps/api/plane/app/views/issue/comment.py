@@ -106,6 +106,7 @@ class IssueCommentViewSet(BaseViewSet):
                     serializer.save(edited_at=timezone.now())
                 else:
                     serializer.save()
+                current_instance = serializer.notification_previous(current_instance)
                 queue_issue_activity(
                     type="comment.activity.updated",
                     requested_data=requested_data,

@@ -67,6 +67,53 @@ def assert_rolled_back(env, report, original_body, counts):
     assert Notification.objects.count() == counts[1]
 
 
+def test_formal_body_mentions_compare_official_versions_and_draft_candidates(env):
+    """草稿不投递，发布时比较前一正式版本，移除后重新发布再通知。"""
+    from plane.tests.contract.app.test_content_mentions import mention
+
+    report = create(env)
+    html = f"<p>{mention(env['advisor'])}{mention(env['advisor'])}</p>"
+    workflow.save_report_body(
+        workspace=env["workspace"], actor=env["student"], report_id=report.pk, payload={"description_html": html}
+    )
+    candidates = env["student_client"].get(
+        f"/api/workspaces/{env['workspace'].slug}/entity-search/",
+        {
+            "source_type": "research_report",
+            "source_id": str(report.pk),
+            "count": 20,
+        },
+    )
+    assert candidates.status_code == 200, candidates.data
+    assert str(env["advisor"].pk) in {item["member__id"] for item in candidates.data["user_mention"]}
+    rows = Notification.objects.filter(
+        entity_identifier=report.pk, receiver=env["advisor"], sender="research:mentioned"
+    )
+    assert not rows.exists()
+    submit(env, report)
+    assert rows.count() == 1
+    for content, count in [(html + "<p>修改</p>", 1), ("<p>移除</p>", 1), (html, 2)]:
+        returned = env["advisor_client"].post(f"{env['url']}{report.pk}/return/", {"comment": "修订"}, format="json")
+        assert returned.status_code == 200, returned.data
+        submit(env, report, {"description_html": content})
+        assert rows.count() == count
+
+
+def test_invalid_formal_mention_rolls_back_body_snapshot_and_approval(env):
+    """提交中的无权接收人使正文、正式快照和审批路由一起回滚。"""
+    from plane.tests.contract.app.test_content_mentions import mention
+    from plane.tests.research_fixtures import make_user
+    from rest_framework.exceptions import ValidationError
+
+    report = create(env)
+    original = report.page.description_html
+    outsider = make_user(first_name="OtherWorkspace")
+    with pytest.raises(ValidationError):
+        submit(env, report, {"description_html": mention(outsider)})
+    assert_rolled_back(env, report, original, (ResearchAuditEvent.objects.count(), Notification.objects.count()))
+    assert not ResearchApprovalRoute.objects.filter(resource_id=report.pk).exists()
+
+
 def test_shared_create_save_submit_and_returned_resubmit_keep_official_versions(env):
     report = create(env)
     workflow.save_report_body(workspace=env["workspace"], actor=env["student"], report_id=report.pk, payload=body("v1"))

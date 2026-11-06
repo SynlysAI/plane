@@ -75,6 +75,15 @@ export type TSearchResponse = {
 };
 
 export type TSearchEntityRequestPayload = {
+  source_type?:
+    | "issue"
+    | "page"
+    | "project"
+    | "research_chain"
+    | "research_chain_task"
+    | "research_report"
+    | "stage_material";
+  source_id?: string;
   count: number;
   project_id?: string;
   query_type: TSearchEntities[];

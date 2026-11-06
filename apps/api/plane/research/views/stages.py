@@ -629,14 +629,13 @@ class ResearchStageMaterialDetailEndpoint(ResearchAPIView):
         if error:
             return error
         context = build_actor_context(request.user, workspace.id)
-        if not check_access(
-            request.user, "view", material_resource(material, with_reviewers=True), context=context
-        ):
+        if not check_access(request.user, "view", material_resource(material, with_reviewers=True), context=context):
             return research_not_found(ResearchErrorCode.MATERIAL_NOT_FOUND, "Material not found.")
         data = serialize_material(material, actor=request.user)
         data["stage"] = serialize_stage(material.stage_instance, actor=request.user, include_materials=False)
         return Response(data, status=status.HTTP_200_OK)
 
+    @transaction.atomic
     def patch(self, request, slug, material_id):
         workspace, error = self.get_workspace(section=MANAGING_SECTION)
         if error:
@@ -644,6 +643,7 @@ class ResearchStageMaterialDetailEndpoint(ResearchAPIView):
         material, error = self._load(request, workspace, material_id)
         if error:
             return error
+        material = StageMaterial.objects.select_for_update().get(pk=material.pk)
         if not material_is_editable(material):
             return research_conflict(
                 ResearchErrorCode.MATERIAL_READ_ONLY,
@@ -654,6 +654,7 @@ class ResearchStageMaterialDetailEndpoint(ResearchAPIView):
 
         page = material.page
         if page is not None:
+            page = Page.objects.select_for_update().get(pk=page.pk)
             if "title" in request.data:
                 page.name = str(request.data.get("title") or "")[:255]
             if "description_json" in request.data and request.data.get("description_json") is not None:
@@ -699,14 +700,14 @@ def can_edit_material(actor, workspace, material) -> bool:
 class ResearchStageMaterialSubmitEndpoint(ResearchAPIView):
     """``POST /api/research/workspaces/<slug>/materials/<material_id>/submit/``"""
 
+    @transaction.atomic
     def post(self, request, slug, material_id):
         workspace, error = self.get_workspace(section=MANAGING_SECTION)
         if error:
             return error
         material = (
-            StageMaterial.objects.filter(
-                stage_instance__workspace=workspace, pk=material_id, deleted_at__isnull=True
-            )
+            StageMaterial.objects.select_for_update(of=("self",))
+            .filter(stage_instance__workspace=workspace, pk=material_id, deleted_at__isnull=True)
             .select_related("page", "owner", "template", "stage_instance")
             .first()
         )

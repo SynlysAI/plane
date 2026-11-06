@@ -16,6 +16,7 @@ import { RichTextEditor } from "@/components/editor/rich-text";
 import { getCommentAttachmentLimitError } from "@/components/comments/comment-attachment-limits";
 import { taskImageDownloadSource } from "@/components/research/common/research-image";
 import { ResearchChainTaskService } from "@/services/research/chain-task.service";
+import { WorkspaceService } from "@/services/workspace.service";
 
 type Props = {
   task: TResearchChainNodeTask;
@@ -61,6 +62,7 @@ export function ResearchTaskDescription({
 }: Props) {
   const { t } = useTranslation();
   const service = useMemo(() => new ResearchChainTaskService(), []);
+  const workspaceService = useMemo(() => new WorkspaceService(), []);
   const editorRef = useRef<EditorRefApi>(null);
   const mountedRef = useRef(true);
   const editableRef = useRef(editable);
@@ -275,7 +277,13 @@ export function ResearchTaskDescription({
           workspaceSlug={workspaceSlug}
           disabledExtensions={["issue-embed"]}
           placeholder={() => t("research.chain_tasks.add_instruction")}
-          searchMentionCallback={async () => ({})}
+          searchMentionCallback={(payload) =>
+            workspaceService.searchEntity(workspaceSlug, {
+              ...payload,
+              source_type: "research_chain_task",
+              source_id: task.id,
+            })
+          }
           uploadFile={uploadImage}
           duplicateFile={async () => {
             throw new Error(t("research.chain_tasks.image_reupload_required"));

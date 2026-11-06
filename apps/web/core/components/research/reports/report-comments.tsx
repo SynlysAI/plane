@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router";
 import { v4 as uuid } from "uuid";
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import { Avatar } from "@makeplane/propel/components/avatar";
@@ -68,6 +69,7 @@ export function ResearchReportComments({
   collapsed,
   onCollapsedChange,
 }: Props) {
+  const { search, key: locationKey } = useLocation();
   const service = useMemo(() => new ResearchReportService(), []);
   const [threads, setThreads] = useState<TReportCommentThread[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,6 +80,28 @@ export function ResearchReportComments({
   const [replyThreadId, setReplyThreadId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
   const [refresh, setRefresh] = useState(0);
+  const focusedNotification = useRef<string | null>(null);
+
+  useEffect(() => {
+    const query = new URLSearchParams(search);
+    const threadId = query.get("thread");
+    const commentId = query.get("comment");
+    const targetKey = `${locationKey}:${report.id}:${threadId}:${commentId}`;
+    if (!threadId || focusedNotification.current === targetKey) return;
+    onActiveThreadIdChange(threadId);
+    onCollapsedChange(false);
+    if (filter !== "ALL") {
+      setFilter("ALL");
+      return;
+    }
+    if (loading || !threads.some((thread) => thread.id === threadId)) return;
+    const frame = requestAnimationFrame(() => {
+      const target = document.getElementById(commentId ? `report-comment-${commentId}` : `report-thread-${threadId}`);
+      target?.scrollIntoView({ block: "center" });
+      if (target) focusedNotification.current = targetKey;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [filter, loading, threads, search, locationKey, report.id, collapsed, onActiveThreadIdChange, onCollapsedChange]);
 
   const load = useCallback(() => {
     let active = true;
@@ -364,6 +388,7 @@ function ThreadCard({
 
   return (
     <article
+      id={`report-thread-${thread.id}`}
       ref={articleRef}
       data-thread-id={thread.id}
       className={`rounded-lg border p-3 ${active ? "border-accent-primary/60 bg-canvas" : "border-subtle bg-canvas/60"}`}
@@ -506,7 +531,7 @@ function CommentCard({
   };
 
   return (
-    <div className="flex gap-2">
+    <div id={`report-comment-${comment.id}`} className="flex scroll-mt-6 gap-2">
       <Avatar
         size="2xs"
         alt={comment.actor_detail.display_name}
@@ -543,7 +568,7 @@ function CommentCard({
         ) : (
           <LiteTextEditor
             key={comment.updated_at}
-            id={`report-comment-${comment.id}`}
+            id={`report-comment-editor-${comment.id}`}
             editable={false}
             workspaceId={workspaceId}
             workspaceSlug={workspaceSlug}

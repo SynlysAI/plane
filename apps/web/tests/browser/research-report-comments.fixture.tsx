@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
+import { BrowserRouter } from "react-router";
 import { AxiosHeaders } from "axios";
 import { TranslationProvider } from "@plane/i18n";
 import type { TPeriodicReport, TReportCommentThread } from "@plane/types";
@@ -97,11 +98,13 @@ const report = {
 } as TPeriodicReport;
 
 createRoot(document.getElementById("root")!).render(
-  <StoreProvider>
-    <TranslationProvider>
-      <ReportCommentsFixture />
-    </TranslationProvider>
-  </StoreProvider>
+  <BrowserRouter>
+    <StoreProvider>
+      <TranslationProvider>
+        <ReportCommentsFixture />
+      </TranslationProvider>
+    </StoreProvider>
+  </BrowserRouter>
 );
 
 /** Render the discussion panel with local state so collapse behavior stays inspectable. */

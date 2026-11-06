@@ -143,6 +143,7 @@ class ResearchTaskCommentDetailEndpoint(ResearchAPIView):
                     user=request.user,
                     comment=comment,
                 )
+            previous_html = comment.comment_html
             comment.comment_html = html
             comment.comment_stripped = strip_tags(html)
             comment.edited_at = timezone.now()
@@ -150,7 +151,7 @@ class ResearchTaskCommentDetailEndpoint(ResearchAPIView):
             if assets is not None:
                 sync_task_comment_attachments(comment, assets, task=comment.task, user=request.user, request=request)
             comment_audit(comment.task, comment, request, "update")
-            notify_task_comment(comment.task, request.user, "updated", comment.pk)
+            notify_task_comment(comment.task, request.user, "updated", comment.pk, previous_html=previous_html)
         return Response(serialize(comment, request))
 
     def delete(self, request, slug, chain_id, node_id, task_id, comment_id):

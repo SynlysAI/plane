@@ -8,7 +8,7 @@ from datetime import datetime
 from django.core.serializers.json import DjangoJSONEncoder
 
 # Django imports
-from django.db import connection
+from django.db import connection, transaction
 from django.db.models import (
     Exists,
     OuterRef,
@@ -55,6 +55,8 @@ from plane.utils.administrative_projects import user_can_manage_administrative_p
 # Local imports
 from ..base import BaseAPIView, BaseViewSet
 from plane.bgtasks.page_transaction_task import page_transaction
+from plane.utils.mention_notifications import notify_page_mentions
+from plane.utils.issue_mutations import enqueue_task_on_commit
 from plane.bgtasks.page_version_task import track_page_version
 from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.bgtasks.copy_s3_object import copy_s3_objects_of_description_and_assets
@@ -163,6 +165,7 @@ class PageViewSet(BaseViewSet):
             .distinct()
         )
 
+    @transaction.atomic
     def create(self, request, slug, project_id):
         serializer = PageSerializer(
             data=request.data,
@@ -176,9 +179,11 @@ class PageViewSet(BaseViewSet):
         )
 
         if serializer.is_valid():
-            serializer.save()
+            saved_page = serializer.save()
+            notify_page_mentions(saved_page, request.user)
             # capture the page transaction
-            page_transaction.delay(
+            enqueue_task_on_commit(
+                page_transaction,
                 new_description_html=request.data.get("description_html", "<p></p>"),
                 old_description_html=None,
                 page_id=serializer.data["id"],
@@ -188,9 +193,10 @@ class PageViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @transaction.atomic
     def partial_update(self, request, slug, project_id, page_id):
         try:
-            page = Page.objects.get(
+            page = Page.objects.select_for_update().get(
                 pk=page_id,
                 workspace__slug=slug,
                 projects__id=project_id,
@@ -229,10 +235,13 @@ class PageViewSet(BaseViewSet):
             serializer = PageDetailSerializer(page, data=request.data, partial=True)
             page_description = page.description_html
             if serializer.is_valid():
-                serializer.save()
+                saved_page = serializer.save()
+                if "description_html" in request.data:
+                    notify_page_mentions(saved_page, request.user, page_description)
                 # capture the page transaction
                 if request.data.get("description_html"):
-                    page_transaction.delay(
+                    enqueue_task_on_commit(
+                        page_transaction,
                         new_description_html=request.data.get("description_html", "<p></p>"),
                         old_description_html=page_description,
                         page_id=page_id,
@@ -616,8 +625,9 @@ class PagesDescriptionViewSet(BaseViewSet):
         response["Content-Disposition"] = 'attachment; filename="page_description.bin"'
         return response
 
+    @transaction.atomic
     def partial_update(self, request, slug, project_id, page_id):
-        page = Page.objects.get(
+        page = Page.objects.select_for_update().get(
             Q(owned_by=self.request.user) | Q(access=0),
             pk=page_id,
             workspace__slug=slug,
@@ -659,18 +669,22 @@ class PagesDescriptionViewSet(BaseViewSet):
         # Use serializer for validation and update
         serializer = PageBinaryUpdateSerializer(page, data=request.data, partial=True)
         if serializer.is_valid():
-            serializer.save()
+            saved_page = serializer.save()
+            if "description_html" in request.data:
+                notify_page_mentions(saved_page, request.user, old_description_html)
 
             # Capture the page transaction
             if request.data.get("description_html"):
-                page_transaction.delay(
+                enqueue_task_on_commit(
+                    page_transaction,
                     new_description_html=request.data.get("description_html", "<p></p>"),
                     old_description_html=old_description_html,
                     page_id=page_id,
                 )
 
             # Run background tasks
-            track_page_version.delay(
+            enqueue_task_on_commit(
+                track_page_version,
                 page_id=page_id,
                 existing_instance=existing_instance,
                 user_id=request.user.id,

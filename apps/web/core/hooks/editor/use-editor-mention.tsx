@@ -17,11 +17,12 @@ import { useAdditionalEditorMention } from "@/hooks/use-additional-editor-mentio
 
 type TArgs = {
   enableAdvancedMentions?: boolean;
+  source?: Pick<TSearchEntityRequestPayload, "source_type" | "source_id">;
   searchEntity: (payload: TSearchEntityRequestPayload) => Promise<TSearchResponse>;
 };
 
 export const useEditorMention = (args: TArgs) => {
-  const { enableAdvancedMentions = false, searchEntity } = args;
+  const { enableAdvancedMentions = false, searchEntity, source } = args;
   // additional mentions
   const { editorMentionTypes, updateAdditionalSections } = useAdditionalEditorMention({
     enableAdvancedMentions,
@@ -34,6 +35,7 @@ export const useEditorMention = (args: TArgs) => {
           count: 5,
           query_type: editorMentionTypes,
           query,
+          ...source,
         });
         const suggestionSections: TMentionSection[] = [];
         if (!res) {
@@ -73,7 +75,7 @@ export const useEditorMention = (args: TArgs) => {
         throw error;
       }
     },
-    [editorMentionTypes, searchEntity, updateAdditionalSections]
+    [editorMentionTypes, searchEntity, source, updateAdditionalSections]
   );
 
   return {

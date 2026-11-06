@@ -251,6 +251,7 @@ export const IssueDescriptionEditor = observer(function IssueDescriptionEditor(p
                   await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
                     ...payload,
                     project_id: projectId?.toString() ?? "",
+                    ...(issueId && !isDraft ? { source_type: "issue", source_id: issueId } : {}),
                   })
                 }
                 containerClassName="pt-3 min-h-[120px]"

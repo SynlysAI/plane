@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter, useNavigate } from "react-router";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TPeriodicReport, TReportCommentThread } from "@plane/types";
 
 const mocks = vi.hoisted(() => ({
@@ -131,12 +132,32 @@ const report = {
   latest_official_version: 1,
 } as TPeriodicReport;
 
+let navigate: ReturnType<typeof useNavigate>;
+const mountedComments: Array<{ root: ReturnType<typeof createRoot>; container: HTMLDivElement }> = [];
+
+afterEach(async () => {
+  const mounted = mountedComments.splice(0);
+  await act(async () => {
+    for (const { root } of mounted) root.unmount();
+  });
+  for (const { container } of mounted) container.remove();
+  vi.unstubAllGlobals();
+});
+
+/** 暴露真实路由的通知跳转，验证侧栏在同页连续定位。 */
+function NotificationRouter({ children }: { children: React.ReactNode }) {
+  navigate = useNavigate();
+  return children;
+}
+
 async function renderComments({
   focusResult = true,
   collapsed = false,
 }: { focusResult?: boolean; collapsed?: boolean } = {}) {
   const container = document.createElement("div");
+  document.body.append(container);
   const root = createRoot(container);
+  mountedComments.push({ root, container });
   const onFocusThread = vi.fn(() => focusResult);
   const onDraftConsumed = vi.fn();
   const onAnchorsChange = vi.fn();
@@ -144,25 +165,29 @@ async function renderComments({
   const onCollapsedChange = vi.fn();
   await act(async () => {
     root.render(
-      <div>
-        {/* eslint-disable-next-line @typescript-eslint/no-var-requires */}
-        {await import("@/components/research/reports/report-comments").then(({ ResearchReportComments }) => (
-          <ResearchReportComments
-            report={report}
-            workspaceSlug="lab"
-            workspaceId="workspace-1"
-            locale="zh-CN"
-            draftAnchor={anchor}
-            onDraftConsumed={onDraftConsumed}
-            onFocusThread={onFocusThread}
-            onAnchorsChange={onAnchorsChange}
-            activeThreadId={null}
-            onActiveThreadIdChange={onActiveThreadIdChange}
-            collapsed={collapsed}
-            onCollapsedChange={onCollapsedChange}
-          />
-        ))}
-      </div>
+      <MemoryRouter>
+        <NotificationRouter>
+          <div>
+            {/* eslint-disable-next-line @typescript-eslint/no-var-requires */}
+            {await import("@/components/research/reports/report-comments").then(({ ResearchReportComments }) => (
+              <ResearchReportComments
+                report={report}
+                workspaceSlug="lab"
+                workspaceId="workspace-1"
+                locale="zh-CN"
+                draftAnchor={anchor}
+                onDraftConsumed={onDraftConsumed}
+                onFocusThread={onFocusThread}
+                onAnchorsChange={onAnchorsChange}
+                activeThreadId={null}
+                onActiveThreadIdChange={onActiveThreadIdChange}
+                collapsed={collapsed}
+                onCollapsedChange={onCollapsedChange}
+              />
+            ))}
+          </div>
+        </NotificationRouter>
+      </MemoryRouter>
     );
   });
   return { container, onFocusThread, onDraftConsumed, onAnchorsChange, onActiveThreadIdChange, onCollapsedChange };
@@ -184,6 +209,35 @@ describe("ResearchReportComments", () => {
       can_comment: true,
       snapshot_version: 1,
     });
+  });
+
+  it("locates another comment in the same thread after a second notification", async () => {
+    const scroll = vi.fn();
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(callback, 0));
+    vi.stubGlobal("cancelAnimationFrame", (handle: number) => window.clearTimeout(handle));
+    mocks.getReportCommentThreads.mockResolvedValue({
+      results: [{ ...thread, comments: [comment, { ...comment, id: "comment-2" }] }],
+      can_comment: false,
+    });
+    const { container } = await renderComments();
+    for (const element of container.querySelectorAll('[id^="report-comment-"]')) {
+      Object.defineProperty(element, "scrollIntoView", { configurable: true, value: scroll });
+    }
+    await act(async () => {
+      await navigate("?thread=thread-1&comment=comment-1");
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(scroll.mock.instances.at(-1)).toBe(container.querySelector("#report-comment-comment-1"));
+    await act(async () => {
+      await navigate("?thread=thread-1&comment=comment-2");
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(scroll.mock.instances.at(-1)).toBe(container.querySelector("#report-comment-comment-2"));
+    vi.unstubAllGlobals();
   });
 
   it("loads threads, exposes anchors, and focuses the body from a quote", async () => {

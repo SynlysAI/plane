@@ -782,8 +782,9 @@ def create_task(*, workspace, chain, node, actor, payload, request=None):
                 metadata={"node": str(node.id), "status": task.status},
                 request=request,
             )
-            if assignee is not None:
-                notify_task_assigned(task, actor)
+            notify_task_updated(
+                task, actor, ["instruction"], previous_instruction="", assignment_changed=assignee is not None
+            )
         return task, True
     except IntegrityError:
         existing = _replay_task(workspace, chain, node, request_id, digest)
@@ -833,37 +834,13 @@ def update_task(*, task, actor, payload, request=None):
     next_due_at = task.due_at
     if "due_at" in payload:
         next_due_at = _parse_datetime(payload["due_at"], "due_at")
-    next_resource_type, next_resource_id = task.resource_type, task.resource_id
-    if "resource_type" in payload or "resource_id" in payload:
-        next_resource_type, next_resource_id = _resource_values(
-            {
-                "resource_type": payload.get("resource_type", task.resource_type),
-                "resource_id": payload.get("resource_id", task.resource_id),
-            }
-        )
-
-    assignee_changed = next_assignee is not None and next_assignee.id != task.assignee_id
-    changed_fields = sorted(
-        field
-        for field, current, next_value in (
-            ("title", task.title, next_title),
-            ("instruction", task.instruction, next_instruction),
-            ("due_at", task.due_at, next_due_at),
-            ("resource_type", task.resource_type, next_resource_type),
-            ("resource_id", task.resource_id, next_resource_id),
-        )
-        if current != next_value
-    )
-    if assignee_changed:
-        changed_fields.append("assignee")
-        changed_fields.sort()
-
     try:
         with transaction.atomic():
             locked_chain = ResearchChain.objects.select_for_update().get(pk=task.chain_id)
             locked_node = ResearchChainNode.objects.select_for_update().get(pk=task.node_id)
             _ensure_task_parent_writable(locked_chain, locked_node)
             locked_task = ResearchChainNodeTask.objects.select_for_update().get(pk=task.pk)
+            assignee_changed = "assignee" in payload and next_assignee.id != locked_task.assignee_id
             if not actor_can_manage_chain_tasks(locked_task.workspace, locked_chain, actor):
                 raise ChainTaskPermissionError("Only chain writers can update tasks.")
             if assignee_changed and not validate_assignable_user(locked_task.workspace, locked_chain, next_assignee.id):
@@ -874,6 +851,30 @@ def update_task(*, task, actor, payload, request=None):
             ):
                 raise ChainTaskStateError("Completed or cancelled tasks are read-only.")
             previous_assignee_id = locked_task.assignee_id
+            next_title = next_title if "title" in payload else locked_task.title
+            next_due_at = next_due_at if "due_at" in payload else locked_task.due_at
+            next_resource_type, next_resource_id = _resource_values(
+                {
+                    "resource_type": payload.get("resource_type", locked_task.resource_type),
+                    "resource_id": payload.get("resource_id", locked_task.resource_id),
+                }
+            )
+            previous_instruction = locked_task.instruction
+            if "instruction" not in payload:
+                next_instruction = previous_instruction
+            changed_fields = sorted(
+                field
+                for field, value in (
+                    ("title", next_title),
+                    ("instruction", next_instruction),
+                    ("due_at", next_due_at),
+                    ("resource_type", next_resource_type),
+                    ("resource_id", next_resource_id),
+                )
+                if getattr(locked_task, field) != value
+            )
+            if assignee_changed:
+                changed_fields.append("assignee")
             locked_task.title = next_title
             locked_task.instruction = next_instruction
             locked_task.due_at = next_due_at
@@ -915,8 +916,13 @@ def update_task(*, task, actor, payload, request=None):
                         {"task_id": str(locked_task.id), "assignee": str(locked_task.assignee_id)}
                     ),
                 )
-                notify_task_assigned(locked_task, actor)
-            notify_task_updated(locked_task, actor, changed_fields)
+            notify_task_updated(
+                locked_task,
+                actor,
+                changed_fields,
+                previous_instruction=previous_instruction,
+                assignment_changed=assignee_changed,
+            )
             return locked_task
     except IntegrityError as error:
         raise ChainTaskConflictError("The task could not be updated consistently.") from error

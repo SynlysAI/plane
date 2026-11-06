@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router";
 import { v4 as uuid } from "uuid";
 import { EditOutline, DeleteOutline, MoreHorizontalOutline, RefreshOutline } from "@makeplane/propel/icons";
 import { Avatar } from "@makeplane/propel/components/avatar";
@@ -15,6 +16,7 @@ import { LiteTextEditor } from "@/components/editor/lite-text";
 import { taskImageDownloadSource } from "@/components/research/common/research-image";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
 import { ResearchChainTaskService } from "@/services/research/chain-task.service";
+import { WorkspaceService } from "@/services/workspace.service";
 
 type Props = { task: TResearchChainNodeTask; workspaceSlug: string; locale: string; order: "asc" | "desc" };
 
@@ -25,6 +27,7 @@ function taskImageBase(task: TResearchChainNodeTask, workspaceSlug: string) {
 
 export function ResearchTaskComments({ task, workspaceSlug, locale, order }: Props) {
   const { t } = useTranslation();
+  const { search } = useLocation();
   const service = useMemo(() => new ResearchChainTaskService(), []);
   const [comments, setComments] = useState<TResearchTaskComment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +67,14 @@ export function ResearchTaskComments({ task, workspaceSlug, locale, order }: Pro
   }, [comments, order]);
   const update = (comment: TResearchTaskComment) =>
     setComments((current) => current.map((item) => (item.id === comment.id ? comment : item)));
+
+  useEffect(() => {
+    if (loading) return;
+    const commentId = new URLSearchParams(search).get("comment");
+    if (commentId && comments.some((comment) => comment.id === commentId)) {
+      document.getElementById(`task-comment-${commentId}`)?.scrollIntoView({ block: "center" });
+    }
+  }, [loading, comments, search, task.id]);
 
   return (
     <div className="mt-5" aria-label={t("research.chain_tasks.comments.title")}>
@@ -212,7 +223,7 @@ function TaskComment({
         ) : (
           <LiteTextEditor
             key={comment.updated_at}
-            id={`task-comment-${comment.id}`}
+            id={`task-comment-editor-${comment.id}`}
             editable={false}
             workspaceId={task.workspace}
             workspaceSlug={workspaceSlug}
@@ -319,6 +330,7 @@ function CommentEditor({
 }) {
   const { t } = useTranslation();
   const editor = useRef<EditorRefApi>(null);
+  const workspaceService = useMemo(() => new WorkspaceService(), []);
   const requestId = useRef(uuid());
   const busyRef = useRef(false);
   const [html, setHtml] = useState(initialHtml);
@@ -385,6 +397,13 @@ function CommentEditor({
         workspaceId={task.workspace}
         workspaceSlug={workspaceSlug}
         initialValue={html}
+        mentionSearch={(payload) =>
+          workspaceService.searchEntity(workspaceSlug, {
+            ...payload,
+            source_type: "research_chain_task",
+            source_id: task.id,
+          })
+        }
         value={null}
         placeholder={t("research.chain_tasks.comments.placeholder")}
         disabledExtensions={["issue-embed"]}

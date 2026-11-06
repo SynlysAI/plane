@@ -16,7 +16,7 @@ from celery import shared_task
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives, get_connection
 from django.db import transaction
-from django.db.models import Case, F, When
+from django.db.models import Case, F, When, Q
 from django.template.loader import render_to_string
 
 # Django imports
@@ -314,9 +314,9 @@ def _lease_and_enqueue_research_email_notifications():
     with transaction.atomic():
         _recover_expired_delivery_claims(
             NotificationEmailDelivery.objects.filter(
+                Q(event__entity_name__startswith="research_") | Q(event__entity_name__in=["page", "stage_material"]),
                 status=NotificationEmailDelivery.Status.PROCESSING,
                 source_log__isnull=True,
-                event__entity_name__startswith="research_",
                 lease_until__lte=now,
             ),
             now=now,
@@ -325,9 +325,9 @@ def _lease_and_enqueue_research_email_notifications():
             NotificationEmailDelivery.objects.select_for_update(skip_locked=True)
             .select_related("event")
             .filter(
+                Q(event__entity_name__startswith="research_") | Q(event__entity_name__in=["page", "stage_material"]),
                 status__in=(NotificationEmailDelivery.Status.PENDING, NotificationEmailDelivery.Status.RETRY),
                 source_log__isnull=True,
-                event__entity_name__startswith="research_",
                 available_at__lte=now,
             )
             .order_by("created_at")[:100]
@@ -823,8 +823,11 @@ def _send_email_notification(issue_id, notification_data, receiver_id, email_not
         )
         return False
 
+    from plane.utils.mentions import can_view_mention_source
+
     allowed_ids = {str(row["member"]) for row in project_member_roster(issue.project)}
-    if str(receiver.id) not in allowed_ids:
+    can_read_source = can_view_mention_source(receiver, "issue", issue)
+    if not can_read_source:
         _update_email_log_state(
             notification_ids,
             EmailNotificationLog.DeliveryStatus.SUPPRESSED,
@@ -847,6 +850,7 @@ def _send_email_notification(issue_id, notification_data, receiver_id, email_not
         },
     )
     eligible_logs = []
+    event_payloads = dict(delivery_query.values_list("source_log_id", "event__payload"))
     for row in logs:
         activity = (row.data or {}).get("issue_activity") or {}
         field = activity.get("field")
@@ -856,6 +860,26 @@ def _send_email_notification(issue_id, notification_data, receiver_id, email_not
             completed = Issue.objects.filter(pk=issue_id, state_id=state_id, state__group="completed").exists()
         issue_data = {"state_group": "completed" if completed else "in_progress"}
         category = issue_notification_category(activity, issue_data)
+        payload = event_payloads.get(row.pk) or {}
+        comment_id = payload.get("comment_id")
+        comment_exists = True
+        if comment_id:
+            from plane.db.models import IssueComment
+
+            try:
+                comment_exists = IssueComment.objects.filter(pk=uuid.UUID(str(comment_id)), issue_id=issue_id).exists()
+            except (ValueError, TypeError, AttributeError):
+                comment_exists = False
+        if not comment_exists or (
+            str(receiver.id) not in allowed_ids and category != NotificationEvent.Category.MENTION
+        ):
+            _update_email_log_state(
+                [row.pk],
+                EmailNotificationLog.DeliveryStatus.SUPPRESSED,
+                lease_token=lease_token,
+                error_code="source_access_revoked",
+            )
+            continue
         enabled = workspace_policies[category]
         if enabled and field == "mention":
             enabled = preference.mention
@@ -993,8 +1017,7 @@ def _send_email_notification(issue_id, notification_data, receiver_id, email_not
     )
     message = EmailMultiAlternatives(
         subject=(
-            f"行政工作项更新：{issue.project.identifier}-{issue.sequence_id} "
-            f"{remove_unwanted_characters(issue.name)}"
+            f"行政工作项更新：{issue.project.identifier}-{issue.sequence_id} {remove_unwanted_characters(issue.name)}"
         ),
         body=text_content,
         from_email=email_from,
@@ -1119,6 +1142,7 @@ def _research_preference_enabled(receiver_id, category):
     if preference is None:
         preference = UserNotificationPreference(user_id=receiver_id)
     field_by_category = {
+        NotificationEvent.Category.MENTION: "mention",
         NotificationEvent.Category.ASSIGNMENT: "assignment",
         NotificationEvent.Category.RESEARCH_ACTION: "property_change",
         NotificationEvent.Category.RESEARCH_PROPERTY_CHANGE: "research_property_change",
@@ -1142,6 +1166,8 @@ def _research_event_currently_authorized(event, receiver):
         ResearchChainStage,
         ResearchPaperReview,
         ResearchStageInstance,
+        Page,
+        StageMaterial,
         WorkspaceMember,
         Workspace,
     )
@@ -1160,6 +1186,23 @@ def _research_event_currently_authorized(event, receiver):
         return False
 
     payload = event.payload if isinstance(event.payload, dict) else {}
+    if payload.get("comment_id"):
+        from plane.db.models import PeriodicReportComment, ResearchTaskComment
+
+        model = ResearchTaskComment if event.entity_name == "research_chain_task" else PeriodicReportComment
+        parent = "task_id" if event.entity_name == "research_chain_task" else "thread__report_id"
+        try:
+            comment_id = uuid.UUID(str(payload["comment_id"]))
+        except (ValueError, TypeError, AttributeError):
+            return False
+        if (
+            event.entity_name in {"research_chain_task", "research_report"}
+            and not model.objects.filter(
+                pk=comment_id,
+                **{parent: event.entity_identifier},
+            ).exists()
+        ):
+            return False
     action = event.action
     resource = None
     allowed_by_assignment = False
@@ -1175,6 +1218,10 @@ def _research_event_currently_authorized(event, receiver):
         )
         if task is None:
             return False
+        if event.category == NotificationEvent.Category.RESEARCH_MENTION:
+            from plane.utils.mentions import can_view_mention_source
+
+            return can_view_mention_source(receiver, "research_chain_task", task)
         if action == "assigned" and task.assignee_id != receiver.id:
             return False
         if action == "completed" and task.status != "COMPLETED":
@@ -1184,6 +1231,8 @@ def _research_event_currently_authorized(event, receiver):
         if action == "cancelled" and task.status != "CANCELLED":
             return False
         allowed_by_assignment = receiver.id in {task.assignee_id, task.assigned_by_id}
+        if action in {"updated", "commented"} and event.recipient_reason in {"mentioned", "mention"}:
+            allowed_by_assignment = True
         if action in {"updated", "commented"} and not allowed_by_assignment:
             allowed_by_assignment = task.notification_subscribers.filter(
                 subscriber_id=receiver.id,
@@ -1233,6 +1282,27 @@ def _research_event_currently_authorized(event, receiver):
         if action in {"returned", "accepted"} and report.owner_id != receiver.id:
             return False
         resource = report_resource(report)
+    elif event.entity_name == "page":
+        page = Page.objects.filter(pk=event.entity_identifier, workspace_id=event.workspace_id).first()
+        if page is None:
+            return False
+        from plane.utils.mentions import can_view_mention_source
+
+        return can_view_mention_source(receiver, "page", page)
+    elif event.entity_name == "stage_material":
+        material = (
+            StageMaterial.objects.select_related("stage_instance__workspace", "stage_instance__project")
+            .filter(
+                pk=event.entity_identifier,
+                stage_instance__workspace_id=event.workspace_id,
+            )
+            .first()
+        )
+        if material is None:
+            return False
+        from plane.utils.mentions import can_view_mention_source
+
+        return can_view_mention_source(receiver, "stage_material", material)
     elif event.entity_name == "research_approval":
         request = (
             ApprovalRequest.objects.select_related("flow", "issue")
@@ -1595,23 +1665,15 @@ def send_research_notification_email(delivery_ids, lease_token):
     )
     issue_url = f"{base_url}{first_route}"
     task = (
-        ResearchChainNodeTask.objects.select_related(
-            "workspace", "chain", "chain__project", "node"
-        ).filter(pk=first_event.entity_identifier)
+        ResearchChainNodeTask.objects.select_related("workspace", "chain", "chain__project", "node")
+        .filter(pk=first_event.entity_identifier)
         .first()
     )
     assignment_transfer = {}
-    if (
-        task is not None
-        and any(
-            event.category == NotificationEvent.Category.ASSIGNMENT
-            and event.action == "assigned"
-            for event in events
-        )
+    if task is not None and any(
+        event.category == NotificationEvent.Category.ASSIGNMENT and event.action == "assigned" for event in events
     ):
-        assignment_transfer = _assignment_transfer_context(
-            "research_chain_task", task, receiver, base_url
-        )
+        assignment_transfer = _assignment_transfer_context("research_chain_task", task, receiver, base_url)
 
     change_rows = []
     actor_names = []

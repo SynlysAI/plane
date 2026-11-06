@@ -678,6 +678,7 @@ class IssueDetailAPIEndpoint(BaseAPIView):
                     # If the serializer is valid, save the issue and dispatch
                     # the update issue activity worker event.
                     serializer.save()
+                    current_instance = serializer.notification_previous(current_instance)
                     queue_issue_activity(
                         type="issue.activity.updated",
                         requested_data=requested_data,
@@ -829,6 +830,7 @@ class IssueDetailAPIEndpoint(BaseAPIView):
                 )
 
             serializer.save()
+            current_instance = serializer.notification_previous(current_instance)
             queue_issue_activity(
                 type="issue.activity.updated",
                 requested_data=requested_data,
@@ -1674,6 +1676,7 @@ class IssueCommentDetailAPIEndpoint(BaseAPIView):
         serializer = IssueCommentCreateSerializer(issue_comment, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
+            current_instance = serializer.notification_previous(current_instance)
             queue_issue_activity(
                 type="comment.activity.updated",
                 requested_data=requested_data,

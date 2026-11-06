@@ -18,6 +18,7 @@ from .user import UserLiteSerializer
 from .state import StateLiteSerializer
 from .project import ProjectLiteSerializer
 from .workspace import WorkspaceLiteSerializer
+from .mention import IssueMentionValidationMixin
 from plane.db.models import (
     User,
     Issue,
@@ -84,7 +85,7 @@ class IssueProjectLiteSerializer(BaseSerializer):
 
 ##TODO: Find a better way to write this serializer
 ## Find a better approach to save manytomany?
-class IssueCreateSerializer(BaseSerializer):
+class IssueCreateSerializer(IssueMentionValidationMixin, BaseSerializer):
     # ids
     state_id = serializers.PrimaryKeyRelatedField(
         source="state", queryset=State.all_state_objects.all(), required=False, allow_null=True
@@ -757,7 +758,7 @@ class IssueVoteSerializer(BaseSerializer):
         read_only_fields = fields
 
 
-class IssueCommentSerializer(BaseSerializer):
+class IssueCommentSerializer(IssueMentionValidationMixin, BaseSerializer):
     attachment_ids = serializers.ListField(
         child=serializers.UUIDField(),
         required=False,

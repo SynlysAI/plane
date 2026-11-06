@@ -10,7 +10,6 @@ from django.db import transaction
 from django.utils import timezone
 import pytest
 from rest_framework import status
-from django.db import transaction
 
 from plane.bgtasks.issue_activities_task import process_notification_generation_outbox
 from plane.db.models import (
@@ -35,6 +34,52 @@ from plane.db.models.project import ProjectNetwork
 from plane.utils.notification_outbox import persist_issue_notification_batch
 from plane.utils.issue_mutations import enqueue_task_on_commit, queue_issue_activity
 from plane.app.views.notification.base import renderable_inbox_notifications
+
+
+@pytest.mark.django_db
+def test_issue_serializers_use_persisted_mentions_for_stale_snapshots(project, create_user):
+    """并发旧实例必须从锁内正文差分，通知快照与权限校验保持一致。"""
+    from plane.app.serializers.issue import IssueCreateSerializer
+    from plane.tests.contract.app.test_content_mentions import mention
+
+    receiver = User.objects.create(email="mention-receiver@example.com", username="mention-receiver")
+    WorkspaceMember.objects.create(workspace=project.workspace, member=receiver, role=15)
+    ProjectMember.objects.create(project=project, member=receiver, role=15)
+    issue = Issue.objects.create(project=project, workspace=project.workspace, name="并发提及", created_by=create_user)
+    stale = Issue.objects.get(pk=issue.pk)
+    Issue.objects.filter(pk=issue.pk).update(description_html=mention(receiver))
+    serializer = IssueCreateSerializer(
+        stale,
+        data={"description_html": mention(receiver) + "<p>更新</p>"},
+        partial=True,
+        context={"project_id": project.pk, "workspace_id": project.workspace_id},
+    )
+    serializer.is_valid(raise_exception=True)
+    serializer.save()
+    assert json.loads(serializer.notification_previous({"description_html": ""}))["description_html"] == mention(
+        receiver
+    )
+
+
+@pytest.mark.django_db
+def test_issue_mentions_reject_inaccessible_receivers_and_rollback(project, create_user):
+    """原生保存入口拒绝跨工作区提及，正文与生成任务均回滚。"""
+    from plane.app.serializers.issue import IssueCreateSerializer
+    from plane.utils.issue_mutations import save_issue
+    from plane.tests.contract.app.test_content_mentions import mention
+    from rest_framework.exceptions import ValidationError
+
+    outsider = User.objects.create(email="other-workspace@example.com", username="other-workspace")
+    serializer = IssueCreateSerializer(
+        data={"name": "无权提及", "description_html": mention(outsider)},
+        context={"project_id": project.pk, "workspace_id": project.workspace_id, "default_assignee_id": None},
+    )
+    serializer.is_valid(raise_exception=True)
+    outbox_count = NotificationGenerationOutbox.objects.count()
+    with pytest.raises(ValidationError):
+        save_issue(serializer=serializer, project=project, actor=create_user)
+    assert not Issue.objects.filter(project=project, name="无权提及").exists()
+    assert NotificationGenerationOutbox.objects.count() == outbox_count
 
 
 @pytest.fixture
@@ -266,7 +311,9 @@ class TestIssueNotificationContract:
         assert set(notifications_for_issue.values_list("sender", flat=True)) == {"in_app:issue_activities:assigned"}
         assert not notifications_for_issue.filter(receiver=observer).exists()
 
-        email_logs = EmailNotificationLog.objects.filter(entity_identifier=issue.id, receiver__in=[assignee_user, second_assignee])
+        email_logs = EmailNotificationLog.objects.filter(
+            entity_identifier=issue.id, receiver__in=[assignee_user, second_assignee]
+        )
         assert set(email_logs.values_list("receiver_id", flat=True)) == {assignee_user.id, second_assignee.id}
         assert email_logs.filter(immediate=True).count() == 2
         assert NotificationEmailDelivery.objects.filter(source_log__in=email_logs).count() == 2
@@ -290,9 +337,7 @@ class TestIssueNotificationContract:
         assert outbox_row.payload["notification"] is True
 
     @pytest.mark.django_db
-    def test_external_id_upsert_uses_the_durable_notification_outbox(
-        self, api_key_client, workspace, project
-    ):
+    def test_external_id_upsert_uses_the_durable_notification_outbox(self, api_key_client, workspace, project):
         """Both branches of the legacy REST upsert persist their activity request."""
         url = f"/api/v1/workspaces/{workspace.slug}/projects/{project.id}/issues/{uuid4()}/"
         data = {"name": "Imported Issue", "external_id": "source-42", "external_source": "integration"}

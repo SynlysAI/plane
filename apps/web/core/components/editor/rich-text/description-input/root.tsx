@@ -270,6 +270,7 @@ export const DescriptionInput = observer(function DescriptionInput(props: Props)
               await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
                 ...payload,
                 project_id: projectId,
+                ...(fileAssetType === "ISSUE_DESCRIPTION" ? { source_type: "issue", source_id: entityId } : {}),
               })
             }
             containerClassName={containerClassName}

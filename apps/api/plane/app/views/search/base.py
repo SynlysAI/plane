@@ -377,8 +377,32 @@ class SearchEndpoint(BaseAPIView):
         query = request.query_params.get("query", False)
         query_types = request.query_params.get("query_type", "user_mention").split(",")
         query_types = [qt.strip() for qt in query_types]
-        count = int(request.query_params.get("count", 5))
+        try:
+            count = min(max(int(request.query_params.get("count", 5)), 1), 20)
+        except (TypeError, ValueError):
+            return Response({"count": "候选人数必须为整数。"}, status=status.HTTP_400_BAD_REQUEST)
         project_id = request.query_params.get("project_id", None)
+
+        from plane.utils.mentions import mention_candidates, resolve_mention_source
+
+        source_type = request.query_params.get("source_type")
+        source_id = request.query_params.get("source_id")
+        if not source_type and request.query_params.get("issue_id"):
+            source_type, source_id = "issue", request.query_params["issue_id"]
+        if not source_type and project_id:
+            source_type, source_id = "project", project_id
+        mention_source = resolve_mention_source(slug, source_type, source_id, request.user) if source_type else None
+        if mention_source and query_types == ["user_mention"]:
+            return Response(
+                {
+                    "user_mention": mention_candidates(
+                        *mention_source,
+                        query=query or "",
+                        count=min(max(count, 1), 20),
+                        actor=request.user,
+                    )
+                }
+            )
 
         visible_projects = restrict_administrative_project_visibility(
             Project.objects.filter(workspace__slug=slug), request.user, slug
@@ -398,6 +422,14 @@ class SearchEndpoint(BaseAPIView):
         if project_id:
             for query_type in query_types:
                 if query_type == "user_mention":
+                    if mention_source:
+                        response_data["user_mention"] = mention_candidates(
+                            *mention_source,
+                            query=query or "",
+                            count=min(max(count, 1), 20),
+                            actor=request.user,
+                        )
+                        continue
                     fields = [
                         "member__first_name",
                         "member__last_name",
@@ -616,6 +648,14 @@ class SearchEndpoint(BaseAPIView):
         else:
             for query_type in query_types:
                 if query_type == "user_mention":
+                    if mention_source:
+                        response_data["user_mention"] = mention_candidates(
+                            *mention_source,
+                            query=query or "",
+                            count=count,
+                            actor=request.user,
+                        )
+                        continue
                     fields = [
                         "member__first_name",
                         "member__last_name",

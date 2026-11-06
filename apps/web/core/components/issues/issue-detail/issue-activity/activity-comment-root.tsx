@@ -4,6 +4,8 @@
  * See the LICENSE file for details.
  */
 
+import { useEffect } from "react";
+import { useLocation } from "react-router";
 import { observer } from "mobx-react";
 // plane imports
 import type { E_SORT_ORDER, TActivityFilters, EActivityFilterType } from "@plane/constants";
@@ -48,12 +50,23 @@ export const IssueActivityCommentRoot = observer(function IssueActivityCommentRo
   } = useIssueDetail();
   // derived values
   const activityAndComments = getActivityAndCommentsByIssueId(issueId, sortOrder);
+  const { hash } = useLocation();
+  const focusedCommentId = hash.startsWith("#comment-") ? hash.slice("#comment-".length) : "";
+  useEffect(() => {
+    if (!focusedCommentId || !activityAndComments) return;
+    const frame = requestAnimationFrame(() =>
+      document.getElementById(`comment-${focusedCommentId}`)?.scrollIntoView({ block: "center" })
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [activityAndComments, focusedCommentId]);
 
   if (!activityAndComments) return <IssueActivityLoader />;
 
   if (activityAndComments.length <= 0) return null;
 
-  const filteredActivityAndComments = filterActivityOnSelectedFilters(activityAndComments, selectedFilters);
+  const filteredActivityAndComments = activityAndComments.filter(
+    (item) => item.id === focusedCommentId || filterActivityOnSelectedFilters([item], selectedFilters).length > 0
+  );
 
   return (
     <div>

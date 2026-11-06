@@ -420,6 +420,7 @@ def _notification_item(notification, issue=None):
     """
     data = notification.data or {}
     action_summary = notification.message_stripped
+    message = notification.message if isinstance(notification.message, dict) else {}
     if issue is not None:
         action_summary = action_summary or notification.title
     work_item_preview = None
@@ -443,11 +444,11 @@ def _notification_item(notification, issue=None):
         "title": issue.name if issue is not None else notification.title,
         "summary": action_summary,
         "actor": _actor(notification.triggered_by),
-        "action": data.get("action") or (notification.message or {}).get("action"),
+        "action": data.get("action") or message.get("action"),
         "route": _notification_route(notification, issue=issue),
         "due_at": None,
         "urgency": None,
-        "status": (notification.message or {}).get("status"),
+        "status": message.get("status"),
         "next_action": None,
         "created_at": _iso(notification.created_at),
         "updated_at": _iso(notification.updated_at),

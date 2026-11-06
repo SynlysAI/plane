@@ -1,6 +1,6 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { MemoryRouter } from "react-router";
+import { BrowserRouter } from "react-router";
 import { setLanguage, TranslationProvider } from "@plane/i18n";
 import type { TResearchChainNodeTask } from "@plane/types";
 import { ResearchTaskComments } from "@/components/research/chains/research-task-comments";
@@ -17,6 +17,13 @@ const LIMITS = {
 };
 
 store.workspaceRoot.workspaces.workspace = { id: "workspace", slug: "lab", name: "公共科研工作区" } as never;
+store.memberRoot.memberMap["61dfc5bd-3176-48f8-ab6a-bff378181a10"] = {
+  id: "61dfc5bd-3176-48f8-ab6a-bff378181a10",
+  display_name: "方奕凯",
+  first_name: "奕凯",
+  last_name: "方",
+  avatar_url: null,
+} as never;
 
 const task = {
   schema_version: "research-node-task.v1",
@@ -85,11 +92,11 @@ function Fixture() {
 
 void setLanguage("zh-CN");
 createRoot(document.getElementById("root")!).render(
-  <MemoryRouter>
+  <BrowserRouter>
     <TranslationProvider>
       <StoreProvider store={store}>
         <Fixture />
       </StoreProvider>
     </TranslationProvider>
-  </MemoryRouter>
+  </BrowserRouter>
 );

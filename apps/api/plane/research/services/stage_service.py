@@ -245,8 +245,10 @@ def _sync_project_stage(instance):
     return profile
 
 
+@transaction.atomic
 def submit_stage(instance, actor, request=None):
     """``IN_PROGRESS -> SUBMITTED``; blocking gate items reject with 422 (P1-STG-06)."""
+    instance = ResearchStageInstance.objects.select_for_update().get(pk=instance.pk)
     require_transition(instance, STATUS.SUBMITTED)
     gate = evaluate_stage_gate(instance, SUBMIT_PHASE)
     if gate["blockers"]:
@@ -275,13 +277,15 @@ def submit_stage(instance, actor, request=None):
         instance.submitted_at = now
         instance.attempt_count = (instance.attempt_count or 0) + 1
         instance.gate_result = ResearchStageInstance.GateResult.PASS
-        instance.save(
-            update_fields=["status", "submitted_at", "attempt_count", "gate_result", "updated_at"]
+        instance.save(update_fields=["status", "submitted_at", "attempt_count", "gate_result", "updated_at"])
+        materials_to_submit = list(
+            StageMaterial.objects.select_for_update()
+            .filter(
+                stage_instance=instance,
+                deleted_at__isnull=True,
+            )
+            .exclude(status=StageMaterial.Status.SUBMITTED)
         )
-        materials_to_submit = list(StageMaterial.objects.select_for_update().filter(
-            stage_instance=instance,
-            deleted_at__isnull=True,
-        ).exclude(status=StageMaterial.Status.SUBMITTED))
         for material in materials_to_submit:
             material.status = StageMaterial.Status.SUBMITTED
             material.submitted_at = now
@@ -529,8 +533,15 @@ def diff_against_previous(material, snapshot):
     return {"changed": sorted(changed), "previous_version": previous.version_no}
 
 
+@transaction.atomic
 def snapshot_material(material, actor, *, change_source, reason=""):
     """Append a material version and bump the material's version counter."""
+    StageMaterial.objects.select_for_update().get(pk=material.pk)
+    material.refresh_from_db()
+    if material.page_id:
+        from plane.db.models import Page
+
+        material.page = Page.objects.select_for_update().get(pk=material.page_id)
     snapshot = material_snapshot(material)
     diff = diff_against_previous(material, snapshot)
     version_no = (material.last_version_no or 0) + 1
@@ -545,4 +556,27 @@ def snapshot_material(material, actor, *, change_source, reason=""):
     )
     material.last_version_no = version_no
     material.save(update_fields=["last_version_no", "updated_at"])
+    if material.status == StageMaterial.Status.SUBMITTED:
+        from plane.utils.mention_notifications import notify_content_mentions
+
+        previous = next(
+            (
+                row
+                for row in material.versions.exclude(pk=version.pk).order_by("-version_no")
+                if row.snapshot.get("status") == StageMaterial.Status.SUBMITTED
+            ),
+            None,
+        )
+        stage = material.stage_instance
+        notify_content_mentions(
+            kind="stage_material",
+            source=material,
+            actor=actor,
+            html=snapshot.get("description_html"),
+            previous_html=previous.snapshot.get("description_html") if previous else "",
+            revision=f"material-body:{version.pk}",
+            project=stage.project,
+            route=f"/research/projects/{stage.project_id}/stages/{stage.stage.lower()}/materials/{material.pk}",
+            data={"material_id": str(material.pk), "version_id": str(version.pk)},
+        )
     return version

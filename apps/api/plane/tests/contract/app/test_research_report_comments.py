@@ -242,6 +242,32 @@ def test_visible_mention_from_comment_api_creates_mention_notification(env):
     assert notification.message["comment_id"] == created.json()["comments"][0]["id"]
 
 
+def test_comment_mention_edit_diff_and_separate_comments(env):
+    """批注编辑只通知新增成员，不同评论和移除再提及分别生成通知。"""
+    from plane.tests.contract.app.test_content_mentions import mention
+    from plane.app.views.notification.base import renderable_inbox_notifications
+
+    report = make_report(env)
+    owner = env["workspace"].owner
+    html = f"<p>{mention(owner)}{mention(owner)}</p>"
+    created = create_thread(env, report, comment_html=html)
+    assert created.status_code == 201, created.data
+    comment = created.json()["comments"][0]
+    url = f'/api/research/workspaces/{env["workspace"].slug}/reports/{report["id"]}/comments/{comment["id"]}/'
+    rows = Notification.objects.filter(entity_identifier=report["id"], receiver=owner, sender="research:mentioned")
+    assert rows.count() == 1
+    assert f'comment={comment["id"]}' in rows.get().data["route"]
+    for value, count in [(html + "<p>文字编辑</p>", 1), ("<p>移除</p>", 1), (html, 2)]:
+        response = env["advisor_client"].patch(url, {"comment_html": value}, format="json")
+        assert response.status_code == 200, response.data
+        assert rows.count() == count
+    assert create_thread(env, report, comment_html=html).status_code == 201
+    assert rows.count() == 3
+    PeriodicReportComment.objects.get(pk=comment["id"]).delete()
+    visible = renderable_inbox_notifications(env["workspace"].slug, owner.pk)
+    assert visible.filter(pk__in=rows).count() == 1
+
+
 def test_comment_request_id_is_idempotent(env):
     report = make_report(env)
     request_id = uuid4().hex

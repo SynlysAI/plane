@@ -524,7 +524,26 @@ def submit_report(*, workspace, actor, report_id, payload, request=None):
         request=request,
     )
     report._workflow_approval_route = route
-    report._workflow_notifications = notify_report_submitted(
-        report, actor, route=route, event_id=review_log.pk
+    from plane.utils.mention_notifications import notify_content_mentions
+
+    previous_snapshot = (
+        PeriodicReportSnapshot.objects.filter(
+            report=report,
+            version_no__lt=snapshot.version_no,
+        )
+        .order_by("-version_no")
+        .first()
     )
+    notify_content_mentions(
+        kind="research_report",
+        source=report,
+        actor=actor,
+        html=snapshot.description_html,
+        previous_html=previous_snapshot.description_html if previous_snapshot else "",
+        revision=f"report-body:{snapshot.pk}",
+        project=report.project,
+        route=f"/research/reports/{report.pk}",
+        data={"report_id": str(report.pk), "snapshot_id": str(snapshot.pk)},
+    )
+    report._workflow_notifications = notify_report_submitted(report, actor, route=route, event_id=review_log.pk)
     return report

@@ -21,9 +21,11 @@ import { getResearchErrorKey } from "@/components/research/common/error-messages
 import { ResearchDetailHeader, ResearchDetailSurface } from "@/components/research/common/research-data-surface";
 import { ExternalReferenceCard } from "@/components/research/integrations/external-reference-card";
 import { ExternalReferencePicker } from "@/components/research/integrations/external-reference-picker";
+import { DocumentEditor } from "@/components/editor/document/editor";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 import { useUser } from "@/hooks/store/user";
+import { useWorkspace } from "@/hooks/store/use-workspace";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 type Props = {
@@ -47,6 +49,7 @@ export const StageMaterialDetail = observer(function StageMaterialDetail({
   const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const { data: currentUser } = useUser();
+  const { getWorkspaceBySlug } = useWorkspace();
   const material = research.stageMaterials[materialId];
   const versions = research.materialVersions[materialId] ?? [];
   const linkedReferences = research
@@ -105,12 +108,14 @@ export const StageMaterialDetail = observer(function StageMaterialDetail({
         hint={t("research.stages.materials.stage_hint", { stage: stageCode })}
         actions={
           <>
-            <Link
-              className="text-12 text-accent-primary hover:underline"
-              href={`/${workspaceSlug}/projects/${projectId}/pages/${material.page}`}
-            >
-              {t("research.stages.materials.open_editor")}
-            </Link>
+            {material.owner === currentUser?.id && (
+              <Link
+                className="text-12 text-accent-primary hover:underline"
+                href={`/${workspaceSlug}/projects/${projectId}/pages/${material.page}`}
+              >
+                {t("research.stages.materials.open_editor")}
+              </Link>
+            )}
             {material.can_edit && (
               <Button
                 size="sm"
@@ -124,6 +129,23 @@ export const StageMaterialDetail = observer(function StageMaterialDetail({
           </>
         }
       />
+
+      {material.page_detail && (
+        <section className="border-b border-subtle pb-5">
+          <h2 className="mb-3 text-14 font-medium text-primary">{material.page_detail.name}</h2>
+          <DocumentEditor
+            key={`${material.id}:${material.last_version_no}`}
+            id={`material-body-${material.id}`}
+            editable={false}
+            value={material.page_detail.description_html || "<p></p>"}
+            workspaceSlug={workspaceSlug}
+            workspaceId={getWorkspaceBySlug(workspaceSlug)?.id ?? ""}
+            projectId={projectId}
+            containerClassName="border-none !p-0"
+            editorClassName="pl-0"
+          />
+        </section>
+      )}
 
       {material.template_detail?.sections_json?.sections?.length ? (
         <ResearchDetailSurface

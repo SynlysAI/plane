@@ -134,6 +134,7 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
           ...payload,
           project_id: projectId,
           issue_id,
+          ...(issue_id ? { source_type: "issue", source_id: issue_id } : {}),
         })),
   });
   // editor config

@@ -6,6 +6,7 @@
 from django.db import transaction
 from django.db.models import Count, Exists, OuterRef, Q, Case, When, BooleanField
 from django.utils import timezone
+from uuid import UUID
 
 # Third party imports
 from rest_framework import status
@@ -43,6 +44,11 @@ from plane.db.models import (
     Workspace,
     WorkspaceNotificationPolicy,
     WorkspaceMember,
+    Page,
+    StageMaterial,
+    ResearchTaskComment,
+    PeriodicReportComment,
+    IssueComment,
 )
 from plane.utils.paginator import BasePaginator
 from plane.utils.order_queryset import NOTIFICATION_ORDER_BY_ALLOWLIST, sanitize_order_by
@@ -261,6 +267,21 @@ def _visible_research_notifications(*, workspace_slug, receiver, visible_project
     return visible
 
 
+def _valid_notification_uuid(value):
+    """安全校验旧通知快照中的评论 ID。
+
+    Args:
+        value: 历史通知中不保证有效的评论标识。
+
+    Returns:
+        标识可解析为 UUID 时为 True。
+    """
+    try:
+        return bool(UUID(str(value)))
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
 def renderable_inbox_notifications(workspace_slug, receiver_id):
     """Return renderable work item, research, and system notifications.
 
@@ -379,6 +400,82 @@ def renderable_inbox_notifications(workspace_slug, receiver_id):
         receiver=receiver,
         visible_project_ids=visible_project_ids,
     )
+    from plane.utils.mentions import can_view_mention_source
+
+    content_filter = Q(pk__in=[])
+    content_rows = Notification.objects.filter(
+        workspace__slug=workspace_slug,
+        receiver_id=receiver_id,
+        entity_name__in=["page", "stage_material"],
+    )
+    for kind, model, related in (
+        ("page", Page, ("workspace",)),
+        ("stage_material", StageMaterial, ("stage_instance__workspace", "stage_instance__project", "page")),
+    ):
+        identifiers = content_rows.filter(entity_name=kind).values_list("entity_identifier", flat=True).distinct()
+        allowed = [
+            source.pk
+            for source in model.objects.filter(pk__in=identifiers, deleted_at__isnull=True).select_related(*related)
+            if receiver and can_view_mention_source(receiver, kind, source)
+        ]
+        content_filter |= Q(entity_name=kind, entity_identifier__in=allowed)
+
+    hidden_mentions = Q(pk__in=[])
+    mention_rows = Notification.objects.filter(
+        workspace__slug=workspace_slug,
+        receiver_id=receiver_id,
+        sender__icontains="mentioned",
+    )
+    for kind, model in (
+        ("issue", Issue),
+        ("research_chain_task", ResearchChainNodeTask),
+        ("research_report", PeriodicReport),
+    ):
+        identifiers = set(mention_rows.filter(entity_name=kind).values_list("entity_identifier", flat=True))
+        if not identifiers:
+            continue
+        allowed = {
+            source.pk
+            for source in model.objects.filter(pk__in=identifiers)
+            if receiver and can_view_mention_source(receiver, kind, source)
+        }
+        hidden_mentions |= Q(
+            entity_name=kind, sender__icontains="mentioned", entity_identifier__in=identifiers - allowed
+        )
+
+    # 通知仍可读的前提是被定位的评论仍存在，且确实属于通知对应的源资源。
+    hidden_comments = []
+    comment_rows = list(
+        Notification.objects.filter(
+            workspace__slug=workspace_slug,
+            receiver_id=receiver_id,
+            data__has_key="comment_id",
+        ).values("id", "entity_name", "entity_identifier", "data")
+    )
+    pairs = {}
+    for kind, model, parent in (
+        ("research_chain_task", ResearchTaskComment, "task_id"),
+        ("research_report", PeriodicReportComment, "thread__report_id"),
+        ("issue", IssueComment, "issue_id"),
+    ):
+        pairs[kind] = {
+            (str(pk), str(resource))
+            for pk, resource in model.objects.filter(
+                pk__in=[
+                    row["data"]["comment_id"]
+                    for row in comment_rows
+                    if row["entity_name"] == kind and _valid_notification_uuid(row["data"].get("comment_id"))
+                ],
+            ).values_list("pk", parent)
+        }
+    for row in comment_rows:
+        comment_id = row["data"].get("comment_id")
+        if (
+            comment_id
+            and row["entity_name"] in pairs
+            and (str(comment_id), str(row["entity_identifier"])) not in pairs[row["entity_name"]]
+        ):
+            hidden_comments.append(row["id"])
 
     renderable_issue = (
         Q(project__isnull=False)
@@ -410,7 +507,9 @@ def renderable_inbox_notifications(workspace_slug, receiver_id):
             workspace__slug=workspace_slug,
             receiver_id=receiver_id,
         )
-        .filter(renderable_issue | renderable_announcement | renderable_research)
+        .filter(renderable_issue | renderable_announcement | renderable_research | content_filter)
+        .exclude(hidden_mentions)
+        .exclude(pk__in=hidden_comments)
         .annotate(is_inbox_issue=Exists(intake_issue))
         .annotate(is_intake_issue=Exists(intake_issue))
         .annotate(
@@ -421,7 +520,7 @@ def renderable_inbox_notifications(workspace_slug, receiver_id):
             )
         )
         .annotate(is_renderable_issue=Exists(linked_issue))
-        .filter(Q(is_renderable_issue=True) | renderable_announcement | renderable_research)
+        .filter(Q(is_renderable_issue=True) | renderable_announcement | renderable_research | content_filter)
         .select_related("workspace", "project", "triggered_by", "receiver", "announcement", "announcement__workspace")
     )
 
@@ -823,6 +922,8 @@ class WorkspaceNotificationPolicyEndpoint(BaseAPIView):
             if category not in self.POLICY_CATEGORIES or category in seen_categories:
                 return Response({"category": "通知类型无效或重复。"}, status=status.HTTP_400_BAD_REQUEST)
             seen_categories.add(category)
+            if category in {"mention", "research_mention"} and item.get("in_app_enabled") is False:
+                return Response({"in_app_enabled": "成员提及的站内通知固定开启。"}, status=status.HTTP_400_BAD_REQUEST)
             values = {"category": category}
             for field in ("in_app_enabled", "email_enabled"):
                 if field in item:
@@ -888,7 +989,9 @@ class WorkspaceNotificationPolicyEndpoint(BaseAPIView):
             "policies": [
                 {
                     "category": category,
-                    "in_app_enabled": policies[category].in_app_enabled if category in policies else True,
+                    "in_app_enabled": True
+                    if category in {"mention", "research_mention"}
+                    else (policies[category].in_app_enabled if category in policies else True),
                     "email_enabled": policies[category].email_enabled if category in policies else True,
                 }
                 for category in WorkspaceNotificationPolicy.Category.values

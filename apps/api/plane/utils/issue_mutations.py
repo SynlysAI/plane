@@ -190,6 +190,8 @@ def save_issue(*, serializer, project, actor, request=None, previous=None, skip_
         raise PermissionDenied("You do not have permission to change this work item.")
     with impersonate(actor):
         issue = serializer.save()
+    if not creating:
+        previous = serializer.notification_previous(previous)
     if not skip_effects:
         data = dict(serializer.initial_data)
         for field in ("name", "description_html"):

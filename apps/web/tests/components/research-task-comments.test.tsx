@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
+import { MemoryRouter, useNavigate } from "react-router";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import type { TResearchChainNodeTask, TResearchTaskComment } from "@plane/types";
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
@@ -132,6 +133,13 @@ const comment: TResearchTaskComment = {
 };
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
+let navigate: ReturnType<typeof useNavigate>;
+
+/** 提供与正式页面一致的路由上下文，并允许验证同页通知跳转。 */
+function RoutedComments({ nextTask }: { nextTask: TResearchChainNodeTask }) {
+  navigate = useNavigate();
+  return <ResearchTaskComments task={nextTask} workspaceSlug="lab" locale="zh-CN" order="asc" />;
+}
 beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
@@ -153,9 +161,26 @@ afterEach(async () => {
 });
 async function renderTask(nextTask = task) {
   await act(async () =>
-    root.render(<ResearchTaskComments task={nextTask} workspaceSlug="lab" locale="zh-CN" order="asc" />)
+    root.render(
+      <MemoryRouter>
+        <RoutedComments nextTask={nextTask} />
+      </MemoryRouter>
+    )
   );
 }
+
+it("locates each comment when notifications navigate within the same task", async () => {
+  const scroll = vi.fn();
+  mocks.getTaskComments.mockResolvedValue({ results: [comment, { ...comment, id: "comment-2" }], can_comment: false });
+  await renderTask();
+  for (const element of container.querySelectorAll("article")) {
+    Object.defineProperty(element, "scrollIntoView", { configurable: true, value: scroll });
+  }
+  await act(async () => navigate("?comment=comment-1"));
+  expect(scroll.mock.instances.at(-1)).toBe(container.querySelector("#task-comment-comment-1"));
+  await act(async () => navigate("?comment=comment-2"));
+  expect(scroll.mock.instances.at(-1)).toBe(container.querySelector("#task-comment-comment-2"));
+});
 async function click(text: string) {
   await act(async () => {
     const element = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === text);

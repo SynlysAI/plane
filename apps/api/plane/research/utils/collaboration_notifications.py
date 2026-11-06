@@ -11,12 +11,13 @@ from django.utils import timezone
 from plane.db.models import Notification, NotificationEvent, ResearchTaskSubscriber, User
 from plane.research.utils.acl import direct_advisor_ids
 from plane.utils.notification_outbox import persist_research_notification_batch
+from plane.utils.mentions import validate_new_mentions
 
 RESEARCH_CHAIN_TASK_ENTITY = "research_chain_task"
 RESEARCH_PAPER_REVIEW_ENTITY = "research_paper_review"
 
 
-def _notify(task, receivers, *, actor, action, title, extra=None, include_subscribers=True):
+def _notify(task, receivers, *, actor, action, title, extra=None, include_subscribers=True, mentioned_ids=None):
     """Create task notifications without introducing a new delivery channel.
 
     Args:
@@ -37,11 +38,16 @@ def _notify(task, receivers, *, actor, action, title, extra=None, include_subscr
 
     created = []
     email_policy = {}
+    mentioned_ids = mentioned_ids or set()
     for receiver_id, receiver in receiver_users.items():
         if receiver is None or receiver.id == actor.id:
             continue
         is_direct = receiver_id in direct_users
-        if action == "assigned":
+        mentioned = str(receiver_id) in mentioned_ids
+        if mentioned:
+            category = NotificationEvent.Category.RESEARCH_MENTION
+            immediate = True
+        elif action == "assigned":
             category = (
                 NotificationEvent.Category.ASSIGNMENT
                 if is_direct
@@ -62,7 +68,7 @@ def _notify(task, receivers, *, actor, action, title, extra=None, include_subscr
             immediate = action == "cc_added"
         email_policy[str(receiver_id)] = {
             "category": category,
-            "reason": "direct" if is_direct else "subscriber",
+            "reason": "mentioned" if mentioned else ("direct" if is_direct else "subscriber"),
             "immediate": immediate,
         }
         created.append(
@@ -83,7 +89,7 @@ def _notify(task, receivers, *, actor, action, title, extra=None, include_subscr
                 message={"action": action, "status": task.status, "at": timezone.now().isoformat()},
                 message_html=f"<p>{escape(title)}</p>",
                 message_stripped=title,
-                sender="research",
+                sender="research:mentioned" if mentioned else "research",
                 triggered_by=actor,
                 receiver=receiver,
             )
@@ -180,22 +186,42 @@ def notify_task_deleted(task, actor):
     )
 
 
-def notify_task_updated(task, actor, changed_fields):
-    """Notify subscribers that editable task fields changed."""
+def notify_task_updated(task, actor, changed_fields, previous_instruction=None, assignment_changed=False):
+    """合并同次任务修改的提及、指派和订阅通知，提及优先。
+
+    Args:
+        task: 已保存的任务修订。
+        actor: 当前操作者。
+        changed_fields: 本次修改的字段。
+        previous_instruction: 锁内旧任务说明。
+        assignment_changed: 本次是否同时改变负责人。
+
+    Returns:
+        本次修改的通知集合。
+    """
     fields = sorted(set(changed_fields) - {"assignee"})
-    if not fields:
+    if not fields and not assignment_changed:
         return []
+    receivers = (
+        validate_new_mentions("research_chain_task", task, task.instruction, previous_instruction)
+        if "instruction" in fields
+        else []
+    )
+    mentioned_ids = {str(user.pk) for user in receivers}
+    if assignment_changed and task.assignee:
+        receivers.append(task.assignee)
     return _notify(
         task,
-        [],
+        receivers,
         actor=actor,
-        action="updated",
-        title=f"科研节点任务已更新：{task.title}",
-        extra={"fields": fields},
+        action="assigned" if assignment_changed else "updated",
+        title=f"科研节点任务{'已指派' if assignment_changed else '已更新'}：{task.title}",
+        extra={"fields": fields, "event_id": f"instruction:{task.pk}:{task.updated_at.isoformat()}"},
+        mentioned_ids=mentioned_ids,
     )
 
 
-def notify_task_comment(task, actor, operation, comment_id=None):
+def notify_task_comment(task, actor, operation, comment_id=None, previous_html=None):
     """Notify subscribers that a task comment was created, edited, or removed."""
     operation_labels = {
         "created": "有新评论",
@@ -203,13 +229,26 @@ def notify_task_comment(task, actor, operation, comment_id=None):
         "deleted": "评论已删除",
     }
     label = operation_labels.get(operation, "评论已更新")
+    from plane.db.models import ResearchTaskComment
+
+    comment = ResearchTaskComment.objects.filter(pk=comment_id, task=task).first()
+    receivers = (
+        validate_new_mentions("research_chain_task", task, comment.comment_html, previous_html)
+        if comment and operation in {"created", "updated"}
+        else []
+    )
     return _notify(
         task,
-        [],
+        receivers,
         actor=actor,
         action="commented",
         title=f"科研节点任务{label}：{task.title}",
-        extra={"operation": operation, "comment_id": str(comment_id) if comment_id else None},
+        extra={
+            "operation": operation,
+            "comment_id": str(comment_id) if comment_id else None,
+            "event_id": f"comment:{comment_id}:{comment.updated_at.isoformat() if comment else operation}",
+        },
+        mentioned_ids={str(user.pk) for user in receivers},
     )
 
 

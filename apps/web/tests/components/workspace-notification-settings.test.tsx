@@ -52,6 +52,22 @@ it("renders grouped workspace notification policies", async () => {
   expect(container.textContent).toContain("邮件不适用");
 });
 
+it("keeps mention inbox channels checked and disabled even with an old disabled policy", async () => {
+  service.list.mockResolvedValue({
+    policies: [
+      { category: "mention", in_app_enabled: false, email_enabled: false },
+      { category: "research_mention", in_app_enabled: false, email_enabled: true },
+    ],
+  });
+  await render();
+  for (const category of ["mention", "research_mention"]) {
+    const input = container.querySelector<HTMLInputElement>(`input[name="${category}-in-app"]`)!;
+    expect(input.checked).toBe(true);
+    expect(input.disabled).toBe(true);
+  }
+  expect(container.querySelector<HTMLInputElement>('input[name="mention-email"]')?.disabled).toBe(false);
+});
+
 it("saves one channel toggle and refreshes the server state", async () => {
   service.update.mockResolvedValue({
     policies: [{ category: "property_change", in_app_enabled: true, email_enabled: false }],

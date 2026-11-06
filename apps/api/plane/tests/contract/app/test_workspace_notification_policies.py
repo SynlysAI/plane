@@ -25,6 +25,24 @@ from plane.utils.notification_outbox import persist_issue_notification_batch, pe
 URL = "/api/workspaces/{slug}/notification-policies/"
 
 
+@pytest.mark.django_db
+@pytest.mark.parametrize("category", ["mention", "research_mention"])
+def test_mention_in_app_cannot_be_disabled(session_client, workspace, category):
+    """两类提及站内固定开启，管理员只能配置邮件渠道。"""
+    WorkspaceNotificationPolicy.objects.create(workspace=workspace, category=category, in_app_enabled=False)
+    response = session_client.get(URL.format(slug=workspace.slug))
+    policy = next(item for item in response.data["policies"] if item["category"] == category)
+    assert policy["in_app_enabled"] is True
+    rejected = session_client.patch(
+        URL.format(slug=workspace.slug),
+        {
+            "policies": [{"category": category, "in_app_enabled": False}],
+        },
+        format="json",
+    )
+    assert rejected.status_code == 400
+
+
 @pytest.fixture
 def project(db, workspace, create_user):
     """Create a project used by notification persistence tests."""

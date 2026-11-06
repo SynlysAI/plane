@@ -48,7 +48,10 @@ from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
 
 
-class IssueSerializer(BaseSerializer):
+from plane.app.serializers.mention import IssueMentionValidationMixin
+
+
+class IssueSerializer(IssueMentionValidationMixin, BaseSerializer):
     """
     Comprehensive work item serializer with full relationship management.
 
@@ -745,7 +748,7 @@ class IssueAttachmentSerializer(BaseSerializer):
         ]
 
 
-class IssueCommentCreateSerializer(BaseSerializer):
+class IssueCommentCreateSerializer(IssueMentionValidationMixin, BaseSerializer):
     """
     Serializer for creating work item comments.
 
@@ -778,7 +781,7 @@ class IssueCommentCreateSerializer(BaseSerializer):
         ]
 
 
-class IssueCommentSerializer(BaseSerializer):
+class IssueCommentSerializer(IssueMentionValidationMixin, BaseSerializer):
     """
     Full serializer for work item comments with membership context.
 
