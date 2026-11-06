@@ -238,6 +238,92 @@ def _clean_instruction(value, task=None):
     return cleaned
 
 
+def _task_user_name(user):
+    """返回任务动态中使用的用户显示名称。"""
+    if user is None:
+        return None
+    return user.display_name or " ".join(
+        part for part in (user.first_name, user.last_name) if part
+    ) or user.email
+
+
+def _task_plain_text(value, limit=240):
+    """将任务动态中的评论或原因转换为限长纯文本摘要。"""
+    if value is None:
+        return ""
+    return BeautifulSoup(str(value), "html.parser").get_text(" ", strip=True)[:limit]
+
+
+def _task_change_value(field, value):
+    """将任务字段转换为可安全写入首页动态的短文本。"""
+    if value is None:
+        return None
+    if field == "assignee":
+        return _task_user_name(value) if hasattr(value, "display_name") else str(value)
+    if field == "status":
+        return {
+            ResearchChainNodeTask.Status.DRAFT: "草稿",
+            ResearchChainNodeTask.Status.ASSIGNED: "已指派",
+            ResearchChainNodeTask.Status.COMPLETED: "已完成",
+            ResearchChainNodeTask.Status.CANCELLED: "已取消",
+        }.get(str(value), str(value))
+    if field == "resource_type":
+        return {
+            ResearchChainNodeTask.ResourceType.NONE: "无关联资源",
+            ResearchChainNodeTask.ResourceType.REPORT: "报告",
+            ResearchChainNodeTask.ResourceType.STAGE_MATERIAL: "阶段材料",
+            ResearchChainNodeTask.ResourceType.OUTCOME: "成果",
+            ResearchChainNodeTask.ResourceType.PAPER_REVIEW: "论文评审",
+            ResearchChainNodeTask.ResourceType.SNAPSHOT: "快照",
+            ResearchChainNodeTask.ResourceType.EXTERNAL_REF: "外部引用",
+        }.get(str(value), str(value))
+    if field == "due_at":
+        return value.isoformat() if hasattr(value, "isoformat") else str(value)
+    if field == "instruction":
+        return _task_plain_text(value) or None
+    return str(value)[:240]
+
+
+def _task_changes(old_values, new_values):
+    """构造任务字段级前后值，忽略没有发生变化的字段。"""
+    changes = []
+    for field, old_value in old_values.items():
+        new_value = new_values.get(field)
+        old_display = _task_change_value(field, old_value)
+        new_display = _task_change_value(field, new_value)
+        if old_display == new_display and (field != "assignee" or old_value == new_value):
+            continue
+        changes.append({"field": field, "old_value": old_display, "new_value": new_display})
+    return changes
+
+
+def _task_creation_changes(task):
+    """构造任务创建时实际写入字段的初始变更。"""
+    fields = ["title", "status"]
+    if task.instruction:
+        fields.append("instruction")
+    if task.due_at:
+        fields.append("due_at")
+    if task.resource_type != ResearchChainNodeTask.ResourceType.NONE:
+        fields.append("resource_type")
+    if task.resource_id:
+        fields.append("resource_id")
+    if task.assignee_id:
+        fields.append("assignee")
+    return _task_changes(
+        {field: None for field in fields},
+        {
+            "title": task.title,
+            "status": task.status,
+            "instruction": task.instruction,
+            "due_at": task.due_at,
+            "resource_type": task.resource_type,
+            "resource_id": task.resource_id,
+            "assignee": task.assignee,
+        },
+    )
+
+
 def actor_can_manage_chain_tasks(workspace, chain, actor) -> bool:
     """Return whether an actor can manage tasks for a chain.
 
@@ -615,6 +701,15 @@ def _write_task_event(*, task, actor, request_id, event_type, summary, metadata,
 
 def _write_task_audit(*, task, actor, action, metadata, request=None):
     """Append the audit-side record for a task mutation."""
+    # Keep the minimum project context with the immutable event so a later
+    # soft/hard deletion of the task cannot erase the home-feed subject.
+    metadata = dict(metadata or {})
+    project = task.chain.project
+    metadata.setdefault("project_id", str(project.id))
+    metadata.setdefault("project_name", project.name)
+    metadata.setdefault("project_identifier", project.identifier)
+    metadata.setdefault("chain_id", str(task.chain_id))
+    metadata.setdefault("node_id", str(task.node_id))
     return record_audit_event(
         workspace=task.workspace,
         action=action,
@@ -774,14 +869,23 @@ def create_task(*, workspace, chain, node, actor, payload, request=None):
                 request_id=request_id,
                 event_type="TASK_CREATED",
                 summary=f"Created task: {task.title}",
-                metadata={"status": task.status},
+                metadata={
+                    "status": task.status,
+                    "entity_name": task.title,
+                    "changes": _task_creation_changes(task),
+                },
                 content_hash=digest,
             )
             _write_task_audit(
                 task=task,
                 actor=actor,
                 action=ResearchAuditAction.TASK_CREATE,
-                metadata={"node": str(node.id), "status": task.status},
+                metadata={
+                    "node": str(node.id),
+                    "status": task.status,
+                    "entity_name": task.title,
+                    "changes": _task_creation_changes(task),
+                },
                 request=request,
             )
             if assignee is not None:
@@ -1085,7 +1189,7 @@ def complete_task(*, task, actor, comment="", request_id=None, content_hash="", 
         content_hash=content_hash,
         action=action,
         request=request,
-        metadata={"comment": str(comment or "")[:500]},
+        metadata={"comment": _task_plain_text(comment)},
         guard=lambda locked_task: _require_complete_permission(locked_task, actor),
     )
 
@@ -1134,7 +1238,7 @@ def reopen_task(*, task, actor, reason="", request_id=None, content_hash="", req
         content_hash=content_hash,
         action=action,
         request=request,
-        metadata={"reason": str(reason or "").strip()[:500]},
+        metadata={"reason": _task_plain_text(reason)},
         guard=lambda locked_task: _require_reopen_permission(locked_task, actor),
     )
 
@@ -1194,7 +1298,7 @@ def cancel_task(*, task, actor, reason, request_id, content_hash, request=None):
         content_hash=content_hash,
         action=action,
         request=request,
-        metadata={"reason": reason[:500]},
+        metadata={"reason": _task_plain_text(reason)},
         guard=lambda locked_task: _require_cancel_permission(locked_task, actor),
     )
 
@@ -1229,6 +1333,8 @@ def delete_task(*, task, actor, request=None):
         "status": task.status,
         "resource_type": task.resource_type,
         "resource_id": str(task.resource_id) if task.resource_id else None,
+        "entity_name": task.title,
+        "changes": [{"field": "status", "old_value": task.status, "new_value": "DELETED"}],
     }
     content_hash = payload_hash({"task_id": str(task.id), **metadata})
 

@@ -150,6 +150,7 @@ class ResearchStageReviewerListCreateEndpoint(ResearchAPIView):
             metadata={
                 "stage": instance.stage,
                 "reviewer": str(reviewer.id),
+                "reviewer_name": reviewer.display_name or reviewer.email,
                 "reviewer_role": role,
                 "kind": assignment_kind,
             },
@@ -174,7 +175,7 @@ class ResearchStageReviewerDetailEndpoint(ResearchAPIView):
                 stage_instance__workspace=workspace,
                 deleted_at__isnull=True,
             )
-            .select_related("stage_instance")
+            .select_related("stage_instance", "reviewer")
             .first()
         )
         if assignment is None:
@@ -197,7 +198,11 @@ class ResearchStageReviewerDetailEndpoint(ResearchAPIView):
             resource_id=assignment.id,
             org_unit=instance.org_unit,
             actor=request.user,
-            metadata={"stage": instance.stage, "reviewer": str(assignment.reviewer_id)},
+            metadata={
+                "stage": instance.stage,
+                "reviewer": str(assignment.reviewer_id),
+                "reviewer_name": assignment.reviewer.display_name or assignment.reviewer.email,
+            },
             request=request,
         )
         return Response(status=status.HTTP_204_NO_CONTENT)

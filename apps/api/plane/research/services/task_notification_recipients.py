@@ -171,6 +171,10 @@ def replace_research_task_cc(*, workspace, chain, task, actor, user_ids, request
                 ],
                 batch_size=100,
             )
+            snapshot_users = {
+                str(user.id): user.display_name or user.email
+                for user in User.objects.filter(id__in=added_ids | removed_ids)
+            }
             record_audit_event(
                 workspace=workspace,
                 actor=actor,
@@ -180,6 +184,8 @@ def replace_research_task_cc(*, workspace, chain, task, actor, user_ids, request
                 metadata={
                     "added": [str(user_id) for user_id in sorted(added_ids)],
                     "removed": [str(user_id) for user_id in sorted(removed_ids)],
+                    "added_names": [snapshot_users.get(str(user_id)) for user_id in sorted(added_ids)],
+                    "removed_names": [snapshot_users.get(str(user_id)) for user_id in sorted(removed_ids)],
                 },
                 request=request,
             )

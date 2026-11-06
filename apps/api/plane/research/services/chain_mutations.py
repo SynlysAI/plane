@@ -12,7 +12,7 @@ from plane.research.services.task_comment_attachments import (
     sync_task_comment_attachments,
 )
 from plane.research.services.mcp_catalog import ResearchReadError
-from plane.research.utils.audit import record_audit_event
+from plane.research.utils.audit import ResearchResourceType, record_audit_event
 from plane.research.utils.collaboration_notifications import notify_task_comment
 from plane.utils.html_processor import strip_tags
 
@@ -52,9 +52,15 @@ def append_task_comment(*, task, actor, request_id, html, attachment_ids=None, r
     comment = ResearchTaskComment.objects.create(task=locked, actor=actor, request_id=request_id,
                                                 comment_html=html, comment_stripped=strip_tags(html))
     sync_task_comment_attachments(comment, assets, task=locked, user=actor, request=request)
-    record_audit_event(workspace=task.workspace, actor=actor, action="task.comment.create",
-                       resource_type="research_chain_node_task", resource_id=task.pk,
-                       metadata={"comment": str(comment.pk)}, request=request)
+    record_audit_event(
+        workspace=task.workspace,
+        actor=actor,
+        action="task.comment.create",
+        resource_type=ResearchResourceType.RESEARCH_CHAIN_NODE_TASK,
+        resource_id=task.pk,
+        metadata={"comment": comment.comment_stripped[:240]},
+        request=request,
+    )
     notify_task_comment(locked, actor, "created", comment.pk)
     return comment, True
 

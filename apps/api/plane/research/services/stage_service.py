@@ -36,6 +36,7 @@ from plane.research.utils.stage_notifications import (
     notify_stage_returned,
     notify_stage_submitted,
 )
+from plane.utils.html_processor import strip_tags
 
 STATUS = ResearchStageInstance.Status
 ACTION = StageTransition.Action
@@ -228,7 +229,11 @@ def enter_stage(instance, actor, request=None):
         resource_id=instance.id,
         org_unit=instance.org_unit,
         actor=actor,
-        metadata={"stage": instance.stage},
+        metadata={
+            "stage": instance.stage,
+            "status": instance.status,
+            "changes": [{"field": "status", "old_value": previous, "new_value": instance.status}],
+        },
         request=request,
     )
     notify_stage_entered(instance, actor, owner_id)
@@ -311,7 +316,13 @@ def submit_stage(instance, actor, request=None):
         resource_id=instance.id,
         org_unit=instance.org_unit,
         actor=actor,
-        metadata={"stage": instance.stage, "rule_version": gate["rule_version"], "attempt": instance.attempt_count},
+        metadata={
+            "stage": instance.stage,
+            "rule_version": gate["rule_version"],
+            "attempt": instance.attempt_count,
+            "status": instance.status,
+            "changes": [{"field": "status", "old_value": previous, "new_value": instance.status}],
+        },
         request=request,
     )
     notify_stage_submitted(instance, actor, owner_id)
@@ -355,7 +366,12 @@ def return_stage(instance, actor, reason, request=None):
         resource_id=instance.id,
         org_unit=instance.org_unit,
         actor=actor,
-        metadata={"stage": instance.stage, "reason": str(reason).strip()[:500]},
+        metadata={
+            "stage": instance.stage,
+            "reason": strip_tags(str(reason).strip())[:240],
+            "status": instance.status,
+            "changes": [{"field": "status", "old_value": previous, "new_value": instance.status}],
+        },
         request=request,
     )
     notify_stage_returned(instance, actor, owner_id, str(reason))
@@ -412,7 +428,13 @@ def pass_stage(instance, actor, request=None):
         resource_id=instance.id,
         org_unit=instance.org_unit,
         actor=actor,
-        metadata={"stage": instance.stage, "review": summary},
+        metadata={
+            "stage": instance.stage,
+            "review": summary,
+            "status": instance.status,
+            "reviewer": str(actor.id),
+            "changes": [{"field": "status", "old_value": previous, "new_value": instance.status}],
+        },
         request=request,
     )
     notify_stage_passed(instance, actor, owner_id)
@@ -480,7 +502,12 @@ def reopen_stage(instance, actor, reason, confirm=False, request=None):
         resource_id=instance.id,
         org_unit=instance.org_unit,
         actor=actor,
-        metadata={"stage": instance.stage, "reason": str(reason).strip()[:500]},
+        metadata={
+            "stage": instance.stage,
+            "reason": strip_tags(str(reason).strip())[:240],
+            "status": instance.status,
+            "changes": [{"field": "status", "old_value": previous, "new_value": instance.status}],
+        },
         request=request,
     )
     return instance

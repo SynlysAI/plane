@@ -202,6 +202,36 @@ it("renders actor, object, link, timestamp and grouped real mutations", async ()
   vi.useRealTimers();
 });
 
+it("renders assignment activity in the shared four-row layout", async () => {
+  mocks.fetchWorkspaceActivities.mockResolvedValue(
+    activityResponse([
+      activity("assignment-1", "2026-10-22T09:59:00Z", {
+        action: "task.update",
+        entity_type: "research_chain_node_task",
+        entity_name: "测试",
+        project: { id: "research-1", name: "方奕凯测试项目", identifier: "TEST" },
+        changes: [
+          { field: "assignee", old_value: "原负责人", new_value: "庄晟珏" },
+          { field: "status", old_value: "草稿", new_value: "已指派" },
+          { field: "title", old_value: "旧标题", new_value: "测试" },
+        ],
+      }),
+    ])
+  );
+
+  await renderWidget();
+
+  expect(container.textContent).toContain("学生一变更了「测试」的负责人");
+  expect(container.textContent).toContain("方奕凯测试项目·任务");
+  expect(container.textContent).toContain("负责人：原负责人→庄晟珏");
+  expect(container.querySelector("time")?.getAttribute("title")).toContain("2026");
+  const moreButton = [...container.querySelectorAll("button")].find((button) =>
+    button.textContent?.includes("显示更多变更")
+  );
+  expect(moreButton).toBeDefined();
+  expect(moreButton?.closest("a")).toBeNull();
+});
+
 it("automatically loads the next page when the list sentinel enters the viewport", async () => {
   mocks.fetchWorkspaceActivities.mockResolvedValueOnce(
     activityResponse([activity("event-1", "2026-10-22T09:00:00Z")], "cursor-2")

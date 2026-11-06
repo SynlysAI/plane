@@ -533,7 +533,7 @@ class ResearchChainMemberListCreateEndpoint(ResearchAPIView):
             member__is_active=True,
             is_active=True,
             deleted_at__isnull=True,
-        ).first()
+        ).select_related("member").first()
         if workspace_member is None:
             return research_error(ResearchErrorCode.USER_NOT_FOUND, "The user must be an active workspace member.")
         member_exists = ProjectMember.objects.filter(
@@ -569,7 +569,11 @@ class ResearchChainMemberListCreateEndpoint(ResearchAPIView):
             resource_id=chain.id,
             org_unit=chain.project.research_profile.org_unit,
             actor=request.user,
-            metadata={"member": str(member_id), "role": role},
+            metadata={
+                "member": str(member_id),
+                "member_name": workspace_member.member.display_name or workspace_member.member.email,
+                "role": role,
+            },
             request=request,
         )
         return Response(
@@ -617,7 +621,7 @@ class ResearchChainMemberDetailEndpoint(ResearchAPIView):
             member_id=member_id,
             is_active=True,
             deleted_at__isnull=True,
-        ).first()
+        ).select_related("member").first()
         if member is None:
             return research_not_found(ResearchErrorCode.USER_NOT_FOUND, "Research chain member not found.")
         member.is_active = False
@@ -630,7 +634,10 @@ class ResearchChainMemberDetailEndpoint(ResearchAPIView):
             resource_id=chain.id,
             org_unit=chain.project.research_profile.org_unit,
             actor=request.user,
-            metadata={"member": str(member_id)},
+            metadata={
+                "member": str(member_id),
+                "member_name": member.member.display_name or member.member.email,
+            },
             request=request,
         )
         return Response(status=status.HTTP_204_NO_CONTENT)

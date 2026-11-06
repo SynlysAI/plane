@@ -267,7 +267,7 @@ class ResearchTaskInstructionAttachmentSlotEndpoint(ResearchAPIView):
                 "size": actual_size,
             }
             asset.save(update_fields=["size", "storage_metadata", "is_uploaded", "attributes", "updated_at"])
-            attachment = ResearchChainNodeTaskAttachment.objects.create(
+            ResearchChainNodeTaskAttachment.objects.create(
                 task=task,
                 asset=asset,
                 file_name=file_name,
@@ -283,7 +283,7 @@ class ResearchTaskInstructionAttachmentSlotEndpoint(ResearchAPIView):
                 resource_type="research_chain_node_task",
                 resource_id=task.pk,
                 actor=request.user,
-                metadata={"attachment": str(attachment.id), "asset": str(asset.id)},
+                metadata={"file": file_name[:255]},
                 request=request,
             )
         return Response(
@@ -319,7 +319,14 @@ class ResearchTaskInstructionAttachmentSlotEndpoint(ResearchAPIView):
                 resource_type="research_chain_node_task",
                 resource_id=task.pk,
                 actor=request.user,
-                metadata={"asset": str(asset.id)},
+                metadata={
+                    "file": str(
+                        (attachment.file_name if attachment else None)
+                        or asset.attributes.get("name")
+                        or asset.asset.name.rsplit("/", 1)[-1]
+                        or "附件"
+                    )[:255]
+                },
                 request=request,
             )
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -456,7 +463,10 @@ class ResearchTaskInstructionImageEndpoint(ResearchAPIView):
                 resource_type="research_chain_node_task",
                 resource_id=task.pk,
                 actor=request.user,
-                metadata={"asset": str(asset.id), "kind": "image"},
+                metadata={
+                    "file": str(asset.attributes.get("name") or asset.asset.name.rsplit("/", 1)[-1])[:255],
+                    "kind": "image",
+                },
                 request=request,
             )
         return Response(status=status.HTTP_204_NO_CONTENT)

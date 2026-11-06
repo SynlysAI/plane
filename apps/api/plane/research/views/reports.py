@@ -65,10 +65,10 @@ from plane.research.utils.notifications import (
     notify_report_returned,
     notify_report_withdrawn,
 )
-from plane.research.utils.roles import is_research_admin
 from plane.research.utils.reports import can_transition, report_resource, visible_reports_queryset
 from plane.research.utils.settings import default_visibility_for
 from plane.research.views.base import ResearchAPIView, parse_date, parse_uuid, resolve_user, truthy
+from plane.utils.html_processor import strip_tags
 
 
 def serialize_report(
@@ -439,7 +439,11 @@ class ResearchReportDetailEndpoint(ResearchAPIView):
                 resource_type=ResearchResourceType.REPORT,
                 resource_id=report.pk,
                 actor=request.user,
-                metadata={"period_key": report.period_key},
+                metadata={
+                    "period_key": report.period_key,
+                    "status": "DELETED",
+                    "changes": [{"field": "status", "old_value": report.status, "new_value": "DELETED"}],
+                },
                 request=request,
             )
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -656,8 +660,10 @@ class ResearchReportWithdrawEndpoint(ResearchAPIView):
                 "period_key": report.period_key,
                 "report_type": report.report_type,
                 "snapshot_version": snapshot_version,
-                "comment": comment[:240],
+                "comment": strip_tags(comment)[:240],
                 "approval_route": str(route.id) if route else None,
+                "status": report.status,
+                "changes": [{"field": "status", "old_value": previous, "new_value": report.status}],
             },
             request=request,
         )
@@ -744,6 +750,9 @@ class ResearchReportReturnEndpoint(ResearchAPIView):
                 "period_key": report.period_key,
                 "reason_provided": True,
                 "approval_route": str(route.id) if route else None,
+                "comment": strip_tags(comment)[:240],
+                "status": report.status,
+                "changes": [{"field": "status", "old_value": previous, "new_value": report.status}],
             },
             request=request,
         )
@@ -799,6 +808,12 @@ class ResearchReportAcceptEndpoint(ResearchAPIView):
                 "period_key": report.period_key,
                 "report_type": report.report_type,
                 "approval_route": str(route.id) if route else None,
+                "comment": strip_tags(str(request.data.get("comment") or ""))[:240],
+                "status": report.status,
+                "changes": [
+                    {"field": "status", "old_value": previous, "new_value": report.status},
+                    {"field": "reviewer", "old_value": None, "new_value": str(request.user.id)},
+                ],
             },
             request=request,
         )
