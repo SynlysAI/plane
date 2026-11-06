@@ -232,6 +232,62 @@ it("renders assignment activity in the shared four-row layout", async () => {
   expect(moreButton?.closest("a")).toBeNull();
 });
 
+it("collapses a paired work item assignee replacement into one transition", async () => {
+  const workItem = {
+    source: "work_item",
+    action: "updated",
+    entity_type: "work_item",
+    entity_id: "issue-1",
+    entity_name: "科研采购审批-机械支架-26460元",
+    project: { id: "project-1", name: "GFZ项目经费支出", identifier: "GFZ" },
+    url: "/lab/browse/GFZ-1",
+  };
+  mocks.fetchWorkspaceActivities.mockResolvedValue(
+    activityResponse([
+      activity("assignment-remove", "2026-10-22T09:58:00Z", {
+        ...workItem,
+        changes: [{ field: "assignees", old_value: "朱刘萍", new_value: "" }],
+      }),
+      activity("assignment-add", "2026-10-22T09:57:00Z", {
+        ...workItem,
+        changes: [{ field: "assignees", old_value: "", new_value: "易轩宇" }],
+      }),
+    ])
+  );
+
+  await renderWidget();
+
+  expect(container.querySelectorAll("li")).toHaveLength(1);
+  expect(container.textContent).toContain("学生一变更了「科研采购审批-机械支架-26460元」的负责人");
+  expect(container.textContent).toContain("负责人：朱刘萍→易轩宇");
+  expect(container.textContent).toContain("合并 2 次同类更新");
+  expect(container.textContent).not.toContain("已清空");
+  expect(container.textContent).not.toContain("未设置");
+});
+
+it.each([
+  ["addition", "", "易轩宇", "未设置→易轩宇"],
+  ["removal", "朱刘萍", "", "朱刘萍→已清空"],
+])("renders standalone work item assignee %s as an assignment change", async (_kind, oldValue, newValue, expected) => {
+  mocks.fetchWorkspaceActivities.mockResolvedValue(
+    activityResponse([
+      activity("standalone-assignment", "2026-10-22T09:59:00Z", {
+        source: "work_item",
+        action: "updated",
+        entity_type: "work_item",
+        entity_id: "issue-1",
+        entity_name: "科研采购审批-机械支架-26460元",
+        changes: [{ field: "assignees", old_value: oldValue, new_value: newValue }],
+      }),
+    ])
+  );
+
+  await renderWidget();
+
+  expect(container.textContent).toContain("学生一变更了「科研采购审批-机械支架-26460元」的负责人");
+  expect(container.textContent).toContain(`负责人：${expected}`);
+});
+
 it("automatically loads the next page when the list sentinel enters the viewport", async () => {
   mocks.fetchWorkspaceActivities.mockResolvedValueOnce(
     activityResponse([activity("event-1", "2026-10-22T09:00:00Z")], "cursor-2")

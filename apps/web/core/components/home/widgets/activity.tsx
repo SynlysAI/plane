@@ -14,7 +14,8 @@ const workspaceService = new WorkspaceService();
 /** 首页最近动态固定为轻量的近 30 天口径；更久历史由专门页面承载。 */
 const ACTIVITY_DAYS = "30" as const;
 const GROUP_WINDOW_MS = 30 * 60 * 1000;
-const PRIORITY_CHANGE_FIELDS = ["assignee", "status", "due_at", "target_date", "title"];
+const PRIORITY_CHANGE_FIELDS = ["assignee", "assignees", "status", "due_at", "target_date", "title"];
+const ASSIGNEE_CHANGE_FIELDS = new Set(["assignee", "assignees"]);
 
 type Props = {
   workspaceSlug: string;
@@ -30,6 +31,11 @@ const NON_GROUPABLE_FIELDS = new Set(["assignee", "status", "member", "role", "c
 /** Detect whether a historical record contains an explicit old or new value. */
 function hasActivityValue(change: THomeActivityChange, key: "old_value" | "new_value"): boolean {
   return Object.prototype.hasOwnProperty.call(change, key);
+}
+
+/** Determine whether an activity value represents an absent assignee. */
+function isEmptyActivityValue(value: string | null | undefined): boolean {
+  return value === null || value === undefined || value === "";
 }
 
 /** Format feed timestamps with the active interface language. */
@@ -53,7 +59,7 @@ function formatActivityTime(value: string, locale: string): string {
   return new Intl.RelativeTimeFormat(locale, { numeric: "always" }).format(Math.round(seconds / divisor), unit);
 }
 
-/** Assignment, lifecycle and discussion events remain separate in the feed. */
+/** Keep discrete research assignments, lifecycle and discussion events separate. */
 function canGroupActivity(activity: THomeActivity): boolean {
   return !activity.changes.some((change) => change.field && NON_GROUPABLE_FIELDS.has(change.field));
 }
@@ -77,6 +83,34 @@ function prioritizeChanges(activity: THomeActivity, limit: number) {
   );
 }
 
+/** Collapse one removed and one added assignee into a readable replacement. */
+function coalesceAssigneeReplacement(changes: THomeActivityChange[]): THomeActivityChange[] {
+  const assigneeChanges = changes
+    .map((change, index) => ({ change, index }))
+    .filter(({ change }) => change.field === "assignees");
+  if (assigneeChanges.length !== 2) return changes;
+
+  const removal = assigneeChanges.find(
+    ({ change }) => !isEmptyActivityValue(change.old_value) && isEmptyActivityValue(change.new_value)
+  );
+  const addition = assigneeChanges.find(
+    ({ change }) => isEmptyActivityValue(change.old_value) && !isEmptyActivityValue(change.new_value)
+  );
+  if (!removal || !addition) return changes;
+
+  const replacement: THomeActivityChange = {
+    field: "assignee",
+    old_value: removal.change.old_value,
+    new_value: addition.change.new_value,
+  };
+  const firstIndex = Math.min(removal.index, addition.index);
+  const secondIndex = Math.max(removal.index, addition.index);
+  const collapsed = [...changes];
+  collapsed[firstIndex] = replacement;
+  collapsed.splice(secondIndex, 1);
+  return collapsed;
+}
+
 /** Merge consecutive identical mutations without losing actors, fields or values. */
 function groupActivities(activities: THomeActivity[]): TGroupedActivity[] {
   return activities.reduce<TGroupedActivity[]>((result, activity) => {
@@ -95,13 +129,18 @@ function groupActivities(activities: THomeActivity[]): TGroupedActivity[] {
         const signature = JSON.stringify(change);
         return all.findIndex((item) => JSON.stringify(item) === signature) === index;
       });
-      previous.changes = changes;
+      previous.changes = coalesceAssigneeReplacement(changes);
       // 输入按时间倒序，保留较新的发生时间，便于用户判断最近一次协作动作。
       previous.event_count += 1;
       previous.grouped_ids.push(activity.id);
       return result;
     }
-    result.push({ ...activity, changes: [...activity.changes], event_count: 1, grouped_ids: [activity.id] });
+    result.push({
+      ...activity,
+      changes: coalesceAssigneeReplacement([...activity.changes]),
+      event_count: 1,
+      grouped_ids: [activity.id],
+    });
     return result;
   }, []);
 }
@@ -422,7 +461,9 @@ export const HomeActivityWidget = observer(function HomeActivityWidget({
             const entityLabel =
               entityTypeLabels[activity.entity_type as keyof typeof entityTypeLabels] ??
               t("research.activity_entities.business_object");
-            const assignmentChange = activity.changes.find((change) => change.field === "assignee");
+            const assignmentChange = activity.changes.find(
+              (change) => change.field && ASSIGNEE_CHANGE_FIELDS.has(change.field)
+            );
             const isAssignment = Boolean(assignmentChange);
             const actionLabel = isAssignment
               ? actionLabels.assignment_changed
