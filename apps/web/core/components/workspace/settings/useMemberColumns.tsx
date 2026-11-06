@@ -11,7 +11,7 @@ import { useTranslation } from "@plane/i18n";
 import { renderFormattedDate } from "@plane/utils";
 import { MemberHeaderColumn } from "@/components/project/member-header-column";
 import type { RowData } from "@/components/workspace/settings/member-columns";
-import { AccountTypeColumn, NameColumn } from "@/components/workspace/settings/member-columns";
+import { AccountTypeColumn, EmailColumn, NameColumn } from "@/components/workspace/settings/member-columns";
 import type { IWorkspaceMemberTag, IWorkspaceMemberTagGroup } from "@plane/types";
 import { useMember } from "@/hooks/store/use-member";
 import { MemberTagsEditor } from "./member-tags-editor";
@@ -143,14 +143,7 @@ export const useMemberColumns = (selection?: MemberSelection) => {
     {
       key: "Email address",
       content: t("workspace_settings.settings.members.details.email_address"),
-      tdRender: (rowData: RowData) => (
-        <div
-          className={`w-48 min-w-0 truncate ${isSuspended(rowData) ? "text-placeholder" : ""}`}
-          title={rowData.member.email ?? ""}
-        >
-          {rowData.member.email}
-        </div>
-      ),
+      tdRender: (rowData: RowData) => <EmailColumn rowData={rowData} workspaceSlug={workspaceSlug} isAdmin={isAdmin} />,
       thRender: () => (
         <MemberHeaderColumn
           property="email"

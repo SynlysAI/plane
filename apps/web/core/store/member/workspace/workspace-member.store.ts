@@ -60,6 +60,7 @@ export interface IWorkspaceMemberStore {
   fetchWorkspaceMemberInvitations: (workspaceSlug: string) => Promise<IWorkspaceMemberInvitation[]>;
   // crud actions
   updateMember: (workspaceSlug: string, userId: string, data: { role: TUserPermissions }) => Promise<void>;
+  updateMemberEmail: (workspaceSlug: string, userId: string, email: string) => Promise<string>;
   updateMemberTags: (workspaceSlug: string, userId: string, tagIds: string[]) => Promise<IWorkspaceMemberTag[]>;
   bulkUpdateMemberTags: (
     workspaceSlug: string,
@@ -111,6 +112,7 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
       fetchWorkspaceMembers: action,
       fetchWorkspaceMemberTagGroups: action,
       updateMember: action,
+      updateMemberEmail: action,
       updateMemberTags: action,
       bulkUpdateMemberTags: action,
       bulkUpdateMemberAccounts: action,
@@ -355,6 +357,20 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
       });
       throw error;
     }
+  };
+
+  /** 更新成员全局邮箱，并同步成员列表和当前用户缓存。 */
+  updateMemberEmail = async (workspaceSlug: string, userId: string, email: string): Promise<string> => {
+    const response = await this.workspaceService.updateWorkspaceMemberEmail(workspaceSlug, userId, email);
+    runInAction(() => {
+      const member = this.memberRoot.memberMap[userId];
+      if (member) member.email = response.email;
+      if (this.userStore.data?.id === userId) {
+        this.userStore.data.email = response.email;
+        this.userStore.data.is_email_verified = false;
+      }
+    });
+    return response.email;
   };
 
   /**
