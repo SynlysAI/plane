@@ -319,6 +319,15 @@ export class WorkspaceService extends APIService {
       });
   }
 
+  /** 通过专用管理员接口更新工作区成员的全局登录邮箱。 */
+  async updateWorkspaceMemberEmail(workspaceSlug: string, userId: string, email: string): Promise<{ email: string }> {
+    return this.patch(`/api/workspaces/${workspaceSlug}/members/${userId}/email/`, { email })
+      .then((response) => response?.data as { email: string })
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async deleteWorkspaceMember(workspaceSlug: string, memberId: string): Promise<any> {
     return this.delete(`/api/workspaces/${workspaceSlug}/members/${memberId}/`)
       .then((response) => response?.data)

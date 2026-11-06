@@ -120,6 +120,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
   const taskService = useMemo(() => new ResearchChainTaskService(), []);
   const sharedPeek = useResearchChainWorkbenchPeek();
   const [tasks, setTasks] = useState<TResearchChainNodeTask[]>([]);
+  const [canCreateTask, setCanCreateTask] = useState(false);
   const [candidates, setCandidates] = useState<TResearchAssignableUser[]>([]);
   const [state, setState] = useState<TPanelState>("loading");
   const [candidateState, setCandidateState] = useState<TCandidateState>("loading");
@@ -170,10 +171,11 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
   const load = useCallback(
     async (isActive: () => boolean = () => true) => {
       setState("loading");
+      setCanCreateTask(false);
       setCandidateState("loading");
       setActionError("");
       const [taskResult, candidateResult] = await Promise.allSettled([
-        taskService.getNodeTasks(workspaceSlug, chainId, nodeId),
+        taskService.getNodeTaskList(workspaceSlug, chainId, nodeId),
         taskService.getAssignableUsers(workspaceSlug, chainId),
       ]);
 
@@ -184,7 +186,8 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
         return;
       }
 
-      setTasks(taskResult.value);
+      setTasks(taskResult.value.tasks);
+      setCanCreateTask(taskResult.value.can_create);
       setState("ready");
       if (candidateResult.status === "fulfilled") {
         setCandidates(candidateResult.value);
@@ -515,7 +518,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
     }
   };
 
-  const canCreate = state === "ready" && candidateState === "ready";
+  const canCreate = state === "ready" && canCreateTask;
 
   return (
     <section className="px-4 py-3" aria-label={t("research.chain_tasks.panel_title")}>
@@ -566,7 +569,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
             <ul role="list">
               {tasks.map((task) => {
                 const canEdit = isTaskActionAllowed(task, "edit");
-                const canAssign = canEdit || isTaskActionAllowed(task, "assign");
+                const canAssign = isTaskActionAllowed(task, "assign");
                 const lifecycle = LIFECYCLE_ACTIONS.filter((action) => isTaskActionAllowed(task, action));
                 const peeked = peek?.kind === "task" && peek.taskId === task.id;
                 return (
@@ -833,6 +836,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
           role="dialog"
           aria-modal="true"
           data-delete-dialog=""
+          data-prevent-outside-click="true"
           aria-label={t("research.chain_tasks.delete")}
           className="fixed top-24 right-6 z-40 w-80 rounded-md border border-subtle bg-surface-1 p-4 shadow-[0_8px_24px_rgba(37,37,34,0.08)]"
         >

@@ -1,6 +1,7 @@
 from django.urls import path
 
 from plane.mcp.views import NativeMCPBridgeEndpoint
+from plane.mcp.file_http import UnifiedFileHTTPEndpoint
 from plane.mcp.endpoints import (
     UnifiedConnectionOptionsEndpoint,
     UnifiedConnectionsEndpoint,
@@ -13,6 +14,7 @@ from plane.mcp.endpoints import (
 )
 
 urlpatterns = [
+    path("mcp/files/<uuid:session_id>/", UnifiedFileHTTPEndpoint.as_view(), name="unified-mcp-file-http"),
     path("mcp", UnifiedMCPEndpoint.as_view(), name="unified-mcp-without-slash"),
     path("mcp/", UnifiedMCPEndpoint.as_view(), name="unified-mcp"),
     path("mcp/connections/", UnifiedConnectionsEndpoint.as_view(), name="unified-mcp-connections"),

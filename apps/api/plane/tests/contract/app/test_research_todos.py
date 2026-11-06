@@ -9,6 +9,8 @@ from hashlib import sha256
 from uuid import uuid4
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -20,7 +22,10 @@ from plane.db.models import (
     OrgUnitMember,
     Page,
     PeriodicReport,
+    PeriodicReportReadReceipt,
+    PeriodicReportSnapshot,
     ProjectMember,
+    ResearchApprovalRoute,
     ResearchChainNodeTask,
     ResearchPaperReview,
     ResearchAgentRunEvent,
@@ -125,6 +130,54 @@ def _revision_report(env):
         description_html="",
         description_stripped="",
         submitted_by=env["student"],
+    )
+    return report
+
+
+def _additional_report(env, index):
+    """Create a submitted report with a route, snapshot, and read receipt."""
+    page = Page.objects.create(
+        workspace=env["workspace"],
+        name=f"Additional report {index}",
+        description_json={"type": "doc", "content": []},
+        owned_by=env["student"],
+        access=Page.PRIVATE_ACCESS,
+    )
+    report = PeriodicReport.objects.create(
+        workspace=env["workspace"],
+        project=env["project"],
+        owner=env["student"],
+        org_unit=env["group_a1"],
+        page=page,
+        report_type=PeriodicReport.ReportType.WEEKLY,
+        period_key=f"2027-W{index:02d}",
+        period_start=timezone.localdate(),
+        period_end=timezone.localdate() + timedelta(days=6),
+        status=PeriodicReport.Status.SUBMITTED,
+        submitted_at=timezone.now(),
+    )
+    PeriodicReportSnapshot.objects.create(
+        report=report,
+        version_no=1,
+        snapshot_status=PeriodicReport.Status.SUBMITTED,
+        description_json=page.description_json,
+        description_html="",
+        description_stripped="",
+        submitted_by=env["student"],
+    )
+    ResearchApprovalRoute.objects.create(
+        workspace=env["workspace"],
+        resource_type=ResearchApprovalRoute.ResourceType.PERIODIC_REPORT,
+        resource_id=report.id,
+        submitted_by=env["student"],
+        reviewer=env["advisor"],
+        reviewer_role=ResearchApprovalRoute.ReviewerRole.PRIMARY_ADVISOR,
+        request_id=f"todo-report-route-{uuid4()}",
+    )
+    PeriodicReportReadReceipt.objects.create(
+        report=report,
+        reader=env["advisor"],
+        snapshot_version=1,
     )
     return report
 
@@ -541,6 +594,56 @@ class TestResearchTodoScopesAndAcl:
 
 @pytest.mark.django_db
 class TestResearchTodoProjectionContract:
+    def test_query_count_stays_bounded_as_reports_and_tasks_grow(self, env):
+        """增加快照、路由、回执和任务不会逐条增加 SQL 查询。"""
+        from plane.research.services.research_todos import collect_research_todos
+
+        with CaptureQueriesContext(connection) as initial_queries:
+            initial, failures = collect_research_todos(env["workspace"], env["advisor"], "visible")
+        assert failures == []
+        for index in range(1, 13):
+            _additional_report(env, index)
+            _task(env, ResearchChainNodeTask.Status.ASSIGNED, title=f"额外任务 {index}")
+        with CaptureQueriesContext(connection) as expanded_queries:
+            expanded, failures = collect_research_todos(env["workspace"], env["advisor"], "visible")
+        assert failures == []
+        assert len(expanded) == len(initial) + 24
+        assert len(expanded_queries) <= len(initial_queries) + 1
+
+    def test_stage_assignments_and_reviews_are_loaded_in_batches(self, env):
+        """多个阶段及各阶段多个分配、评审复用固定数量查询。"""
+        from plane.research.services.research_todos import collect_research_todos
+
+        with CaptureQueriesContext(connection) as initial_queries:
+            initial, failures = collect_research_todos(env["workspace"], env["advisor"], "visible")
+        assert failures == []
+        for index, stage_type in enumerate((StageType.OPENING, StageType.MIDTERM, StageType.FINAL), start=1):
+            stage = ResearchStageInstance.objects.create(
+                workspace=env["workspace"],
+                project=env["project"],
+                stage=stage_type,
+                status=ResearchStageInstance.Status.SUBMITTED,
+                org_unit=env["group_a1"],
+                submitted_at=timezone.now(),
+                sort_order=index,
+            )
+            for reviewer in (env["advisor"], env["group_member"]):
+                StageReviewerAssignment.objects.create(
+                    stage_instance=stage, reviewer=reviewer, reviewer_role=ReviewerRole.REVIEWER
+                )
+            StageReview.objects.create(
+                stage_instance=stage,
+                reviewer=env["group_member"],
+                reviewer_role=ReviewerRole.REVIEWER,
+                recommendation=StageReview.Recommendation.PASS,
+                submitted_at=timezone.now(),
+            )
+        with CaptureQueriesContext(connection) as expanded_queries:
+            expanded, failures = collect_research_todos(env["workspace"], env["advisor"], "visible")
+        assert failures == []
+        assert len(expanded) == len(initial) + 3
+        assert len(expanded_queries) <= len(initial_queries) + 1
+
     def test_read_and_review_are_deduplicated_into_one_report_todo(self, env):
         response = _get(env, "advisor", "?scope=visible")
         payload = _payload(response)

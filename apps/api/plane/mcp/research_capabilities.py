@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from plane.research.serializers import ResearchChainNodeTaskSerializer
 from plane.research.services.agent_operations import allowed_actions, workspace_policy
-from plane.research.services.chain_tasks import assignable_project_members
+from plane.research.services.chain_tasks import assignable_chain_members, chain_writer
 from plane.research.services.mcp_catalog import ResearchReadError
 
 
@@ -39,7 +39,7 @@ def actions_for(connection, workspace, kind, target):
         # Only a serializer projection context; authorization uses the persisted connection owner.
         serializer = ResearchChainNodeTaskSerializer(context={"request": SimpleNamespace(user=connection.owner)})
         decisions = serializer.get_capabilities(target)["actions"]
-        if decisions["edit"]["allowed"]:
+        if decisions["edit"]["allowed"] or decisions["assign"]["allowed"]:
             direct.append("update_task")
         direct.extend(action for action in ("complete", "reopen", "cancel") if decisions[action]["allowed"])
     return sorted(proposals) + direct
@@ -50,7 +50,7 @@ def capabilities(reader, workspace, kind, target):
 
     actions = actions_for(reader.connection, workspace, kind, target)
     node = target if kind == "ResearchChainNode" else target.node
-    members = assignable_project_members(workspace, node.chain).select_related("member")
+    members = assignable_chain_members(workspace, node.chain).select_related("member")
     if "update_task" not in actions:
         members = members.none()
     if "query" in reader.args:
@@ -69,10 +69,15 @@ def capabilities(reader, workspace, kind, target):
     )
     transitions = [action for action in ("complete", "reopen", "cancel") if action in actions]
     proposal_actions = [action for action in RESEARCH_PAYLOADS if action in actions]
+    editable_fields = []
+    if "update_task" in actions:
+        editable_fields = (
+            list(RESEARCH_FIELDS) if chain_writer(workspace, reader.connection.owner, node.chain) else ["assignee"]
+        )
     return {
         "data": {
             "allowed_actions": actions,
-            "editable_fields": list(RESEARCH_FIELDS) if "update_task" in actions else [],
+            "editable_fields": editable_fields,
             "assignable_users": options["data"],
             "transition_options": [
                 {

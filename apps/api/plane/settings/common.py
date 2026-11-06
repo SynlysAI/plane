@@ -337,6 +337,7 @@ CELERY_ACCEPT_CONTENT = ["application/json"]
 
 
 CELERY_IMPORTS = (
+    "plane.bgtasks.mcp_file_task",
     "plane.bgtasks.asset_preview_task",
     # scheduled tasks
     "plane.bgtasks.issue_automation_task",

@@ -39,6 +39,11 @@ vi.mock("@plane/utils", () => ({
 vi.mock("@/components/project/member-header-column", () => ({ MemberHeaderColumn: () => <span /> }));
 vi.mock("@/components/workspace/settings/member-columns", () => ({
   AccountTypeColumn: () => <span />,
+  EmailColumn: ({ rowData }: { rowData: { member: { email: string } } }) => (
+    <div className="min-w-0 flex-1 truncate" title={rowData.member.email}>
+      {rowData.member.email}
+    </div>
+  ),
   NameColumn: () => <span />,
 }));
 vi.mock("@/components/workspace/settings/member-tags-editor", () => ({ MemberTagsEditor: () => <div /> }));

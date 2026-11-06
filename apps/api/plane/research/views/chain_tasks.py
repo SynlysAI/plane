@@ -7,13 +7,14 @@
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.db.models import ResearchChainNodeTask
+from plane.db.models import ResearchChain, ResearchChainNode, ResearchChainNodeTask
 from plane.research.serializers import ResearchChainNodeTaskSerializer
 from plane.research.services.chain_tasks import (
     ChainTaskConflictError,
     ChainTaskPermissionError,
     ChainTaskStateError,
     ChainTaskValidationError,
+    actor_can_manage_chain_tasks,
     cancel_task,
     complete_task,
     create_task,
@@ -131,10 +132,17 @@ class ResearchChainNodeTaskListCreateEndpoint(ResearchAPIView):
         except ChainTaskValidationError as exception:
             return _error_response(exception)
         return Response(
-            _envelope(
-                data=ResearchChainNodeTaskSerializer(tasks, many=True, context={"request": request}).data,
-                request_id=request_id_from(request),
-                schema_version=TASK_SCHEMA_VERSION,
+            dict(
+                _envelope(
+                    data=ResearchChainNodeTaskSerializer(tasks, many=True, context={"request": request}).data,
+                    request_id=request_id_from(request),
+                    schema_version=TASK_SCHEMA_VERSION,
+                ),
+                can_create=(
+                    chain.status == ResearchChain.Status.ACTIVE
+                    and node.status != ResearchChainNode.Status.ARCHIVED
+                    and actor_can_manage_chain_tasks(workspace, chain, request.user)
+                ),
             )
         )
 
@@ -204,6 +212,8 @@ class ResearchChainNodeTaskDetailEndpoint(ResearchAPIView):
         readonly_error = _chain_readonly_error(chain)
         if readonly_error:
             return readonly_error
+        if not actor_can_manage_chain_tasks(task.workspace, chain, request.user) and set(request.data) != {"assignee"}:
+            return _error_response(ChainTaskPermissionError("Only the assignee field can be transferred."))
         serializer = ResearchChainNodeTaskSerializer(
             task, data=request.data, partial=True, context={"request": request}
         )

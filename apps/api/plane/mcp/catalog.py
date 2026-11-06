@@ -8,48 +8,8 @@ from uuid import UUID as UUIDValue
 from plane.mcp.schema_compat import project_tools
 from plane.research.services.mcp_catalog import RESOURCE_KINDS, ResearchReadError
 
+from plane.mcp.schema_types import PAGING, REQUEST_ID, TARGET, UUID, enum, obj, ref, text, union
 
-def text(maximum=200):
-    return {"type": "string", "minLength": 1, "maxLength": maximum}
-
-
-UUID = {"type": "string", "format": "uuid"}
-
-
-def obj(properties, required=()):
-    return {"type": "object", "properties": properties, "required": list(required), "additionalProperties": False}
-
-
-def union(*branches):
-    properties = {}
-    for branch in branches:
-        for key, value in branch["properties"].items():
-            if key not in properties:
-                properties[key] = value
-            elif properties[key] != value:
-                variants = properties[key].get("anyOf", [properties[key]])
-                if value not in variants:
-                    properties[key] = {"anyOf": [*variants, value]}
-    return {**obj(properties), "anyOf": list(branches)}
-
-
-def enum(*values):
-    return {"type": "string", "enum": list(values)}
-
-
-def ref(domain, *types):
-    fields = {"domain": {"const": domain}, "workspace_slug": text(80), "object_type": enum(*types)}
-    return union(
-        obj({**fields, "id": UUID}, [*fields, "id"]),
-        obj({**fields, "url": {**text(2048), "format": "uri"}}, [*fields, "url"]),
-    )
-
-
-PAGING = {"cursor": text(4096), "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 20}}
-TARGET = union(
-    ref("administrative", "Project", "Issue"),
-    ref("research", "ResearchChain", "ResearchChainNode", "ResearchChainNodeTask"),
-)
 SCHEMAS = {
     "plane_list_workspaces": obj({"query": text(), **PAGING}),
     "plane_list_containers": obj(
@@ -123,7 +83,6 @@ SCHEMAS = {
     ),
 }
 READ_TOOL_NAMES = frozenset(SCHEMAS)
-REQUEST_ID = {**text(128), "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"}
 ADMIN_FIELDS = {
     "name": text(255),
     "description_html": {"type": "string", "minLength": 0, "maxLength": 30000},
@@ -144,8 +103,10 @@ ADMIN_SCHEMAS = {
         ["target", "changes"],
     ),
     "plane_add_comment": obj(
-        {"target": ref("administrative", "Issue"), "request_id": REQUEST_ID, "comment_html": text(30000)},
-        ["target", "request_id", "comment_html"],
+        {"target": ref("administrative", "Issue"), "request_id": REQUEST_ID,
+         "comment_html": {"type": "string", "minLength": 0, "maxLength": 30000},
+         "attachment_ids": {"type": "array", "items": UUID, "maxItems": 50, "uniqueItems": True}},
+        ["target", "request_id"],
     ),
     "plane_transition_task": obj(
         {"target": ref("administrative", "Issue"), "action": {"const": "set_state"}, "state_id": UUID},
@@ -206,10 +167,16 @@ PROJECT_LIFECYCLE_SCHEMAS = {
 DESCRIPTIONS = (
     "List selected workspaces still accessible to this connection owner.",
     "Find administrative projects and research chains. Names are candidates, never unique identities.",
-    "List research nodes. Administrative projects return not_applicable and a task-list entry.",
-    "List native tasks within their real parent, with native state, owner and keyword filters.",
-    "Read one bounded context section; follow cursors for comments, resources and events.",
-    "Read bounded authorized native content; never fetch URLs or file bytes. Reports require a version.",
+    "List research nodes. Node assignees and node states are separate from task assignees and task states.",
+    "List native tasks within their real parent, including completed tasks and their independent assignees. "
+    "Read each task's comments and resources for discussion and attachments.",
+    "Read bounded details, comments or resources. Research node details include scoped content counts and next calls; "
+    "node comments aggregate task discussion newest first. Omit resource_kind to list all resources, including task "
+    "and comment attachments. Empty instructions do not mean empty discussion. Follow cursors.",
+    "Read bounded authorized content, including text, Markdown, DOCX, PDF task attachments and existing Office "
+    "previews. "
+    "Use attachment registration IDs from content_ref; unavailable content returns explicit errors. "
+    "Never fetch arbitrary URLs. Reports require a version.",
 )
 TOOLS = tuple(
     {
@@ -274,7 +241,14 @@ RESEARCH_FIELDS = {
 }
 RESEARCH_PAYLOADS = {
     "create_task": obj({"title": text(500), "instruction": text(8000)}, ["title"]),
-    "append_task_comment": obj({"task_id": UUID, "text": text(8000)}, ["task_id", "text"]),
+    "append_task_comment": obj(
+        {
+            "task_id": UUID,
+            "text": {"type": "string", "minLength": 0, "maxLength": 8000},
+            "attachment_ids": {"type": "array", "items": UUID, "maxItems": 50, "uniqueItems": True},
+        },
+        ["task_id"],
+    ),
     "save_analysis_draft": obj(
         {"method": text(255), "summary": text(8000), "conclusion": text(8000)}, ["method", "summary"]
     ),
@@ -492,6 +466,11 @@ RESEARCH_PROJECT_TOOLS = tuple(
 )
 
 
+from plane.mcp.file_catalog import FILE_READ_NAMES, FILE_SCHEMAS, FILE_TOOLS  # noqa: E402
+
+SCHEMAS.update(FILE_SCHEMAS)
+
+
 def tools_for(connection):
     administrative = any(
         entry["domains"].get("administrative") == "read_write" for entry in connection.scope["workspaces"]
@@ -510,6 +489,13 @@ def tools_for(connection):
                 current["description"] += " " + item["description"]
             else:
                 result.append(item)
+    result.extend(
+        deepcopy(tool)
+        for tool in FILE_TOOLS
+        if tool["name"] in FILE_READ_NAMES or administrative or research
+    )
+    if not any(tool["name"] == "plane_get_write_result" for tool in result):
+        result.append(deepcopy(next(tool for tool in ADMIN_TOOLS if tool["name"] == "plane_get_write_result")))
     return project_tools(result)
 
 
@@ -607,9 +593,19 @@ def validate(name, arguments):
         if isinstance(value, dict):
             return {
                 key: str(UUIDValue(item))
-                if key in {"id", "resource_id", "state_id", "assignee_id", "assignee", "task_id", "operation_id"}
+                if key
+                in {
+                    "id",
+                    "resource_id",
+                    "state_id",
+                    "assignee_id",
+                    "assignee",
+                    "task_id",
+                    "operation_id",
+                    "session_id",
+                }
                 else [str(UUIDValue(identity)) for identity in item]
-                if key in {"assignee_ids", "module_ids", "label_ids"}
+                if key in {"assignee_ids", "module_ids", "label_ids", "attachment_ids"}
                 else normalize(item)
                 for key, item in value.items()
             }

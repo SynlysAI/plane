@@ -72,7 +72,9 @@ def issue_context_token(
     if not request_id:
         raise ValueError("request_id is required")
     raw_token = secrets.token_urlsafe(48)
-    visibility_scope = profile.chain_visibility
+    from plane.research.utils.chain_permissions import effective_chain_visibility
+
+    visibility_scope = effective_chain_visibility(profile)
     allowed_knowledge_base_ids = list(allowed_knowledge_base_ids or [])
     allowed_file_ids = list(allowed_file_ids or [])
     allowed_reports = list(allowed_reports or [])

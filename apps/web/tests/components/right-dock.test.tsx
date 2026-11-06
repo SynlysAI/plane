@@ -67,6 +67,7 @@ it("renders detail and agent as sibling flow columns without a fixed overlay", a
   const workspace = document.querySelector("[data-right-dock-workspace]") as HTMLElement;
   const detail = document.querySelector('[data-right-dock-detail="task-1"]');
   const agent = document.querySelector('[data-testid="agent"]');
+  const detailBody = document.querySelector("#plane-right-detail-dock-body");
   expect(main).not.toBeNull();
   expect(detail).not.toBeNull();
   expect(agent).not.toBeNull();
@@ -75,6 +76,9 @@ it("renders detail and agent as sibling flow columns without a fixed overlay", a
   expect(detail?.classList.contains("fixed")).toBe(false);
   expect(detail?.classList.contains("hidden")).toBe(false);
   expect(detail?.classList.contains("flex")).toBe(true);
+  expect(detail?.classList.contains("relative")).toBe(true);
+  expect(detail?.classList.contains("isolate")).toBe(true);
+  expect(detailBody?.classList.contains("relative")).toBe(true);
   expect(workspace.style.flexBasis).toBe("min(320px, 100%)");
   expect(workspace.style.flexGrow).toBe("1");
   expect(workspace.style.flexShrink).toBe("0");
@@ -114,6 +118,24 @@ it("uses a wide detail column and keeps the agent rail available when the agent 
   expect(railButton).not.toBeNull();
   await act(async () => railButton?.click());
   expect(onOpenAgent).toHaveBeenCalledOnce();
+});
+
+it("contains legacy detail mounts inside the fallback panel", async () => {
+  const { RightDockPortal } = await import("@/components/right-dock");
+  await act(async () =>
+    root.render(
+      <RightDockPortal id="legacy-detail" title="任务详情" onClose={() => undefined}>
+        <div data-testid="legacy-detail-body">任务详情</div>
+      </RightDockPortal>
+    )
+  );
+
+  const fallback = document.querySelector("aside");
+  expect(fallback?.classList.contains("fixed")).toBe(true);
+  expect(fallback?.classList.contains("isolate")).toBe(true);
+  expect(fallback?.classList.contains("min-w-0")).toBe(true);
+  expect(fallback?.classList.contains("overflow-hidden")).toBe(true);
+  expect(document.querySelector('[data-testid="legacy-detail-body"]')?.textContent).toBe("任务详情");
 });
 
 it("escape closes the active detail before the persistent agent slot", async () => {

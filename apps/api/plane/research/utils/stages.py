@@ -41,19 +41,38 @@ def project_owner_id(project_id, workspace_id):
     return profile
 
 
-def stage_resource(instance, *, owner_id=None, visibility=None, with_reviewers=False) -> ResearchResource:
-    owner = owner_id or project_owner_id(instance.project_id, instance.workspace_id)
-    reviewer_ids = []
-    if with_reviewers:
+def stage_resource(
+    instance, *, owner_id=None, visibility=None, with_reviewers=False, reviewer_ids=None
+) -> ResearchResource:
+    """将阶段及可选的批量预取评审人转换为权限资源。
+
+    Args:
+        instance: 当前阶段实例。
+        owner_id: 可选的已解析课题所有者 ID。
+        visibility: 可选的已解析阶段可见范围。
+        with_reviewers: 未提供评审人列表时是否查询有效分配。
+        reviewer_ids: 已批量加载的评审人 ID；None 表示未预取。
+
+    Returns:
+        保持原有可见性语义的阶段权限资源。
+    """
+    profile = getattr(instance.project, "research_profile", None)
+    if owner_id is not None:
+        owner = owner_id
+    else:
+        owner = (
+            profile.owner_id
+            if profile and profile.deleted_at is None and profile.workspace_id == instance.workspace_id
+            else None
+        )
+    if reviewer_ids is not None:
+        reviewer_ids = [str(reviewer_id) for reviewer_id in reviewer_ids]
+    elif with_reviewers:
         from plane.research.services.review_rules import effective_assignments
 
         reviewer_ids = [str(assignment.reviewer_id) for assignment in effective_assignments(instance)]
-    profile = getattr(instance.project, "research_profile", None)
-    if profile is None:
-        profile = ResearchProjectProfile.objects.filter(
-            project_id=instance.project_id,
-            workspace_id=instance.workspace_id,
-        ).first()
+    else:
+        reviewer_ids = []
     return ResearchResource(
         kind=STAGE_RESOURCE_KIND,
         workspace_id=instance.workspace_id,

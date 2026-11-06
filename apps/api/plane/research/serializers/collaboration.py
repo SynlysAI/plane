@@ -16,6 +16,7 @@ from plane.db.models import (
     ResearchPaperReviewVersion,
 )
 from plane.research.services.chain_tasks import (
+    actor_can_assign_task,
     actor_can_cancel_task,
     actor_can_complete_task,
     actor_can_delete_task,
@@ -81,6 +82,9 @@ def _capabilities(serializer, task):
                 assignee_is_valid=serializer.get_assignee_is_valid(task),
             ),
             "deleter": actor_can_delete_task(workspace, task, actor),
+            "assigner": actor_can_assign_task(
+                workspace, task, actor, assignee_is_valid=serializer.get_assignee_is_valid(task)
+            ),
         }
     roles = cache[cache_key]
     editable = task.status in EDITABLE_STATUSES
@@ -88,7 +92,7 @@ def _capabilities(serializer, task):
     decisions = {
         "view": True,
         "edit": writer,
-        "assign": writer,
+        "assign": roles["assigner"],
         "complete": roles["completer"],
         "reopen": roles["reopener"],
         "cancel": roles["manager"] and task.status != ResearchChainNodeTask.Status.CANCELLED,

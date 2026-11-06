@@ -633,7 +633,7 @@ class ResearchReportCommentFeedbackEndpoint(ResearchAPIView):
             metadata={
                 "report": str(report.id),
                 "thread": str(comment.thread.id),
-                "comment": str(comment.id),
+                "comment": comment.comment_stripped[:240],
                 "snapshot_version": snapshot.version_no,
                 "feedback_type": comment.feedback_type,
                 "agent_session": str(agent_session.session_id) if agent_session else None,

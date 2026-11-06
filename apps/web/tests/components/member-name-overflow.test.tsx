@@ -27,7 +27,11 @@ vi.mock("@plane/ui", () => {
 });
 vi.mock("@plane/utils", () => ({ getFileURL: (value: string) => value }));
 vi.mock("lucide-react", () => ({ CircleMinus: () => <span /> }));
-vi.mock("@makeplane/propel/icons", () => ({ DeactivatedUserOutline: () => <span />, DeleteOutline: () => <span /> }));
+vi.mock("@makeplane/propel/icons", () => ({
+  DeactivatedUserOutline: () => <span />,
+  DeleteOutline: () => <span />,
+  EditOutline: () => <span />,
+}));
 vi.mock("@/hooks/store/use-member", () => ({
   useMember: () => ({
     project: { updateMemberRole: vi.fn() },

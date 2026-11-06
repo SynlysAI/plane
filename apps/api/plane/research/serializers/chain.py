@@ -12,9 +12,10 @@ from plane.db.models import (
     ResearchChainSnapshot,
     ResearchChainUpload,
 )
-from plane.research.services.chain_tasks import chain_lifecycle_manager, chain_manager, chain_writer
+from plane.research.services.chain_tasks import chain_lifecycle_manager, chain_manager, chain_resource, chain_writer
+from plane.research.utils.chain_permissions import effective_chain_visibility
 from plane.research.utils.action_capabilities import capability_map
-from plane.research.utils.acl import ResearchResource, build_actor_context, check_access
+from plane.research.utils.acl import build_actor_context, check_access
 from plane.preview.service import file_kind
 
 
@@ -97,18 +98,7 @@ def _request_context(serializer, workspace_id):
 
 def _chain_resource(obj):
     """Project a Chain into the shared ACL resource shape."""
-    profile = getattr(obj.project, "research_profile", None)
-    visibility = {"MEMBERS": "UNIT", "ORG": "ANCESTRY"}.get(obj.visibility, obj.visibility)
-    return ResearchResource(
-        kind="research_chain",
-        workspace_id=obj.workspace_id,
-        owner_id=obj.owner_id,
-        org_unit_id=getattr(profile, "org_unit_id", None),
-        visibility=visibility,
-        state=obj.status,
-        project_id=obj.project_id,
-        is_team_content=obj.visibility != "PRIVATE",
-    )
+    return chain_resource(obj)
 
 
 def _node_resource(obj):
@@ -172,6 +162,7 @@ class ResearchChainSerializer(serializers.ModelSerializer):
     open_task_count = serializers.SerializerMethodField()
     next_due_at = serializers.SerializerMethodField()
     current_node = serializers.SerializerMethodField()
+    effective_visibility = serializers.SerializerMethodField()
 
     class Meta:
         model = ResearchChain
@@ -187,6 +178,7 @@ class ResearchChainSerializer(serializers.ModelSerializer):
             "org_unit_name",
             "status",
             "visibility",
+            "effective_visibility",
             "open_task_count",
             "next_due_at",
             "current_node",
@@ -201,6 +193,11 @@ class ResearchChainSerializer(serializers.ModelSerializer):
     def get_project_name(self, obj):
         """Return the topic title for fixed Chain UI context."""
         return obj.project.name
+
+    def get_effective_visibility(self, obj):
+        """返回研究链基于项目组织归属派生的有效可见性。"""
+        profile = getattr(obj.project, "research_profile", None)
+        return effective_chain_visibility(profile, configured_visibility=obj.visibility)
 
     def get_owner_name(self, obj):
         """Return the owner display name without exposing a raw user ID."""

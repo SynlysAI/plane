@@ -28,6 +28,7 @@ from plane.db.models import (
 )
 from plane.research.utils.config import research_module_enabled
 from plane.research.utils.roles import is_research_admin
+from plane.research.utils.todo_context import reuse_todo_query
 
 WORKSPACE_ADMIN_ROLE = 20
 
@@ -139,10 +140,13 @@ def managing_org_units_for(user, workspace_id, on_date=None):
     for path in paths:
         query |= Q(path__startswith=path)
     return set(
-        OrgUnit.objects.filter(workspace_id=workspace_id, deleted_at__isnull=True).filter(query).values_list("id", flat=True)
+        OrgUnit.objects.filter(workspace_id=workspace_id, deleted_at__isnull=True)
+        .filter(query)
+        .values_list("id", flat=True)
     )
 
 
+@reuse_todo_query
 def build_actor_context(actor, workspace_id, on_date=None) -> ActorContext:
     """Collect every relation the visibility matrix needs, in one pass."""
     on_date = on_date or timezone.localdate()

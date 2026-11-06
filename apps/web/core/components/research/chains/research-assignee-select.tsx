@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useId, useMemo, useRef, useState } from "react";
+import { usePopper } from "react-popper";
 import { useTranslation } from "@plane/i18n";
 import type { TResearchAssignableUser, TResearchAssignableUserScope } from "@plane/types";
 import { useTransientMenu } from "@/hooks/use-transient-menu";
@@ -20,7 +21,12 @@ type Props = {
   onChange: (userId: string) => void;
 };
 
-const SCOPE_ORDER: TResearchAssignableUserScope[] = ["ORG_SCOPE", "COLLABORATOR"];
+const SCOPE_ORDER: TResearchAssignableUserScope[] = ["WORKSPACE", "ORG_SCOPE", "COLLABORATOR"];
+const SCOPE_KEYS: Record<TResearchAssignableUserScope, string> = {
+  WORKSPACE: "workspace",
+  ORG_SCOPE: "org_scope",
+  COLLABORATOR: "collaborator",
+};
 
 /**
  * 拼出候选人的组织、角色和身份，供指派弹出层展示。
@@ -35,14 +41,17 @@ const SCOPE_ORDER: TResearchAssignableUserScope[] = ["ORG_SCOPE", "COLLABORATOR"
 function candidateIdentity(candidate: TResearchAssignableUser, t: (key: string) => string) {
   const org = candidate.org_unit_name || t("research.chain_tasks.assignee_no_org");
   const role = candidate.org_role ? t(`research.chain_tasks.roles.${candidate.org_role.toLowerCase()}`) : "";
-  const identity = candidate.is_primary
-    ? t("research.chain_tasks.primary_identity")
-    : t("research.chain_tasks.collaborator_identity");
+  const identity =
+    candidate.scope === "WORKSPACE"
+      ? ""
+      : candidate.is_primary
+        ? t("research.chain_tasks.primary_identity")
+        : t("research.chain_tasks.collaborator_identity");
   return [org, role, identity].filter(Boolean).join(" · ");
 }
 
 /**
- * 用弹出层选择有效课题成员中的单名负责人。
+ * 用弹出层从研究链有效候选人中选择单名负责人。
  *
  * Args:
  *   candidates: 可指派接口的原样结果。
@@ -73,6 +82,16 @@ export function ResearchAssigneeSelect({
   const { t } = useTranslation();
   const listboxId = useId();
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const [referenceElement, setReferenceElement] = useState<HTMLButtonElement | null>(null);
+  const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
+  const { styles, attributes } = usePopper(referenceElement, popperElement, {
+    placement: menuAlign === "left" ? "bottom-start" : "bottom-end",
+    strategy: "fixed",
+    modifiers: [
+      { name: "offset", options: { offset: [0, 4] } },
+      { name: "preventOverflow", options: { padding: 12 } },
+    ],
+  });
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -98,6 +117,7 @@ export function ResearchAssigneeSelect({
   return (
     <div role="presentation" ref={menuRef} className="relative min-w-0" data-peek-trigger="" onKeyDown={handleKeyDown}>
       <button
+        ref={setReferenceElement}
         type="button"
         aria-label={label}
         aria-expanded={open}
@@ -118,14 +138,17 @@ export function ResearchAssigneeSelect({
       </button>
       {open && !disabled && (
         <div
+          ref={setPopperElement}
           id={listboxId}
           role="listbox"
           aria-label={label}
-          className={`absolute top-8 z-20 w-72 rounded-md border border-subtle bg-surface-1 p-2 shadow-[0_8px_24px_rgba(37,37,34,0.08)] ${
-            menuAlign === "left" ? "left-0" : "right-0"
-          }`}
+          style={styles.popper}
+          {...attributes.popper}
+          className="z-20 max-h-96 w-72 max-w-[calc(100vw-24px)] overflow-y-auto rounded-md border border-subtle bg-surface-1 p-2 shadow-[0_8px_24px_rgba(37,37,34,0.08)]"
         >
-          <p className="px-2 py-1 text-12 text-tertiary">{t("research.chain_tasks.membership_hint")}</p>
+          {!candidates.some((candidate) => candidate.scope === "WORKSPACE") && (
+            <p className="px-2 py-1 text-12 text-tertiary">{t("research.chain_tasks.membership_hint")}</p>
+          )}
           <input
             type="search"
             value={query}
@@ -161,11 +184,11 @@ export function ResearchAssigneeSelect({
               <div
                 key={scope}
                 role="group"
-                aria-label={t(`research.chain_tasks.scopes.${scope === "ORG_SCOPE" ? "org_scope" : "collaborator"}`)}
+                aria-label={t(`research.chain_tasks.scopes.${SCOPE_KEYS[scope]}`)}
                 className="mt-1"
               >
                 <p className="px-2 py-1 text-11 text-tertiary">
-                  {t(`research.chain_tasks.scopes.${scope === "ORG_SCOPE" ? "org_scope" : "collaborator"}`)}
+                  {t(`research.chain_tasks.scopes.${SCOPE_KEYS[scope]}`)}
                 </p>
                 {scoped.map((candidate) => (
                   <button
@@ -200,7 +223,9 @@ export function ResearchAssigneeSelect({
               <p className="px-2 py-2 text-11 text-tertiary">{t("research.chain_tasks.no_candidate_match")}</p>
             )
           )}
-          <p className="mt-2 px-2 text-11 text-tertiary">{t("research.chain_tasks.candidate_scope_hint")}</p>
+          {!candidates.some((candidate) => candidate.scope === "WORKSPACE") && (
+            <p className="mt-2 px-2 text-11 text-tertiary">{t("research.chain_tasks.candidate_scope_hint")}</p>
+          )}
         </div>
       )}
     </div>

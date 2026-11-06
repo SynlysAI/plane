@@ -183,6 +183,44 @@ it("keeps a floating agent above the page without a persistent rail", async () =
   expect(container.querySelector("[data-right-dock-rail]")).toBeNull();
 });
 
+it("uses the floating agent below the desktop dock threshold even when pinned is preferred", async () => {
+  mocks.getStatus.mockReturnValue({ enabled: true, ready: true, state: "ready" });
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+  const { AIAssistantRoot } = await import("@/components/assistant/ai-assistant-root");
+  const { AIAssistantStore } = await import("@/store/ai-assistant");
+  const { StoreContext } = await import("@/lib/store-context");
+  const store = new AIAssistantStore();
+  const contextValue = createStoreContext(store);
+  store.hydrate("lab");
+  store.open();
+  store.setDockMode("docked");
+
+  await act(async () =>
+    root.render(
+      <StoreContext.Provider value={contextValue}>
+        <AIAssistantRoot>
+          <main data-testid="narrow-route-page">narrow page</main>
+        </AIAssistantRoot>
+      </StoreContext.Provider>
+    )
+  );
+
+  const agentSlot = container.querySelector("[data-right-dock-agent]") as HTMLElement;
+  expect(agentSlot.classList.contains("fixed")).toBe(true);
+  expect(agentSlot.classList.contains("flex")).toBe(true);
+  expect(container.querySelector('[data-testid="narrow-route-page"]')).not.toBeNull();
+  expect(container.querySelector('[data-testid="assistant-panel"]')).not.toBeNull();
+});
+
 it("renders an expanded pinned agent as a full-width floating layer", async () => {
   mocks.getStatus.mockReturnValue({ enabled: true, ready: true, state: "ready" });
   const { AIAssistantRoot } = await import("@/components/assistant/ai-assistant-root");

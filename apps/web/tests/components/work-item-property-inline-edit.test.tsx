@@ -179,6 +179,19 @@ function renderPeekView(disabled = false, isArchived = false) {
   );
 }
 
+/** Render a standalone side peek view as it is mounted in the right detail dock. */
+function renderSidePeekView() {
+  renderElement(
+    <IssueView
+      workspaceSlug="ws"
+      projectId="project-1"
+      issueId="issue-1"
+      is_archived={false}
+      issueOperations={issueOperations}
+    />
+  );
+}
+
 beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
@@ -249,6 +262,27 @@ it("keeps peek properties editable while widgets require edit mode", async () =>
   expect(captured.peekMode).toBe("full-screen");
   expect(captured.peekWidgetsDisabled).toBe(false);
   expect(captured.peekPropertiesDisabled).toBe(false);
+});
+
+it("keeps a standalone side peek inside the right detail dock flow", async () => {
+  await act(async () => renderSidePeekView());
+
+  const peekFrame = container.querySelector("[data-issue-peek-frame]");
+  expect(peekFrame).toBeTruthy();
+  expect(peekFrame?.classList.contains("absolute")).toBe(false);
+  expect(peekFrame?.classList.contains("flex")).toBe(true);
+  expect(peekFrame?.classList.contains("h-full")).toBe(true);
+  expect(peekFrame?.classList.contains("w-full")).toBe(true);
+  expect(peekFrame?.classList.contains("min-h-0")).toBe(true);
+  expect(peekFrame?.classList.contains("min-w-0")).toBe(true);
+  expect(peekFrame?.classList.contains("flex-col")).toBe(true);
+  expect(peekFrame?.classList.contains("overflow-hidden")).toBe(true);
+  expect((peekFrame as HTMLElement).style.boxShadow).toBe("");
+
+  await act(async () => clickByTestId("peek-mode-toggle"));
+  const fullScreenFrame = container.querySelector("[data-issue-peek-frame]");
+  expect(fullScreenFrame).toBeTruthy();
+  expect((fullScreenFrame as HTMLElement).style.boxShadow).not.toBe("");
 });
 
 it("keeps peek properties disabled without permission or after archiving", async () => {

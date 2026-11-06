@@ -117,10 +117,10 @@ def assignment_transfer_candidates(entity_type, entity):
     if entity_type == ISSUE_ENTITY:
         users = User.objects.filter(id__in=assignable_project_member_ids(entity.project))
     else:
-        from plane.research.services.chain_tasks import assignable_project_members
+        from plane.research.services.chain_tasks import assignable_chain_members
 
         users = User.objects.filter(
-            id__in=assignable_project_members(entity.workspace, entity.chain).values("member_id")
+            id__in=assignable_chain_members(entity.workspace, entity.chain).values("member_id")
         )
     return _sorted_candidates(users, assignment_transfer_owner_id(entity_type, entity))
 

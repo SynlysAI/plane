@@ -22,6 +22,7 @@ from plane.utils.color import get_random_color
 from plane.utils.constants import DEFAULT_TIMEZONE
 
 from ..mixins import TimeAuditModel
+from plane.db.todo_queryset import TodoInvalidationQuerySet
 
 
 def get_default_onboarding():
@@ -131,6 +132,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     REQUIRED_FIELDS = ["username"]
 
     objects = UserManager()
+    # 保留 stock UserManager 的用户创建接口与迁移序列化，只扩展运行时查询集。
+    objects._queryset_class = TodoInvalidationQuerySet
 
     class Meta:
         verbose_name = "User"

@@ -774,6 +774,7 @@ def test_home_activity_research_links_use_frontend_routes(env):
     assert rows[str(task.id)]["url"] == (
         f"/{slug}/research/chains/{chain.id}/?tab=nodes&node={node.id}&task={task.id}"
     )
+    assert rows[str(task.id)]["changes"] == [{"field": "assignee", "old_value": None, "new_value": "已更新"}]
     assert rows[str(chain.id)]["url"] == f"/{slug}/research/chains/{chain.id}/"
     assert rows[str(report.id)]["url"] == f"/{slug}/research/reports/{report.id}/"
 

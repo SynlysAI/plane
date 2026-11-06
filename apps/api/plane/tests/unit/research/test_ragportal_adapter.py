@@ -95,6 +95,30 @@ def test_upload_passes_research_scope_metadata_and_request_id(client):
     assert post.call_args.kwargs["headers"]["Idempotency-Key"] == "req-upload-1"
 
 
+def test_upload_does_not_retry_an_uncertain_write(client, settings):
+    """An uncertain upload response must not trigger another file creation."""
+    settings.RESEARCH_INTEGRATION_MAX_RETRIES = 2
+    with patch("httpx.post", return_value=FakeResponse(status_code=503)) as post:
+        result = client.upload(file_name="paper.pdf", file_content=b"pdf", kb_id="kb-1")
+
+    assert result.degraded is True
+    assert post.call_count == 1
+
+
+def test_other_post_requests_keep_the_configured_retry_policy(client, settings):
+    """The no-retry rule is limited to RAGPortal file uploads."""
+    settings.RESEARCH_INTEGRATION_MAX_RETRIES = 1
+    responses = [FakeResponse(status_code=503), FakeResponse(payload={"items": [{"id": "ok"}]})]
+    with (
+        patch("httpx.post", side_effect=responses) as post,
+        patch("plane.research.services.integrations.base.time.sleep"),
+    ):
+        result = client.request(path="/api/test-write", method="POST", operation="test_write")
+
+    assert result.degraded is False
+    assert post.call_count == 2
+
+
 def test_upload_forwards_seekable_file_object_without_reading_it(client):
     """The adapter can stream request-owned file objects without buffering them."""
     document = BytesIO(b"streamed-pdf")

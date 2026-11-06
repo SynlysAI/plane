@@ -21,6 +21,9 @@ from plane.db.models import FileAsset
 def delete_unuploaded_file_asset():
     """This task deletes unuploaded file assets older than a certain number of days."""
     cutoff = timezone.now() - timedelta(days=int(os.environ.get("UNUPLOADED_ASSET_DELETE_DAYS", "7")))
+    from plane.bgtasks.mcp_file_task import cleanup_mcp_file_transfers
+
+    cleanup_mcp_file_transfers()
     FileAsset.objects.filter(
         Q(created_at__lt=cutoff)
         & (Q(is_uploaded=False) | Q(entity_type=FileAsset.EntityTypeContext.COMMENT_ATTACHMENT, comment__isnull=True))

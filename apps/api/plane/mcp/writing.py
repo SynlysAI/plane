@@ -519,7 +519,10 @@ class UnifiedWriteService:
                             )
                         elif name == "plane_add_comment":
                             serializer = IssueCommentSerializer(
-                                data={"comment_html": args["comment_html"], "attachment_ids": []},
+                                data={
+                                    "comment_html": args.get("comment_html", ""),
+                                    "attachment_ids": args.get("attachment_ids", []),
+                                },
                                 context={"request": self.request, "attachment_issue": target},
                             )
                             serializer.is_valid(raise_exception=True)
@@ -626,8 +629,12 @@ class UnifiedWriteService:
         )
 
     def get_result(self, args):
+        from plane.mcp.files import UnifiedFileService
         from plane.mcp.authorization import active_connection
 
+        file_result = UnifiedFileService(self.connection, request=self.request).get_result(**args)
+        if file_result is not None:
+            return file_result
         current = active_connection(self.connection.pk)
         if current is None:
             raise ResearchReadError("scope_denied", "Connection is no longer valid.", 403)

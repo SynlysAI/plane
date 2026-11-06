@@ -23,7 +23,8 @@ RESOURCE_TYPES = {"REPORT": "report", "STAGE_MATERIAL": "stage_material", "PAPER
                   "SNAPSHOT": "snapshot", "EXTERNAL_REF": "external_reference"}
 PAYLOADS = {
     "create_task": obj({"title": text(500), "instruction": text()}, ["title"]),
-    "append_task_comment": obj({"task_id": UUID, "text": text()}, ["task_id", "text"]),
+    "append_task_comment": obj({"task_id": UUID, "text": {"type": "string", "minLength": 0, "maxLength": 8000},
+                                "attachment_ids": {"type": "array", "items": UUID, "maxItems": 50}}, ["task_id"]),
     "save_analysis_draft": obj({"method": text(255), "summary": text(), "conclusion": text()}, ["method", "summary"]),
     "attach_task_resource": obj({"task_id": UUID, "resource_type": {"enum": list(RESOURCE_TYPES)},
                                  "resource_id": UUID, "version": {"type": "integer", "minimum": 1}},
@@ -74,6 +75,15 @@ def validate_operation(name, arguments):
             result["payload"][key] = str(UUIDValue(result["payload"][key]))
     for ref in result.get("source_refs", []):
         ref["id"] = str(UUIDValue(ref["id"]))
+    if "attachment_ids" in result.get("payload", {}):
+        ids = [str(UUIDValue(value)) for value in result["payload"]["attachment_ids"]]
+        if len(ids) != len(set(ids)):
+            raise ResearchReadError("invalid_arguments", "评论附件不能重复。")
+        result["payload"]["attachment_ids"] = ids
+    if result.get("action") == "append_task_comment" and not (
+        result["payload"].get("text", "").strip() or result["payload"].get("attachment_ids")
+    ):
+        raise ResearchReadError("invalid_arguments", "评论需要正文或至少一个附件。")
     refs = result.get("source_refs", [])
     if len({(ref["kind"], ref["id"], ref.get("version"), ref["usage"]) for ref in refs}) != len(refs):
         raise ResearchReadError("invalid_arguments", "Duplicate source references are not permitted.")
@@ -100,7 +110,7 @@ def matches(schema, value):
     if kind == "integer":
         return type(value) is int and schema.get("minimum", 0) <= value <= schema.get("maximum", 2147483647)
     if kind == "string":
-        if not isinstance(value, str) or not schema.get("minLength", 1) <= len(value) <= schema.get("maxLength", 200) or not value.strip():
+        if not isinstance(value, str) or not schema.get("minLength", 1) <= len(value) <= schema.get("maxLength", 200) or (schema.get("minLength", 1) > 0 and not value.strip()):
             return False
         if schema.get("format") == "uuid":
             try:

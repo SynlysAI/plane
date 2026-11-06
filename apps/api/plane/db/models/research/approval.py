@@ -8,6 +8,7 @@ from django.db import models
 from django.db.models import Q
 
 from plane.db.models.base import BaseModel
+from plane.db.todo_queryset import TodoInvalidationQuerySet
 
 APPROVAL_TYPES = (("TASK", "Task"), ("PURCHASE", "Purchase"), ("CUSTOM", "Custom"))
 
@@ -201,6 +202,8 @@ class ApprovalAction(models.Model):
     action = models.CharField(max_length=16, choices=Action.choices)
     comment = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    objects = models.Manager.from_queryset(TodoInvalidationQuerySet)()
 
     class Meta:
         verbose_name = "Approval Action"

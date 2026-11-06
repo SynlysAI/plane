@@ -26,24 +26,48 @@ def flow_steps(flow):
     )
 
 
-def step_approver_ids(request, step):
-    """Users who may act on a step (explicit user or organisation role)."""
+def step_approver_ids(request, step, cache=None):
+    """解析步骤审批人，可在一次只读聚合中复用组织角色查询。
+
+    Args:
+        request: 当前审批请求。
+        step: 当前审批步骤。
+        cache: 可选的请求级缓存字典。
+
+    Returns:
+        明确指定或由组织角色解析得到的审批人 ID 集合。
+    """
     if step.approver_user_id:
         return {step.approver_user_id}
     if not step.approver_org_role:
         return set()
 
-    scope = org_unit_scope_ids(request.org_unit_id, request.flow.workspace_id)
-    if not scope:
-        return set()
     today = timezone.localdate()
+    key = (request.org_unit_id, request.flow.workspace_id, step.approver_org_role, today)
+    if cache is not None and key in cache:
+        return set(cache[key])
+
+    scope_key = ("org_unit_scope", request.org_unit_id, request.flow.workspace_id)
+    if cache is not None and scope_key in cache:
+        scope = cache[scope_key]
+    else:
+        scope = org_unit_scope_ids(request.org_unit_id, request.flow.workspace_id)
+        if cache is not None:
+            cache[scope_key] = scope
+    if not scope:
+        if cache is not None:
+            cache[key] = set()
+        return set()
     memberships = OrgUnitMember.objects.filter(
         active_membership_q(today),
         workspace_id=request.flow.workspace_id,
         org_unit_id__in=scope,
         org_role=step.approver_org_role,
     )
-    return set(memberships.values_list("user_id", flat=True))
+    approver_ids = set(memberships.values_list("user_id", flat=True))
+    if cache is not None:
+        cache[key] = approver_ids
+    return approver_ids
 
 
 def current_step(request):

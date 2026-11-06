@@ -43,7 +43,7 @@ from plane.research.services.chain_tasks import (
     _ensure_task_parent_writable,
     _replay_task_event,
     actor_can_cancel_task,
-    assignable_project_members,
+    assignable_chain_members,
     cancel_task,
     chain_writer,
     complete_task,
@@ -584,7 +584,7 @@ class UnifiedResearchWriteService:
         if chain.status != ResearchChain.Status.ACTIVE:
             raise ResearchReadError("state_conflict", "Chain is not active.", 409)
         assignee_id = args.get("assignee_id") or connection.owner.pk
-        if not assignable_project_members(workspace, chain).filter(member_id=assignee_id).exists():
+        if not assignable_chain_members(workspace, chain).filter(member_id=assignee_id).exists():
             raise ResearchReadError("permission_denied", "Assignee is not available for this research chain.", 403)
         node_type = args["node_type"]
         if NODE_TYPE_PATTERN.fullmatch(node_type) is None:
@@ -680,7 +680,7 @@ class UnifiedResearchWriteService:
                 fields.append(field)
         if "assignee_id" in args["changes"]:
             assignee_id = args["changes"]["assignee_id"]
-            if not assignable_project_members(workspace, node.chain).filter(member_id=assignee_id).exists():
+            if not assignable_chain_members(workspace, node.chain).filter(member_id=assignee_id).exists():
                 raise ResearchReadError("permission_denied", "Assignee is not available for this research chain.", 403)
             node.assignee_id = assignee_id
             fields.append("assignee")
@@ -878,7 +878,11 @@ class UnifiedResearchWriteService:
                     )
                     serializer.is_valid(raise_exception=True)
                     task = update_task(
-                        task=task, actor=self.connection.owner, payload=serializer.validated_data, request=self.request
+                        task=task,
+                        actor=self.connection.owner,
+                        payload=serializer.validated_data,
+                        request=self.request,
+                        source="MCP",
                     )
                     expected = task_snapshot(task)
                     event = None

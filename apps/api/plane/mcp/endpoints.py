@@ -33,7 +33,8 @@ from plane.mcp.credentials import (
     recover_credential,
     seal_credential,
 )
-from plane.mcp.catalog import ADMIN_SCHEMAS, PROJECT_LIFECYCLE_SCHEMAS, SCHEMAS, tools_for
+from plane.mcp.catalog import ADMIN_SCHEMAS, FILE_SCHEMAS, PROJECT_LIFECYCLE_SCHEMAS, SCHEMAS, tools_for
+from plane.mcp.files import UnifiedFileService
 from plane.mcp.reading import VERSION, UnifiedReadService, encode
 from plane.mcp.writing import UnifiedWriteService
 from plane.mcp.research_writing import UnifiedResearchWriteService
@@ -63,7 +64,8 @@ class UnifiedEndpointBase(APIView):
         }
         if origin and (origin not in allowed or urlsplit(origin).path):
             raise ResearchReadError("origin_denied", "Origin is not allowed.", 403)
-        if request.method == "POST" and (request.content_type != "application/json" or len(request.body) > 65536):
+        body_limit = 2 * 1024 * 1024 if isinstance(self, UnifiedMCPEndpoint) else 65536
+        if request.method == "POST" and (request.content_type != "application/json" or len(request.body) > body_limit):
             raise ResearchReadError("invalid_request", "Use a bounded application/json request.", 400)
         return super().initial(request, *args, **kwargs)
 
@@ -539,7 +541,13 @@ class UnifiedMCPEndpoint(UnifiedEndpointBase):
                     "Research task create/comment/analysis/binding/notes use explicit prepare then execute; recover with "  # noqa: E501
                     "the same operation_id or list by request_id. Task edits and native transitions execute directly. "
                     "A write connection is not review authority. Read capabilities and the task before retrying "
-                    "an uncertain edit. Formal report submissions are not offered."
+                    "an uncertain edit. Formal report submissions are not offered. "
+                    "文件操作先调用 plane_list_files 选择文件及版本。下载和上传优先使用工具返回的完整临时 HTTP 请求；"
+                    "没有 HTTP 文件能力时使用 MCP 分块，由 Agent 现有本地文件工具执行 Base64 编解码并核对 SHA-256。"
+                    "禁止编造二进制内容或让服务器读取客户端路径。上传后必须 complete 并查询至 file_complete；"
+                    "评论附件 READY 后将 asset_id 作为 attachment_ids 随评论事务发布，确认 business_published。"
+                    "论文上传仅为候选，用户明确提交后调用 plane_submit_paper_version。超时使用原 request_id 恢复，"
+                    "不能把上传地址、暂存记录或评论文字当作附件上传完成。"
                 ),
             }
         elif method == "ping":
@@ -592,7 +600,9 @@ class UnifiedMCPEndpoint(UnifiedEndpointBase):
                     and target.get("domain") == "research"
                 )
                 service = (
-                    UnifiedResearchWriteService(request.auth, request=request)
+                    UnifiedFileService(request.auth, request=request)
+                    if params["name"] in FILE_SCHEMAS
+                    else UnifiedResearchWriteService(request.auth, request=request)
                     if research
                     else UnifiedWriteService(request.auth, request=request)
                     if params["name"] in ADMIN_SCHEMAS or params["name"] in PROJECT_LIFECYCLE_SCHEMAS

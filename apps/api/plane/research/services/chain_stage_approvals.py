@@ -22,6 +22,8 @@ from plane.research.utils.chain_stage_notifications import (
 )
 from plane.research.utils.errors import ResearchErrorCode
 from plane.research.utils.org import active_membership_q
+from plane.research.utils.todo_context import reuse_todo_query
+from plane.utils.html_processor import strip_tags
 
 
 CHAIN_STAGE_CODES = (
@@ -381,6 +383,7 @@ def _active_mentor_bindings(chain, owner_id):
     )
 
 
+@reuse_todo_query
 def resolve_advisor(chain):
     """Resolve the single direct advisor for a chain owner.
 
@@ -426,6 +429,7 @@ def _active_pi_members(chain, owner_id):
     )
 
 
+@reuse_todo_query
 def resolve_principal(chain):
     """Resolve the single principal investigator for a chain org unit.
 
@@ -1032,6 +1036,7 @@ def submit_chain_stage(
         locked_stage = type(stage).objects.select_for_update().get(pk=stage.pk)
         locked_node = node.__class__.objects.select_for_update().get(pk=node.pk)
         final_requires_pi = _validate_submission(locked_stage, locked_node, requires_pi, str(escalation_reason or ""))
+        previous_status = locked_stage.status
         locked_stage.attempt_count += 1
         locked_stage.status = "AWAITING_ADVISOR"
         locked_stage.requires_pi = final_requires_pi
@@ -1070,7 +1075,13 @@ def submit_chain_stage(
             ResearchAuditAction.CHAIN_STAGE_SUBMIT,
             locked_stage,
             actor,
-            {"attempt": locked_stage.attempt_count, "requires_pi": locked_stage.requires_pi},
+            {
+                "attempt": locked_stage.attempt_count,
+                "requires_pi": locked_stage.requires_pi,
+                "status": locked_stage.status,
+                "reviewer": str(actor.id),
+                "changes": [{"field": "status", "old_value": previous_status, "new_value": locked_stage.status}],
+            },
             request,
         )
         locked_stage.refresh_from_db()
@@ -1081,6 +1092,7 @@ def submit_chain_stage(
 
 @transaction.atomic
 def _return_stage(stage, actor, reviewer_role, comment, request_id, request):
+    previous_status = stage.status
     stage.status = "NEEDS_REVISION"
     stage.save(update_fields=["status", "updated_at"])
     if stage.submitted_node is not None:
@@ -1091,7 +1103,14 @@ def _return_stage(stage, actor, reviewer_role, comment, request_id, request):
         ResearchAuditAction.CHAIN_STAGE_RETURN,
         stage,
         actor,
-        {"reviewer_role": reviewer_role, "attempt": stage.attempt_count},
+        {
+            "reviewer_role": reviewer_role,
+            "reviewer": str(actor.id),
+            "attempt": stage.attempt_count,
+            "comment": strip_tags(str(comment or ""))[:240],
+            "status": stage.status,
+            "changes": [{"field": "status", "old_value": previous_status, "new_value": stage.status}],
+        },
         request,
     )
     profile = _chain_profile(stage.chain)
@@ -1101,7 +1120,8 @@ def _return_stage(stage, actor, reviewer_role, comment, request_id, request):
 
 
 @transaction.atomic
-def _approve_stage(stage, actor, reviewer_role, request_id, request, escalate_to_pi=False):
+def _approve_stage(stage, actor, reviewer_role, request_id, request, escalate_to_pi=False, comment=""):
+    previous_status = stage.status
     principal = resolve_principal(stage.chain) if escalate_to_pi else None
     stage.status = "AWAITING_PI" if escalate_to_pi else "APPROVED"
     if not escalate_to_pi:
@@ -1127,7 +1147,15 @@ def _approve_stage(stage, actor, reviewer_role, request_id, request, escalate_to
         audit_action,
         stage,
         actor,
-        {"reviewer_role": reviewer_role, "attempt": stage.attempt_count, "escalated_to_pi": escalate_to_pi},
+        {
+            "reviewer_role": reviewer_role,
+            "reviewer": str(actor.id),
+            "attempt": stage.attempt_count,
+            "escalated_to_pi": escalate_to_pi,
+            "comment": strip_tags(str(comment or ""))[:240],
+            "status": stage.status,
+            "changes": [{"field": "status", "old_value": previous_status, "new_value": stage.status}],
+        },
         request,
     )
     if not escalate_to_pi:
@@ -1275,4 +1303,5 @@ def review_chain_stage(
             request_id,
             request,
             escalate_to_pi=escalate,
+            comment=str(comment or "").strip(),
         )

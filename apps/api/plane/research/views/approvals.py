@@ -43,6 +43,7 @@ from plane.research.utils.errors import (
 )
 from plane.research.utils.roles import is_research_admin
 from plane.research.views.base import ResearchAPIView, resolve_user, truthy
+from plane.utils.html_processor import strip_tags
 
 APPROVAL_TYPES = ("TASK", "PURCHASE", "CUSTOM")
 
@@ -358,7 +359,13 @@ class ResearchApprovalRequestListCreateEndpoint(ResearchAPIView):
             resource_id=approval_request.id,
             org_unit=approval_request.org_unit,
             actor=request.user,
-            metadata={"issue": str(issue.id), "flow": str(flow.id), "version": flow.version},
+            metadata={
+                "issue": str(issue.id),
+                "flow": str(flow.id),
+                "version": flow.version,
+                "status": approval_request.status,
+                "changes": [{"field": "status", "old_value": None, "new_value": approval_request.status}],
+            },
             request=request,
         )
         notify_approvers(approval_request, request.user, f"待审批：{issue.name}")
@@ -415,6 +422,7 @@ class ResearchApprovalRequestActionEndpoint(ResearchAPIView):
                 request.user, workspace.id
             ):
                 return research_permission_denied()
+            previous_status = approval_request.status
             approval_request.status = ApprovalRequest.Status.WITHDRAWN
             approval_request.save(update_fields=["status", "updated_at"])
             ApprovalAction.objects.create(
@@ -429,7 +437,19 @@ class ResearchApprovalRequestActionEndpoint(ResearchAPIView):
                 resource_type=ResearchResourceType.APPROVAL_REQUEST,
                 resource_id=approval_request.id,
                 actor=request.user,
-                metadata={"issue": str(approval_request.issue_id)},
+                metadata={
+                    "issue": str(approval_request.issue_id),
+                    "approver": str(request.user.id),
+                    "comment": strip_tags(comment)[:240],
+                    "status": approval_request.status,
+                    "changes": [
+                        {
+                            "field": "status",
+                            "old_value": previous_status,
+                            "new_value": approval_request.status,
+                        }
+                    ],
+                },
                 request=request,
             )
             notify_requester(approval_request, request.user, "审批申请已撤回", "withdrawn")
@@ -453,6 +473,7 @@ class ResearchApprovalRequestActionEndpoint(ResearchAPIView):
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
 
+        previous_status = approval_request.status
         with transaction.atomic():
             ApprovalAction.objects.create(
                 request=approval_request,
@@ -494,6 +515,15 @@ class ResearchApprovalRequestActionEndpoint(ResearchAPIView):
                 "issue": str(approval_request.issue_id),
                 "step": step.order,
                 "status": approval_request.status,
+                "approver": str(request.user.id),
+                "comment": strip_tags(comment)[:240],
+                "changes": [
+                    {
+                        "field": "status",
+                        "old_value": previous_status,
+                        "new_value": approval_request.status,
+                    }
+                ],
             },
             request=request,
         )

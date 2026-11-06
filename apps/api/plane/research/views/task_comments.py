@@ -31,13 +31,14 @@ def serialize(comment, request):
 
 
 def comment_audit(task, comment, request, action):
+    """记录评论纯文本摘要，避免首页动态暴露评论内部 ID。"""
     record_audit_event(
         workspace=task.workspace,
         action=f"task.comment.{action}",
         resource_type=ResearchResourceType.RESEARCH_CHAIN_NODE_TASK,
         resource_id=task.pk,
         actor=request.user,
-        metadata={"comment": str(comment.pk)},
+        metadata={"comment": (comment.comment_stripped or "")[:240]},
         request=request,
     )
 

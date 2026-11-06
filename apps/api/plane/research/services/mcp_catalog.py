@@ -6,6 +6,7 @@ from uuid import UUID
 RESOURCE_KINDS = (
     "analysis", "snapshot", "upload", "paper_review", "report", "experiment",
     "stage_material", "topic_material", "external_reference", "agent_event", "event", "task", "task_comment",
+    "task_attachment", "task_comment_attachment",
 )
 
 
@@ -51,7 +52,9 @@ TOOLS = (
           {"chain_id": _uuid()}, ("chain_id",)),
     _tool("list_research_nodes", "List visible nodes, their state and iteration relationships.",
           {"chain_id": _uuid(), "status": _text(20), "node_type": _text(64)}, ("chain_id",), paged=True),
-    _tool("get_research_node_context", "Read a node and bounded evidence sections, then use paged tools for its contents.",
+    _tool("get_research_node_context",
+          "Read a node, scoped content counts and next calls. "
+          "Empty node metadata does not mean its tasks, comments or attachments are empty.",
           {"node_id": _uuid()}, ("node_id",)),
     _tool("list_research_node_events", "Read a page of process facts and authorised resource references.",
           {"node_id": _uuid(), "event_type": _text(64)}, ("node_id",), paged=True),
@@ -67,9 +70,14 @@ TOOLS = (
         {},
         paged=True,
     ),
-    _tool("list_research_node_resources", "List one kind of directly attached or explicitly referenced resource. File metadata is not parsed content.",
+    _tool("list_research_node_resources",
+          "List directly attached or explicitly referenced resources, including task_attachment and "
+          "task_comment_attachment. Follow each content_ref to read its body.",
           {"node_id": _uuid(), "kind": _enum(RESOURCE_KINDS)}, ("node_id", "kind"), paged=True),
-    _tool("read_research_resource", "Read bounded task instructions, research comments, process events, analyses, snapshots, public assistant output, experiments or formal reports attached to this node. Other kinds return unsupported_content; arbitrary URLs are never fetched.",
+    _tool("read_research_resource",
+          "Read bounded tasks, comments, task attachments, process evidence or formal reports. "
+          "Attachments support text, Markdown, DOCX, PDF and existing Office previews; "
+          "unavailable content returns an explicit error. Arbitrary URLs are never fetched.",
           {"node_id": _uuid(), "kind": _enum(RESOURCE_KINDS), "resource_id": _uuid(),
            "version": {"type": "integer", "minimum": 1}, "cursor": _text(4096),
            "max_chars": {"type": "integer", "minimum": 256, "maximum": 16000, "default": 8000}},

@@ -8,6 +8,7 @@ import translations from "../../../../packages/i18n/src/locales/zh-CN/common.jso
 
 const mocks = vi.hoisted(() => ({
   getNodeTasks: vi.fn(),
+  canCreate: true,
   getAssignableUsers: vi.fn(),
   createNodeTask: vi.fn(),
   updateNodeTask: vi.fn(),
@@ -56,6 +57,10 @@ vi.mock("@plane/propel/icon-button", () => ({
 vi.mock("@/services/research/chain-task.service", () => ({
   ResearchChainTaskService: class {
     getNodeTasks = mocks.getNodeTasks;
+    getNodeTaskList = async (...args: string[]) => ({
+      tasks: await mocks.getNodeTasks(...args),
+      can_create: mocks.canCreate,
+    });
     getAssignableUsers = mocks.getAssignableUsers;
     createNodeTask = mocks.createNodeTask;
     updateNodeTask = mocks.updateNodeTask;
@@ -185,6 +190,7 @@ let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 
 beforeEach(() => {
+  mocks.canCreate = true;
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -255,6 +261,18 @@ async function setInput(selector: string, value: string) {
 async function clickOutsideMenu(target: Element) {
   await act(async () => {
     target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+  });
+}
+
+/** 按浏览器真实顺序触发一次鼠标点击，覆盖 mousedown 导致的外部关闭逻辑。 */
+async function clickWithMouseSequence(target: Element) {
+  await act(async () => {
+    target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    target.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     await new Promise((resolve) => window.setTimeout(resolve, 0));
   });
 }
@@ -423,6 +441,83 @@ it("hides the edit toggle but keeps permitted property and workflow actions avai
   expect(peek?.querySelector("[data-task-edit-toggle]")).toBeNull();
   expect(peek?.querySelector('button[aria-label="责任人"]')).not.toBeNull();
   expect(peek?.textContent).toContain("标记完成");
+});
+
+it("基础研究承办人可在列表和详情转派但不能创建或编辑正文", async () => {
+  mocks.canCreate = false;
+  const assigned = task();
+  assigned.capabilities!.actions.edit = capability(false);
+  const transferred = task({ assignee: "advisor-1", assignee_detail: { id: "advisor-1", display_name: "王导师" } });
+  transferred.capabilities!.actions.edit = capability(false);
+  transferred.capabilities!.actions.assign = capability(false);
+  mocks.getNodeTasks.mockResolvedValue([assigned]);
+  mocks.getAssignableUsers.mockResolvedValue(candidates.map((candidate) => ({ ...candidate, scope: "WORKSPACE" })));
+  mocks.updateNodeTask.mockResolvedValue(transferred);
+  await renderPanel();
+
+  expect(container.textContent).not.toContain(`+ ${translations.research.chain_tasks.create}`);
+  const assigneeButton = container.querySelector<HTMLButtonElement>('button[aria-label="责任人"]');
+  expect(assigneeButton?.disabled).toBe(false);
+  await act(async () => assigneeButton?.click());
+  expect(container.querySelector('[role="group"][aria-label="科研成员"]')).not.toBeNull();
+  expect(container.textContent).not.toContain("请先在课题成员中添加负责人");
+  expect(container.textContent).not.toContain(translations.research.chain_tasks.candidate_scope_hint);
+  const target = [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')].find((option) =>
+    option.textContent?.includes("王导师")
+  );
+  await act(async () => target?.click());
+  expect(mocks.updateNodeTask).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1", { assignee: "advisor-1" });
+  expect(container.querySelector<HTMLButtonElement>('button[aria-label="责任人"]')?.disabled).toBe(true);
+  await act(async () => button("整理开题文献").click());
+  expect(container.querySelector("[data-task-edit-toggle]")).toBeNull();
+});
+
+it("基础研究承办人可直接在只读详情中转派", async () => {
+  mocks.canCreate = false;
+  const assigned = task();
+  assigned.capabilities!.actions.edit = capability(false);
+  mocks.getNodeTasks.mockResolvedValue([assigned]);
+  mocks.getAssignableUsers.mockResolvedValue(candidates.map((candidate) => ({ ...candidate, scope: "WORKSPACE" })));
+  const transferred = task({ assignee: "advisor-1", assignee_detail: { id: "advisor-1", display_name: "王导师" } });
+  transferred.capabilities!.actions.edit = capability(false);
+  transferred.capabilities!.actions.assign = capability(false);
+  mocks.updateNodeTask.mockResolvedValue(transferred);
+  await renderPanel();
+  await act(async () => button("整理开题文献").click());
+  const detail = container.querySelector("aside");
+  expect(detail?.querySelector("[data-task-edit-toggle]")).toBeNull();
+  const assignee = detail?.querySelector<HTMLButtonElement>('button[aria-label="责任人"]');
+  expect(assignee).not.toBeNull();
+  await act(async () => assignee?.click());
+  const target = [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')].find((option) =>
+    option.textContent?.includes("王导师")
+  );
+  await act(async () => target?.click());
+  expect(mocks.updateNodeTask).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1", { assignee: "advisor-1" });
+  expect(detail?.querySelector('button[aria-label="责任人"]')).toBeNull();
+  expect(detail?.textContent).toContain("王导师");
+});
+
+it("候选人可读不会给普通科研读者授予创建或改派入口", async () => {
+  mocks.canCreate = false;
+  const readonly = task();
+  readonly.capabilities!.actions.edit = capability(false);
+  readonly.capabilities!.actions.assign = capability(false);
+  mocks.getNodeTasks.mockResolvedValue([readonly]);
+  await renderPanel();
+
+  expect(container.textContent).not.toContain(`+ ${translations.research.chain_tasks.create}`);
+  expect(container.querySelector<HTMLButtonElement>('button[aria-label="责任人"]')?.disabled).toBe(true);
+});
+
+it("编辑能力不能覆盖服务端拒绝的转派能力", async () => {
+  const readonlyAssignment = task();
+  readonlyAssignment.capabilities!.actions.assign = capability(false);
+  mocks.getNodeTasks.mockResolvedValue([readonlyAssignment]);
+  await renderPanel();
+  expect(container.querySelector<HTMLButtonElement>('button[aria-label="责任人"]')?.disabled).toBe(true);
+  await act(async () => button("整理开题文献").click());
+  expect(container.querySelector('aside button[aria-label="责任人"]')).toBeNull();
 });
 
 it("resets edit mode when switching from one research task to another", async () => {
@@ -715,13 +810,13 @@ it("requires confirmation before deleting a research task", async () => {
   );
   if (!deleteAction) throw new Error("删除任务菜单项未找到");
   expect(deleteAction.className).toContain("text-danger-primary");
-  await act(async () => deleteAction.click());
+  await clickWithMouseSequence(deleteAction);
 
   const dialog = container.querySelector("[data-delete-dialog]");
   expect(dialog?.textContent).toContain("任务将从科研项目和行动项中移除，审计记录会保留。");
   expect(mocks.deleteNodeTask).not.toHaveBeenCalled();
 
-  await act(async () => button("取消").click());
+  await clickWithMouseSequence(button("取消"));
   expect(container.querySelector("[data-delete-dialog]")).toBeNull();
   expect(mocks.deleteNodeTask).not.toHaveBeenCalled();
 
@@ -729,8 +824,9 @@ it("requires confirmation before deleting a research task", async () => {
   const deleteAgain = [...(peek?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])].find(
     (item) => item.textContent === "删除任务"
   );
-  await act(async () => deleteAgain?.click());
-  await act(async () => button("删除任务").click());
+  if (!deleteAgain) throw new Error("再次打开删除菜单失败");
+  await clickWithMouseSequence(deleteAgain);
+  await clickWithMouseSequence(button("删除任务"));
 
   expect(mocks.deleteNodeTask).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1");
   expect(container.textContent).not.toContain("整理开题文献");
@@ -754,8 +850,9 @@ it("keeps a research task when deletion fails", async () => {
   const deleteAction = [...(peek?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])].find(
     (item) => item.textContent === "删除任务"
   );
-  await act(async () => deleteAction?.click());
-  await act(async () => button("删除任务").click());
+  if (!deleteAction) throw new Error("删除任务菜单项未找到");
+  await clickWithMouseSequence(deleteAction);
+  await clickWithMouseSequence(button("删除任务"));
 
   expect(container.querySelector("[data-delete-dialog]")?.textContent).toContain("任务已被其他成员处理。");
   expect(container.textContent).toContain("整理开题文献");

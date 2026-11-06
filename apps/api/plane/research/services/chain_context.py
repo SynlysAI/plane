@@ -1,23 +1,28 @@
-"""Scoped, paged research reads. No business writes, file downloads or raw URLs."""
+"""科研资源与附件正文的授权分页读取，不执行业务写入或任意 URL 请求。"""
 
 import hashlib
 import json
 from uuid import UUID
 
 from django.core import signing
-from django.db.models import F, Q
+from django.db.models import CharField, F, Prefetch, Q
+from django.db.models.functions import Cast
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from plane.db.models import (
-    ExperimentRecord, FileAsset, PeriodicReport, ResearchAgentRunEvent,
+    AssetPreview, ExperimentRecord, FileAsset, PeriodicReport, ResearchAgentRunEvent,
     PeriodicReportCommentFeedback, ResearchAnalysisResult, ResearchChain, ResearchChainEvent, ResearchChainNode,
-    ResearchChainNodeTask, ResearchChainSnapshot, ResearchChainUpload,
-    ResearchExternalReference, ResearchPaperReview, ResearchTaskComment, StageMaterial,
+    ResearchChainNodeTask, ResearchChainNodeTaskAttachment, ResearchChainSnapshot, ResearchChainUpload,
+    ResearchExternalReference, ResearchPaperReview, ResearchTaskComment, ResearchTaskCommentAttachment, StageMaterial,
+)
+from plane.research.services.mcp_attachment_content import (
+    ATTACHMENT_KINDS, attachment_content_state, read_attachment_content,
 )
 from plane.research.services.mcp_catalog import ResearchReadError, validate_arguments
 from plane.research.services.report_context import ResearchReportContextError, selected_report_content
 from plane.research.utils.acl import build_actor_context, check_access
+from plane.research.utils.chain_permissions import effective_chain_visibility
 from plane.research.utils.integrations import reference_allowed
 from plane.research.utils.projects import can_manage_team_content
 from plane.research.utils.reports import report_resource
@@ -30,7 +35,9 @@ from plane.utils.html_processor import strip_tags
 CURSOR_SALT = "research-mcp.read.v1"
 MAX_SCAN = 200
 MAX_OUTPUT = 24000
-CONTENT_KINDS = frozenset({"analysis", "snapshot", "experiment", "report", "agent_event", "event", "task", "task_comment"})
+CONTENT_KINDS = frozenset({
+    "analysis", "snapshot", "experiment", "report", "agent_event", "event", "task", "task_comment",
+}) | ATTACHMENT_KINDS
 ALIASES = {
     "experiment_record": "experiment", "periodic_report": "report",
     "analysis_result": "analysis", "research_analysis": "analysis",
@@ -45,6 +52,7 @@ MODELS = {
     "stage_material": StageMaterial, "topic_material": FileAsset,
     "external_reference": ResearchExternalReference, "agent_event": ResearchAgentRunEvent,
     "event": ResearchChainEvent, "task": ResearchChainNodeTask, "task_comment": ResearchTaskComment,
+    "task_attachment": ResearchChainNodeTaskAttachment, "task_comment_attachment": ResearchTaskCommentAttachment,
 }
 
 # Runtime payloads also contain raw tools and private reasoning. Public fields
@@ -92,6 +100,20 @@ def _instruction_text(task):
     """Return a bounded plain-text projection of a task instruction."""
     _valid, _error, cleaned = validate_html_content(task.instruction or "")
     return strip_tags(cleaned or "").strip()
+
+
+def participant_data(user):
+    """仅投影参与人的稳定 ID 和显示名称。
+
+    Args:
+        user: 参与人，可为空。
+
+    Returns:
+        不含邮箱等联系信息的参与人对象。
+    """
+    if user is None:
+        return None
+    return {"id": str(user.pk), "display_name": _clip(user.display_name or user.first_name or str(user.pk), 100)}
 
 
 def normalise_reference(ref):
@@ -176,7 +198,7 @@ class ResearchReadService:
         rows = ResearchChain.objects.filter(
             workspace=self.workspace, project_id__in=profiles.values("project_id"),
             project__deleted_at__isnull=True,
-        ).exclude(status="DELETED").select_related("project", "project__research_profile")
+        ).exclude(status="DELETED").select_related("project", "project__research_profile__org_unit")
         if self.grant and self.grant.target_type != "WORKSPACE":
             rows = rows.filter(project_id=self.grant.project_id)
             if self.grant.chain_node_id:
@@ -192,7 +214,9 @@ class ResearchReadService:
         return chain
 
     def nodes(self, chain=None):
-        rows = ResearchChainNode.objects.filter(chain__in=self.chains()).select_related("chain", "chain__project")
+        rows = ResearchChainNode.objects.filter(chain__in=self.chains()).select_related(
+            "chain", "chain__project", "assignee"
+        )
         if chain:
             rows = rows.filter(chain=chain)
         if self.grant and self.grant.chain_node_id:
@@ -257,7 +281,11 @@ class ResearchReadService:
     def _chain_data(self, chain):
         return {"id": str(chain.id), "project_id": str(chain.project_id),
                 "title": _clip(chain.project.name), "status": chain.status,
-                "visibility": chain.visibility, "owner_id": str(chain.owner_id),
+                "visibility": chain.visibility,
+                "effective_visibility": effective_chain_visibility(
+                    chain.project.research_profile, configured_visibility=chain.visibility
+                ),
+                "owner_id": str(chain.owner_id),
                 "node_count_in_scope": self.nodes(chain).count()}
 
     def _node_data(self, node):
@@ -269,7 +297,50 @@ class ResearchReadService:
                 "parent_node_id": str(node.parent_node_id) if node.parent_node_id and not restricted else None,
                 "parent_outside_scope": bool(node.parent_node_id and restricted),
                 "loop_iteration": node.loop_iteration,
-                "assignee_id": str(node.assignee_id) if node.assignee_id else None}
+                "assignee_id": str(node.assignee_id) if node.assignee_id else None,
+                "assignee": participant_data(node.assignee)}
+
+    def content_summary(self, node, task=None):
+        """统计授权范围内的任务、讨论和附件，不以节点状态推断任务状态。
+
+        Args:
+            node: 已授权的科研节点。
+            task: 可选的任务范围。
+
+        Returns:
+            当前可读取的各类内容数量。
+        """
+        counts = {}
+        for kind, field in (
+            ("task", "pk"), ("task_comment", "task"),
+            ("task_attachment", "task"), ("task_comment_attachment", "comment__task"),
+        ):
+            rows = self._candidates(node, kind)
+            if task is not None:
+                rows = rows.filter(**{field: task.pk})
+            counts[f"{kind}_count"] = rows.count()
+        return counts
+
+    @staticmethod
+    def comment_data(node, comment):
+        """投影评论正文、任务归属和可继续读取的内容引用。
+
+        Args:
+            node: 评论所属节点。
+            comment: 已授权并加载作者与任务的评论。
+
+        Returns:
+            有长度限制的评论摘要。
+        """
+        author = participant_data(comment.actor)
+        return {
+            "id": str(comment.pk), "task_id": str(comment.task_id), "task_title": _clip(comment.task.title),
+            "actor_id": str(comment.actor_id), "author": author["display_name"], "actor": author,
+            "text": _clip(comment.comment_stripped, 2000),
+            "text_truncated": len(comment.comment_stripped) > 2000,
+            "content_ref": {"kind": "task_comment", "id": str(comment.pk), "node_id": str(node.pk)},
+            "created_at": comment.created_at.isoformat(),
+        }
 
     def list_research_chains(self, query=None, status=None, cursor=None, limit=20):
         rows = self.chains()
@@ -297,7 +368,9 @@ class ResearchReadService:
             if ref is not None:
                 obj = self._lookup(node, ref["kind"], ref["id"])
                 if obj is not None and self._allowed(node, ref["kind"], obj):
-                    result.append({**ref, "content_available": ref["kind"] in CONTENT_KINDS})
+                    available = (attachment_content_state(obj)[0] if ref["kind"] in ATTACHMENT_KINDS
+                                 else ref["kind"] in CONTENT_KINDS)
+                    result.append({**ref, "content_available": available})
         return result
 
     def _event_data(self, node, event):
@@ -327,7 +400,15 @@ class ResearchReadService:
         # Output-only snapshots are still discoverable when no OUTPUT event exists.
         snapshots = [{"id": str(row.snapshot_id), "version": row.version, "summary": _clip(row.summary)}
                      for row in self._candidates(node, "snapshot").order_by("-created_at", "-id")[:3]]
+        next_calls = [
+            {"name": "list_research_node_tasks", "arguments": {"node_id": str(node.pk)}},
+            *[{"name": "list_research_node_resources", "arguments": {"node_id": str(node.pk), "kind": kind}}
+              for kind in ("task_comment", "task_attachment", "task_comment_attachment")],
+        ]
+        if self.grant is not None:
+            next_calls = [call for call in next_calls if call["name"] in self.grant.allowed_tools]
         return {"data": {"node": self._node_data(node), "evidence_sections": sections,
+                         "content_summary": self.content_summary(node), "next_calls": next_calls,
                          "snapshot_sample": snapshots, "read_only": True,
                          "scope_kind": ("node" if self.grant.chain_node_id else "project") if self.grant else "visible_projects",
                          "next_tools": ["list_research_node_events", "list_research_node_snapshots",
@@ -367,6 +448,7 @@ class ResearchReadService:
             "instruction_truncated": len(_instruction_text(row)) > 2000,
             "content_ref": {"kind": "task", "id": str(row.id), "node_id": str(node.id)},
             "status": row.status, "assignee_id": str(row.assignee_id) if row.assignee_id else None,
+            "assignee": participant_data(row.assignee),
             "due_at": row.due_at.isoformat() if row.due_at else None,
             "resource_refs": self._references(node, [{"kind": row.resource_type, "id": str(row.resource_id)}]),
         }, cursor=cursor, limit=limit)
@@ -379,12 +461,8 @@ class ResearchReadService:
             raise ResearchReadError("not_found", "Research task not found in the current scope.", 404)
         if not self._candidates(task.node, "task").filter(pk=task.pk).exists():
             raise ResearchReadError("not_found", "Research task not found in the current scope.", 404)
-        return self._page(self._candidates(task.node, "task_comment").filter(task=task).select_related("actor"), lambda row: {
-            "id": str(row.id), "task_id": str(task.id), "actor_id": str(row.actor_id),
-            "author": _clip(row.actor.display_name, 100), "text": _clip(row.comment_stripped, 2000),
-            "content_ref": {"kind": "task_comment", "id": str(row.id), "node_id": str(task.node_id)},
-            "text_truncated": len(row.comment_stripped) > 2000, "created_at": row.created_at.isoformat(),
-        }, cursor=cursor, limit=limit)
+        return self._page(self._candidates(task.node, "task_comment").filter(task=task),
+                          lambda row: self.comment_data(task.node, row), cursor=cursor, limit=limit)
 
     def list_research_report_feedback(self, cursor=None, limit=20):
         """Read explicit report-comment feedback within the pinned Context scope.
@@ -494,10 +572,33 @@ class ResearchReadService:
     def _raw_candidates(self, node, kind):
         model = MODELS[kind]
         if kind in {"analysis", "upload", "paper_review", "task"}:
-            return model.objects.filter(node=node, chain=node.chain, workspace=self.workspace)
+            rows = model.objects.filter(node=node, chain=node.chain, workspace=self.workspace)
+            return rows.select_related("assignee", "node", "chain__project") if kind == "task" else rows
         if kind == "task_comment":
-            return model.objects.filter(task__node=node, task__chain=node.chain, task__workspace=self.workspace,
-                                        task__deleted_at__isnull=True)
+            return model.objects.filter(task__in=self._candidates(node, "task")).select_related("actor", "task")
+        if kind in ATTACHMENT_KINDS:
+            from django.conf import settings
+
+            task_path = "task" if kind == "task_attachment" else "comment__task"
+            entity_type = (
+                FileAsset.EntityTypeContext.RESEARCH_TASK_INSTRUCTION_ATTACHMENT
+                if kind == "task_attachment" else FileAsset.EntityTypeContext.RESEARCH_TASK_COMMENT_ATTACHMENT
+            )
+            rows = model.objects.filter(**{
+                f"{task_path}__in": self._candidates(node, "task"),
+                "asset__workspace": self.workspace, "asset__is_uploaded": True,
+                "asset__is_deleted": False, "asset__deleted_at__isnull": True,
+                "asset__entity_type": entity_type,
+                "asset__entity_identifier": Cast(F(f"{task_path}_id"), output_field=CharField()),
+            })
+            if kind == "task_comment_attachment":
+                rows = rows.filter(comment__in=self._candidates(node, "task_comment"))
+            return rows.select_related("asset", task_path).prefetch_related(Prefetch(
+                "asset__previews", to_attr="mcp_ready_previews",
+                queryset=AssetPreview.objects.filter(
+                    status="ready", kind="pdf", converter_version=settings.ATTACHMENT_PREVIEW_VERSION,
+                ),
+            ))
         if kind == "event":
             return model.objects.filter(node=node, chain=node.chain)
         if kind == "snapshot":
@@ -530,7 +631,9 @@ class ResearchReadService:
         return self._reference_cache[key]
 
     def _linked(self, node, kind, obj):
-        if kind in {"analysis", "snapshot", "upload", "paper_review", "agent_event", "event", "task", "task_comment"}:
+        if kind in {
+            "analysis", "snapshot", "upload", "paper_review", "agent_event", "event", "task", "task_comment",
+        } | ATTACHMENT_KINDS:
             return True  # _candidates already constrained the real foreign keys.
         event_q, snapshot_q = _reference_filters(kind, obj.id)
         task_kind = {"report": "REPORT", "stage_material": "STAGE_MATERIAL",
@@ -577,13 +680,17 @@ class ResearchReadService:
                 report_version_changed = current is not None and current.version_no != version
             if self.grant and not self._workspace_sd_grant():
                 version = next(item["version_no"] for item in self.grant.allowed_reports if str(item.get("report_id")) == str(obj.id))
-        title = (obj.file_name if kind == "upload" else f"{obj.period_key} {obj.report_type}" if kind == "report"
+        title = (obj.file_name if kind == "upload" or kind in ATTACHMENT_KINDS
+                 else f"{obj.period_key} {obj.report_type}" if kind == "report"
                  else (obj.attributes or {}).get("name") if kind == "topic_material"
                  else getattr(obj, "title", None) or getattr(obj, "method", None) or kind)
         data = {"id": str(obj.snapshot_id if kind == "snapshot" else obj.id), "kind": kind,
                 "node_id": str(node.id), "title": _clip(title), "version": version,
                 "status": getattr(obj, "status", None), "content_available": kind in CONTENT_KINDS,
                 "content_state": "readable" if kind in CONTENT_KINDS else "metadata_only"}
+        data["content_ref"] = {"kind": kind, "id": data["id"], "node_id": str(node.pk)}
+        if version is not None:
+            data["content_ref"]["version"] = version
         if report_version_changed:
             # The shared report reader intentionally accepts only the latest
             # formal version. A frozen connection must not silently adopt it.
@@ -601,6 +708,17 @@ class ResearchReadService:
         elif kind == "agent_event":
             data.update(version=1, event_type=obj.event_type, seq=obj.seq,
                         run_id=str(obj.run_id), session_id=str(obj.session.session_id))
+        elif kind == "task_comment":
+            data.update(self.comment_data(node, obj))
+        elif kind in ATTACHMENT_KINDS:
+            task = obj.task if kind == "task_attachment" else obj.comment.task
+            available, state = attachment_content_state(obj)
+            data.update(
+                file_name=obj.file_name, content_type=obj.content_type, size_bytes=obj.file_size,
+                asset_id=str(obj.asset_id), task_id=str(task.pk), task_title=_clip(task.title),
+                comment_id=str(obj.comment_id) if kind == "task_comment_attachment" else None,
+                content_available=available, content_state=state, created_at=obj.created_at.isoformat(),
+            )
         return data
 
     def list_research_node_resources(self, node_id, kind, cursor=None, limit=20):
@@ -609,6 +727,10 @@ class ResearchReadService:
                           cursor=cursor, limit=limit)
 
     def _content(self, node, kind, obj, version):
+        if kind in ATTACHMENT_KINDS:
+            if version is not None:
+                raise ResearchReadError("version_invalid", "附件使用源指纹和内容哈希，不支持编号版本。")
+            return read_attachment_content(obj), None
         if kind in {"task", "task_comment", "event"}:
             if version is not None:
                 raise ResearchReadError("version_invalid", "This resource has no numbered versions; use its content hash.")

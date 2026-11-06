@@ -42,6 +42,7 @@ from plane.research.utils.roles import is_research_admin
 from plane.research.utils.reports import can_transition, is_editable, report_resource
 from plane.research.utils.settings import default_visibility_for, report_timezone_for
 from plane.research.utils.templates import find_report_template, resolve_variables, template_target_key, template_values
+from plane.utils.html_processor import strip_tags
 
 
 class ReportWorkflowError(Exception):
@@ -360,6 +361,8 @@ def create_report_draft(*, workspace, actor, payload, request=None):
             "period_key": period_key,
             "is_backfill": report.is_backfill,
             "template": str(template.id) if template else None,
+            "status": report.status,
+            "changes": [{"field": "status", "old_value": None, "new_value": report.status}],
         },
         request=request,
     )
@@ -520,6 +523,12 @@ def submit_report(*, workspace, actor, report_id, payload, request=None):
             "report_type": report.report_type,
             "approval_route": str(route.id),
             "reviewer": str(route.reviewer_id),
+            "comment": strip_tags(str(payload.get("comment") or ""))[:240],
+            "status": report.status,
+            "changes": [
+                {"field": "status", "old_value": previous, "new_value": report.status},
+                {"field": "reviewer", "old_value": None, "new_value": str(route.reviewer_id)},
+            ],
         },
         request=request,
     )

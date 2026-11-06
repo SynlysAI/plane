@@ -70,6 +70,19 @@ export const ResearchProjectDialog = observer(function ResearchProjectDialog({
   const isTeamProject = researchType === "RESEARCH_PROJECT";
   const requiresOrgUnit = !isTeamProject || !research.isResearchAdmin;
   const canEditVisibility = researchChainEnabled && (project?.research?.chain_kind ?? chainKind) === "RESEARCH_CHAIN";
+  const isBasicResearch = useMemo(() => {
+    const byId = new Map(orgUnits.map((unit) => [unit.id, unit]));
+    const visited = new Set<string>();
+    let unit = byId.get(orgUnit);
+    while (unit && !visited.has(unit.id)) {
+      if (!unit.is_active) return false;
+      visited.add(unit.id);
+      if (unit.business_category === "BASIC_RESEARCH") return true;
+      if (unit.business_category === "INDUSTRIALIZATION") return false;
+      unit = unit.parent ? byId.get(unit.parent) : undefined;
+    }
+    return false;
+  }, [orgUnit, orgUnits]);
 
   useEffect(() => {
     if (!isOpen || orgUnits.length) return;
@@ -134,7 +147,7 @@ export const ResearchProjectDialog = observer(function ResearchProjectDialog({
           name: name.trim(),
           research_type: researchType,
           org_unit: orgUnit || null,
-          ...(canEditVisibility ? { chain_visibility: chainVisibility } : {}),
+          ...(canEditVisibility && !isBasicResearch ? { chain_visibility: chainVisibility } : {}),
         });
         await onUpdated?.(updated);
         onClose();
@@ -151,7 +164,7 @@ export const ResearchProjectDialog = observer(function ResearchProjectDialog({
           research_type: researchType,
           org_unit: orgUnit || null,
           chain_kind: chainKind,
-          ...(chainKind === "RESEARCH_CHAIN" ? { chain_visibility: chainVisibility } : {}),
+          ...(chainKind === "RESEARCH_CHAIN" && !isBasicResearch ? { chain_visibility: chainVisibility } : {}),
         });
         setName("");
         onClose();
@@ -174,6 +187,7 @@ export const ResearchProjectDialog = observer(function ResearchProjectDialog({
     }
   }, [
     canEditVisibility,
+    isBasicResearch,
     chainKind,
     chainVisibility,
     currentUserId,
@@ -269,19 +283,23 @@ export const ResearchProjectDialog = observer(function ResearchProjectDialog({
           {canEditVisibility && (
             <label className="flex flex-col gap-1 text-12 text-secondary">
               <span>{t("research.projects.fields.chain_visibility")}</span>
-              <select
-                className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
-                value={chainVisibility}
-                onChange={(event) =>
-                  setChainVisibility(event.target.value as "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE")
-                }
-              >
-                {(["PRIVATE", "MEMBERS", "ORG", "WORKSPACE"] as const).map((visibility) => (
-                  <option key={visibility} value={visibility}>
-                    {t(`research.projects.chain_visibility.${visibility.toLowerCase()}`)}
-                  </option>
-                ))}
-              </select>
+              {isBasicResearch ? (
+                <span className="py-1.5 text-13 text-primary">{t("research.projects.chain_visibility.workspace")}</span>
+              ) : (
+                <select
+                  className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
+                  value={chainVisibility}
+                  onChange={(event) =>
+                    setChainVisibility(event.target.value as "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE")
+                  }
+                >
+                  {(["PRIVATE", "MEMBERS", "ORG", "WORKSPACE"] as const).map((visibility) => (
+                    <option key={visibility} value={visibility}>
+                      {t(`research.projects.chain_visibility.${visibility.toLowerCase()}`)}
+                    </option>
+                  ))}
+                </select>
+              )}
             </label>
           )}
         </div>

@@ -19,6 +19,7 @@ from plane.research.utils.config import (
 )
 from plane.research.utils.acl import visibility_breadth
 from plane.utils.constants import DEFAULT_TIMEZONE
+from plane.research.utils.todo_context import reuse_todo_query
 
 WEEKLY_DEFAULT_VISIBILITY = "WORKSPACE"
 WEEKLY_CONFIDENTIAL_VISIBILITY = "UNIT"
@@ -47,6 +48,7 @@ def default_workspace_research_settings():
     }
 
 
+@reuse_todo_query
 def get_workspace_research_settings(workspace):
     """Return the effective research settings for a workspace."""
     defaults = default_workspace_research_settings()
@@ -116,6 +118,7 @@ def workspace_research_enabled(workspace) -> bool:
     return config["purpose"] != "PI_PRIVATE" and bool(config["module_enabled"])
 
 
+@reuse_todo_query
 def workspace_research_sections(workspace):
     settings = get_workspace_research_settings(workspace)
     enabled = workspace_research_enabled(workspace)

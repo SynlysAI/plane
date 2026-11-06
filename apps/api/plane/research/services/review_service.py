@@ -12,6 +12,7 @@ stage supersedes both the assignments and the reviews collected so far.
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
+from plane.utils.html_processor import strip_tags
 
 from plane.db.models import (
     MentorBinding,
@@ -117,6 +118,10 @@ def assign_reviewers(instance, actor=None, request=None):
                 "stage": instance.stage,
                 "reviewers": [str(assignment.reviewer_id) for assignment in created],
                 "kind": "auto",
+                "changes": [
+                    {"field": "reviewer", "old_value": None, "new_value": str(assignment.reviewer_id)}
+                    for assignment in created
+                ],
             },
             request=request,
         )
@@ -271,6 +276,8 @@ def submit_review(instance, actor, *, recommendation, comment="", score=None, re
             "stage": instance.stage,
             "recommendation": recommendation,
             "reviewer_role": role,
+            "reviewer": str(actor.id),
+            "comment": strip_tags(str(comment or ""))[:240],
         },
         request=request,
     )
@@ -344,7 +351,9 @@ def revise_review(review, actor, *, reason, recommendation=None, comment=None, s
             "stage": review.stage_instance.stage,
             "recommendation": next_recommendation,
             "revision_no": revision_no,
-            "reason": str(reason).strip()[:500],
+            "reason": strip_tags(str(reason).strip())[:240],
+            "reviewer": str(actor.id),
+            "comment": strip_tags(next_comment)[:240],
         },
         request=request,
     )

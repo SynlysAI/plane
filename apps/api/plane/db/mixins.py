@@ -11,6 +11,7 @@ from django.utils import timezone
 
 # Module imports
 from plane.bgtasks.deletion_task import soft_delete_related_objects
+from plane.db.todo_queryset import TodoInvalidationQuerySet
 
 
 class TimeAuditModel(models.Model):
@@ -45,7 +46,7 @@ class UserAuditModel(models.Model):
         abstract = True
 
 
-class SoftDeletionQuerySet(models.QuerySet):
+class SoftDeletionQuerySet(TodoInvalidationQuerySet):
     def delete(self, soft=True):
         if soft:
             return self.update(deleted_at=timezone.now())
@@ -64,7 +65,7 @@ class SoftDeleteModel(models.Model):
     deleted_at = models.DateTimeField(verbose_name="Deleted At", null=True, blank=True)
 
     objects = SoftDeletionManager()
-    all_objects = models.Manager()
+    all_objects = models.Manager.from_queryset(TodoInvalidationQuerySet)()
 
     class Meta:
         abstract = True
