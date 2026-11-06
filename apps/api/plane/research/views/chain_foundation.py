@@ -37,6 +37,7 @@ from plane.research.services.chain_tasks import (
     chain_lifecycle_manager as _chain_lifecycle_manager,
     chain_manager as _chain_manager,
     chain_writer as _chain_writer,
+    can_list_assignable_users,
     list_assignable_users,
     review_only_actor as _review_only_actor,
 )
@@ -95,7 +96,7 @@ def _visible_node(workspace, user, node_id):
             chain__project__deleted_at__isnull=True,
             chain__project__research_profile__deleted_at__isnull=True,
         )
-        .select_related("chain__workspace", "chain__project__research_profile")
+        .select_related("chain__workspace", "chain__project__research_profile__org_unit")
         .first()
     )
     if node is None:
@@ -113,7 +114,7 @@ def _visible_chain(workspace, user, chain_id):
             project__deleted_at__isnull=True,
             project__research_profile__deleted_at__isnull=True,
         )
-        .select_related("workspace", "project__research_profile", "project", "owner")
+        .select_related("workspace", "project__research_profile__org_unit", "project", "owner")
         .first()
     )
     if chain is None or not can_read_project_research_metadata(workspace, user, chain.project.research_profile):
@@ -229,7 +230,7 @@ class ResearchChainListCreateEndpoint(ResearchAPIView):
                 workspace=workspace,
                 project_id__in=profiles.values("project_id"),
             )
-            .select_related("workspace", "project__research_profile", "owner")
+            .select_related("workspace", "project__research_profile__org_unit", "owner")
             .order_by("-updated_at", "id")
         )
         if request.GET.get("status"):
@@ -340,7 +341,7 @@ class ResearchChainDetailEndpoint(ResearchAPIView):
                 project__deleted_at__isnull=True,
                 project__research_profile__deleted_at__isnull=True,
             ).select_related(
-                "workspace", "project__research_profile", "project", "owner"
+                "workspace", "project__research_profile__org_unit", "project", "owner"
             )
         ).first()
         if chain is not None and not can_read_project_research_metadata(
@@ -657,10 +658,10 @@ class ResearchChainAssignableUserListEndpoint(ResearchAPIView):
         chain = _visible_chain(workspace, request.user, chain_id)
         if chain is None:
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research chain not found.")
-        if not _chain_writer(workspace, request.user, chain):
+        if not can_list_assignable_users(workspace, chain, request.user):
             return research_error(
                 ResearchErrorCode.PERMISSION_DENIED,
-                "Only chain writers can list assignable users.",
+                "Current role cannot list assignable users.",
                 status.HTTP_403_FORBIDDEN,
             )
         return Response(

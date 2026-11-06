@@ -40,11 +40,19 @@ from plane.research.utils.collaboration_notifications import (
     notify_task_updated,
 )
 from plane.research.utils.org import READABLE_WORKSPACE_ROLES, active_membership_q
+from plane.research.utils.chain_permissions import (
+    effective_chain_visibility,
+    is_basic_research_chain,
+    is_research_workspace_member,
+    research_workspace_members,
+)
 from plane.research.utils.roles import is_research_admin
+from plane.research.utils.todo_context import reuse_todo_query
 from plane.utils.content_validator import validate_html_content
 
 ORG_SCOPE = "ORG_SCOPE"
 COLLABORATOR_SCOPE = "COLLABORATOR"
+WORKSPACE_SCOPE = "WORKSPACE"
 ORG_ROLE_ORDER = {
     OrgUnitMember.OrgRole.OWNER: 0,
     OrgUnitMember.OrgRole.PI: 1,
@@ -121,7 +129,8 @@ def chain_resource(chain) -> ResearchResource:
         The minimal ACL resource representation of the chain.
     """
     profile = getattr(chain.project, "research_profile", None)
-    visibility = {"MEMBERS": "UNIT", "ORG": "ANCESTRY"}.get(chain.visibility, chain.visibility)
+    effective_visibility = effective_chain_visibility(profile, configured_visibility=chain.visibility)
+    visibility = {"MEMBERS": "UNIT", "ORG": "ANCESTRY"}.get(effective_visibility, effective_visibility)
     return ResearchResource(
         kind="research_chain",
         workspace_id=chain.workspace_id,
@@ -130,10 +139,11 @@ def chain_resource(chain) -> ResearchResource:
         visibility=visibility,
         state=chain.status,
         project_id=chain.project_id,
-        is_team_content=chain.visibility != "PRIVATE",
+        is_team_content=effective_visibility != "PRIVATE",
     )
 
 
+@reuse_todo_query
 def review_only_actor(workspace, user, chain) -> bool:
     """Return whether an actor has review scope without mutable Chain rights.
 
@@ -368,6 +378,40 @@ def assignable_project_members(workspace, chain):
     )
 
 
+def assignable_chain_members(workspace, chain):
+    """统一查询研究链可指派成员，不自动创建课题成员关系。
+
+    Args:
+        workspace: 当前工作区。
+        chain: 行动项所属研究链。
+
+    Returns:
+        基础研究返回有效科研席位，其他研究链返回原有课题成员查询集。
+    """
+    if chain.workspace_id != workspace.id:
+        return WorkspaceMember.objects.none()
+    if is_basic_research_chain(getattr(chain.project, "research_profile", None)):
+        return research_workspace_members(workspace)
+    return assignable_project_members(workspace, chain)
+
+
+def can_list_assignable_users(workspace, chain, actor):
+    """判断调用方是否可读取该研究链的指派候选人。
+
+    Args:
+        workspace: 当前工作区。
+        chain: 目标研究链。
+        actor: 当前登录用户。
+
+    Returns:
+        基础研究链科研读者或原有课题写入者返回 True。
+    """
+    return (
+        is_basic_research_chain(getattr(chain.project, "research_profile", None))
+        and is_research_workspace_member(workspace, actor)
+    ) or actor_can_manage_chain_tasks(workspace, chain, actor)
+
+
 def _candidate_items(workspace, chain) -> list[dict]:
     """Build the complete assignable-user boundary for a chain.
 
@@ -379,9 +423,10 @@ def _candidate_items(workspace, chain) -> list[dict]:
         Serialized candidate users ordered by scope and research identity.
     """
     today = timezone.localdate()
-    project_members = assignable_project_members(workspace, chain)
+    project_members = assignable_chain_members(workspace, chain)
     active_project_user_ids = set(project_members.values_list("member_id", flat=True))
     profile = getattr(chain.project, "research_profile", None)
+    workspace_scope = is_basic_research_chain(profile)
     unit_ids = []
     if profile is not None and profile.org_unit_id:
         unit_ids.append(profile.org_unit_id)
@@ -389,15 +434,18 @@ def _candidate_items(workspace, chain) -> list[dict]:
 
     memberships_by_user: dict[UUID, OrgUnitMember] = {}
     unit_ranks = {unit_id: index for index, unit_id in enumerate(unit_ids)}
-    if unit_ids:
+    if unit_ids or workspace_scope:
         memberships = OrgUnitMember.objects.filter(
             active_membership_q(today),
             workspace_id=workspace.id,
-            org_unit_id__in=unit_ids,
             org_unit__deleted_at__isnull=True,
             user_id__in=active_project_user_ids,
             user__is_active=True,
         ).select_related("org_unit", "user")
+        if workspace_scope:
+            memberships = memberships.filter(org_unit__is_active=True)
+        else:
+            memberships = memberships.filter(org_unit_id__in=unit_ids)
         for membership in memberships:
             rank = (
                 not membership.is_primary,
@@ -420,7 +468,7 @@ def _candidate_items(workspace, chain) -> list[dict]:
             "org_unit_name": membership.org_unit.name,
             "org_role": membership.org_role,
             "is_primary": membership.is_primary,
-            "scope": ORG_SCOPE,
+            "scope": WORKSPACE_SCOPE if workspace_scope else ORG_SCOPE,
         }
         for membership in memberships_by_user.values()
     ]
@@ -435,12 +483,12 @@ def _candidate_items(workspace, chain) -> list[dict]:
             "org_unit_name": None,
             "org_role": None,
             "is_primary": False,
-            "scope": COLLABORATOR_SCOPE,
+            "scope": WORKSPACE_SCOPE if workspace_scope else COLLABORATOR_SCOPE,
         }
         for collaborator in collaborators
     )
 
-    scope_order = {ORG_SCOPE: 0, COLLABORATOR_SCOPE: 1}
+    scope_order = {WORKSPACE_SCOPE: 0, ORG_SCOPE: 1, COLLABORATOR_SCOPE: 2}
     return sorted(
         data,
         key=lambda item: (
@@ -466,7 +514,7 @@ def list_assignable_users(workspace, chain, actor) -> list[dict]:
     Raises:
         ChainTaskPermissionError: When the actor cannot manage chain tasks.
     """
-    if not actor_can_manage_chain_tasks(workspace, chain, actor):
+    if not can_list_assignable_users(workspace, chain, actor):
         raise ChainTaskPermissionError("The actor cannot manage chain tasks.")
     return _candidate_items(workspace, chain)
 
@@ -481,7 +529,7 @@ def chain_assignable_user_ids(workspace, chain) -> set[UUID]:
     Returns:
         A set of user IDs that can currently own tasks in the chain.
     """
-    return set(assignable_project_members(workspace, chain).values_list("member_id", flat=True))
+    return set(assignable_chain_members(workspace, chain).values_list("member_id", flat=True))
 
 
 def validate_assignable_user(workspace, chain, user_id) -> bool:
@@ -500,7 +548,34 @@ def validate_assignable_user(workspace, chain, user_id) -> bool:
     except (TypeError, ValueError):
         return False
 
-    return assignable_project_members(workspace, chain).filter(member_id=parsed_user_id).exists()
+    return assignable_chain_members(workspace, chain).filter(member_id=parsed_user_id).exists()
+
+
+def actor_can_assign_task(workspace, task, actor, *, assignee_is_valid=None):
+    """判断原有写入者或基础研究链当前承办人是否可以改派。
+
+    Args:
+        workspace: 行动项所在工作区。
+        task: 待改派行动项。
+        actor: 当前登录用户。
+        assignee_is_valid: 可选的已计算承办人有效性。
+
+    Returns:
+        行动项可写且调用方具有原有权限或当前有效承办人权限时返回 True。
+    """
+    if actor is None or not getattr(actor, "is_authenticated", False):
+        return False
+    if (
+        task.chain.status != ResearchChain.Status.ACTIVE
+        or task.node.status == ResearchChainNode.Status.ARCHIVED
+        or task.status not in (ResearchChainNodeTask.Status.DRAFT, ResearchChainNodeTask.Status.ASSIGNED)
+    ):
+        return False
+    if chain_writer(workspace, actor, task.chain):
+        return True
+    return is_basic_research_chain(getattr(task.chain.project, "research_profile", None)) and actor_can_complete_task(
+        workspace, task, actor, assignee_is_valid=assignee_is_valid
+    )
 
 
 def actor_can_complete_task(workspace, task, actor, *, assignee_is_valid=None) -> bool:
@@ -781,7 +856,9 @@ def list_tasks(*, workspace, chain, node, status=None, assignee_id=None, due_bef
     """
     rows = (
         ResearchChainNodeTask.objects.filter(workspace=workspace, chain=chain, node=node)
-        .select_related("workspace", "chain", "node", "assignee", "assigned_by", "completed_by")
+        .select_related(
+            "workspace", "chain__project__research_profile__org_unit", "node", "assignee", "assigned_by", "completed_by"
+        )
         .prefetch_related("instruction_attachments__asset")
     )
     if status:
@@ -898,7 +975,7 @@ def create_task(*, workspace, chain, node, actor, payload, request=None):
         raise ChainTaskConflictError("request_id was already used.") from None
 
 
-def update_task(*, task, actor, payload, request=None):
+def update_task(*, task, actor, payload, request=None, source="WEB"):
     """Update editable task fields without changing lifecycle state directly.
 
     Args:
@@ -906,6 +983,7 @@ def update_task(*, task, actor, payload, request=None):
         actor: User editing or assigning the task.
         payload: Validated partial payload.
         request: Optional HTTP request used for audit client metadata.
+        source: 转派入口来源，原生网页使用 WEB，MCP 使用 MCP。
 
     Returns:
         The updated task.
@@ -916,7 +994,17 @@ def update_task(*, task, actor, payload, request=None):
         ChainTaskStateError: When the task or its parent is read-only.
     """
     if not actor_can_manage_chain_tasks(task.workspace, task.chain, actor):
-        raise ChainTaskPermissionError("Only chain writers can update tasks.")
+        if set(payload) != {"assignee"} or not actor_can_assign_task(task.workspace, task, actor):
+            raise ChainTaskPermissionError("Only chain writers can update tasks.")
+        next_assignee = payload["assignee"]
+        transferred, _changed = transfer_task_by_current_assignee(
+            task=task,
+            actor=actor,
+            assignee_id=getattr(next_assignee, "id", next_assignee),
+            request=request,
+            source=source,
+        )
+        return transferred
     if task.status not in (
         ResearchChainNodeTask.Status.DRAFT,
         ResearchChainNodeTask.Status.ASSIGNED,
@@ -948,7 +1036,6 @@ def update_task(*, task, actor, payload, request=None):
             }
         )
 
-    assignee_changed = next_assignee is not None and next_assignee.id != task.assignee_id
     changed_fields = sorted(
         field
         for field, current, next_value in (
@@ -960,26 +1047,43 @@ def update_task(*, task, actor, payload, request=None):
         )
         if current != next_value
     )
-    if assignee_changed:
-        changed_fields.append("assignee")
-        changed_fields.sort()
-
     try:
         with transaction.atomic():
             locked_chain = ResearchChain.objects.select_for_update().get(pk=task.chain_id)
             locked_node = ResearchChainNode.objects.select_for_update().get(pk=task.node_id)
             _ensure_task_parent_writable(locked_chain, locked_node)
-            locked_task = ResearchChainNodeTask.objects.select_for_update().get(pk=task.pk)
+            locked_task = (
+                ResearchChainNodeTask.objects.select_for_update(of=("self",))
+                .select_related("assignee")
+                .get(pk=task.pk)
+            )
+            locked_task.chain = locked_chain
+            locked_task.node = locked_node
             if not actor_can_manage_chain_tasks(locked_task.workspace, locked_chain, actor):
                 raise ChainTaskPermissionError("Only chain writers can update tasks.")
-            if assignee_changed and not validate_assignable_user(locked_task.workspace, locked_chain, next_assignee.id):
+            assignee_changed = "assignee" in payload and next_assignee.id != locked_task.assignee_id
+            if "assignee" in payload and not validate_assignable_user(
+                locked_task.workspace, locked_chain, next_assignee.id
+            ):
                 raise ChainTaskPermissionError("请先将负责人添加为有效课题成员。")
+            if assignee_changed:
+                changed_fields.append("assignee")
+                changed_fields.sort()
             if locked_task.status not in (
                 ResearchChainNodeTask.Status.DRAFT,
                 ResearchChainNodeTask.Status.ASSIGNED,
             ):
                 raise ChainTaskStateError("Completed or cancelled tasks are read-only.")
+            previous_values = {
+                "title": locked_task.title,
+                "instruction": locked_task.instruction,
+                "due_at": locked_task.due_at,
+                "resource_type": locked_task.resource_type,
+                "resource_id": locked_task.resource_id,
+                "status": locked_task.status,
+            }
             previous_assignee_id = locked_task.assignee_id
+            previous_assignee = locked_task.assignee
             locked_task.title = next_title
             locked_task.instruction = next_instruction
             locked_task.due_at = next_due_at
@@ -991,6 +1095,9 @@ def update_task(*, task, actor, payload, request=None):
                 if locked_task.status == ResearchChainNodeTask.Status.DRAFT:
                     locked_task.status = ResearchChainNodeTask.Status.ASSIGNED
             locked_task.updated_by = actor
+            if locked_task.status != previous_values["status"] and "status" not in changed_fields:
+                changed_fields.append("status")
+                changed_fields.sort()
             update_fields = {*changed_fields, "updated_by", "updated_at"}
             if assignee_changed:
                 update_fields.update({"assigned_by"})
@@ -998,14 +1105,32 @@ def update_task(*, task, actor, payload, request=None):
                     update_fields.update({"status"})
             locked_task.save(update_fields=list(update_fields))
 
-            _write_task_audit(
-                task=locked_task,
-                actor=actor,
-                action=ResearchAuditAction.TASK_UPDATE,
-                metadata={"fields": changed_fields},
-                request=request,
+            changes = _task_changes(
+                previous_values | {"assignee": previous_assignee},
+                {
+                    "title": locked_task.title,
+                    "instruction": locked_task.instruction,
+                    "due_at": locked_task.due_at,
+                    "resource_type": locked_task.resource_type,
+                    "resource_id": locked_task.resource_id,
+                    "assignee": locked_task.assignee,
+                    "status": locked_task.status,
+                },
             )
-            if assignee_changed:
+
+            if changes:
+                _write_task_audit(
+                    task=locked_task,
+                    actor=actor,
+                    action=ResearchAuditAction.TASK_UPDATE,
+                    metadata={
+                        "fields": changed_fields,
+                        "changes": changes,
+                        "entity_name": locked_task.title,
+                    },
+                    request=request,
+                )
+            if assignee_changed and any(change["field"] == "assignee" for change in changes):
                 assignment_request_id = f"task-assigned-{locked_task.id}-{uuid4().hex}"
                 _write_task_event(
                     task=locked_task,
@@ -1016,19 +1141,22 @@ def update_task(*, task, actor, payload, request=None):
                     metadata={
                         "previous_assignee": str(previous_assignee_id) if previous_assignee_id else None,
                         "assignee": str(locked_task.assignee_id),
+                        "entity_name": locked_task.title,
+                        "changes": [change for change in changes if change["field"] == "assignee"],
                     },
                     content_hash=payload_hash(
                         {"task_id": str(locked_task.id), "assignee": str(locked_task.assignee_id)}
                     ),
                 )
                 notify_task_assigned(locked_task, actor)
-            notify_task_updated(locked_task, actor, changed_fields)
+            if changes:
+                notify_task_updated(locked_task, actor, changed_fields)
             return locked_task
     except IntegrityError as error:
         raise ChainTaskConflictError("The task could not be updated consistently.") from error
 
 
-def transfer_task_by_current_assignee(*, task, actor, assignee_id, request=None):
+def transfer_task_by_current_assignee(*, task, actor, assignee_id, request=None, source="EMAIL"):
     """Let the current assignee hand a task to another valid chain member.
 
     This path is intentionally narrower than ``update_task``: it accepts only the
@@ -1040,6 +1168,7 @@ def transfer_task_by_current_assignee(*, task, actor, assignee_id, request=None)
         actor: Authenticated current assignee who confirmed the transfer.
         assignee_id: Server-validated next owner identifier.
         request: Confirmation API request used for audit metadata.
+        source: 转派来源 WEB、MCP 或 EMAIL，既有邮件入口保持 EMAIL。
 
     Returns:
         A tuple of the locked task and whether this call changed its owner.
@@ -1048,7 +1177,13 @@ def transfer_task_by_current_assignee(*, task, actor, assignee_id, request=None)
         locked_chain = ResearchChain.objects.select_for_update().get(pk=task.chain_id)
         locked_node = ResearchChainNode.objects.select_for_update().get(pk=task.node_id)
         _ensure_task_parent_writable(locked_chain, locked_node)
-        locked_task = ResearchChainNodeTask.objects.select_for_update().get(pk=task.pk)
+        locked_task = (
+            ResearchChainNodeTask.objects.select_for_update(of=("self",))
+            .select_related("assignee")
+            .get(pk=task.pk)
+        )
+        locked_task.chain = locked_chain
+        locked_task.node = locked_node
         if (
             actor is None
             or not getattr(actor, "is_authenticated", False)
@@ -1056,6 +1191,11 @@ def transfer_task_by_current_assignee(*, task, actor, assignee_id, request=None)
             or locked_task.status not in (ResearchChainNodeTask.Status.DRAFT, ResearchChainNodeTask.Status.ASSIGNED)
         ):
             raise ChainTaskPermissionError("Only the current assignee can transfer this task.")
+        basic_chain = is_basic_research_chain(getattr(locked_chain.project, "research_profile", None))
+        if (source != "EMAIL" and not basic_chain) or (
+            basic_chain and not validate_assignable_user(locked_task.workspace, locked_chain, actor.id)
+        ):
+            raise ChainTaskPermissionError("The current assignee cannot transfer this research task.")
         if not validate_assignable_user(locked_task.workspace, locked_chain, assignee_id):
             raise ChainTaskValidationError("The next assignee is outside the chain boundary.")
 
@@ -1064,6 +1204,7 @@ def transfer_task_by_current_assignee(*, task, actor, assignee_id, request=None)
             return locked_task, False
 
         previous_assignee_id = locked_task.assignee_id
+        previous_assignee = locked_task.assignee
         locked_task.assignee = next_assignee
         locked_task.assigned_by = actor
         locked_task.updated_by = actor
@@ -1073,9 +1214,15 @@ def transfer_task_by_current_assignee(*, task, actor, assignee_id, request=None)
             "fields": ["assignee"],
             "previous_assignee": str(previous_assignee_id),
             "assignee": str(next_assignee.id),
-            "email_assignment_transfer": True,
+            "email_assignment_transfer": source == "EMAIL",
+            "assignment_transfer_source": source,
+            "entity_name": locked_task.title,
+            "changes": _task_changes(
+                {"assignee": previous_assignee},
+                {"assignee": next_assignee},
+            ),
         }
-        request_id = f"task-email-transfer-{locked_task.id}-{next_assignee.id}-{uuid4().hex[:12]}"
+        request_id = f"task-{source.lower()}-transfer-{locked_task.id}-{next_assignee.id}-{uuid4().hex[:12]}"
         content = {
             "task_id": str(locked_task.id),
             "previous_assignee": str(previous_assignee_id),
@@ -1107,19 +1254,33 @@ def _run_task_action(*, task, actor, request_id, event_type, content_hash, actio
         locked_chain = ResearchChain.objects.select_for_update().get(pk=task.chain_id)
         locked_node = ResearchChainNode.objects.select_for_update().get(pk=task.node_id)
         _ensure_task_parent_writable(locked_chain, locked_node)
-        locked_task = ResearchChainNodeTask.objects.select_for_update().get(pk=task.pk)
+        locked_task = (
+            ResearchChainNodeTask.objects.select_for_update(of=("self",))
+            .select_related("assignee")
+            .get(pk=task.pk)
+        )
         guard(locked_task)
         existing_event = _replay_task_event(locked_task, request_id, event_type, content_hash)
         if existing_event is not None:
             return locked_task, False
+        previous_status = locked_task.status
         action(locked_task)
+        action_metadata = dict(metadata)
+        for summary_field in ("comment", "reason"):
+            if summary_field in action_metadata:
+                action_metadata[summary_field] = _task_plain_text(action_metadata[summary_field])
+        action_metadata["entity_name"] = locked_task.title
+        action_metadata["changes"] = _task_changes(
+            {"status": previous_status},
+            {"status": locked_task.status},
+        )
         _write_task_event(
             task=locked_task,
             actor=actor,
             request_id=request_id,
             event_type=event_type,
             summary=f"{event_type}: {locked_task.title}",
-            metadata=metadata | {"status": locked_task.status},
+            metadata=action_metadata | {"status": locked_task.status},
             content_hash=content_hash,
         )
         _write_task_audit(
@@ -1130,7 +1291,7 @@ def _run_task_action(*, task, actor, request_id, event_type, content_hash, actio
                 "TASK_REOPENED": ResearchAuditAction.TASK_REOPEN,
                 "TASK_CANCELLED": ResearchAuditAction.TASK_CANCEL,
             }[event_type],
-            metadata=metadata | {"status": locked_task.status},
+            metadata=action_metadata | {"status": locked_task.status},
             request=request,
         )
         if event_type == "TASK_COMPLETED":

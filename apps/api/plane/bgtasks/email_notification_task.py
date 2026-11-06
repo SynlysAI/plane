@@ -1145,8 +1145,9 @@ def _research_event_currently_authorized(event, receiver):
         WorkspaceMember,
         Workspace,
     )
-    from plane.research.services.chain_tasks import chain_resource
+    from plane.research.services.chain_tasks import chain_resource, validate_assignable_user
     from plane.research.utils.acl import build_actor_context, check_access
+    from plane.research.utils.chain_permissions import is_basic_research_chain
     from plane.research.utils.reports import report_resource
     from plane.research.utils.resource_projections import experiment_resource
     from plane.research.utils.stages import stage_resource
@@ -1166,14 +1167,20 @@ def _research_event_currently_authorized(event, receiver):
 
     if event.entity_name == "research_chain_task":
         task = (
-            ResearchChainNodeTask.objects.select_related("chain__project")
+            ResearchChainNodeTask.objects.select_related("workspace", "chain__project__research_profile__org_unit")
             .filter(
                 pk=event.entity_identifier,
+                workspace_id=event.workspace_id,
                 deleted_at__isnull=True,
             )
             .first()
         )
         if task is None:
+            return False
+        if (
+            is_basic_research_chain(getattr(task.chain.project, "research_profile", None))
+            and not validate_assignable_user(task.workspace, task.chain, receiver.id)
+        ):
             return False
         if action == "assigned" and task.assignee_id != receiver.id:
             return False

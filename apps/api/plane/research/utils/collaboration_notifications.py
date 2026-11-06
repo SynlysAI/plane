@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from plane.db.models import Notification, NotificationEvent, ResearchTaskSubscriber, User
 from plane.research.utils.acl import direct_advisor_ids
+from plane.research.utils.chain_permissions import is_basic_research_chain
 from plane.utils.notification_outbox import persist_research_notification_batch
 
 RESEARCH_CHAIN_TASK_ENTITY = "research_chain_task"
@@ -30,10 +31,21 @@ def _notify(task, receivers, *, actor, action, title, extra=None, include_subscr
     Returns:
         The notification rows created for this action.
     """
-    direct_users = {receiver.id: receiver for receiver in receivers if receiver is not None}
+    candidate_ids = None
+    if is_basic_research_chain(getattr(task.chain.project, "research_profile", None)):
+        from plane.research.services.chain_tasks import chain_assignable_user_ids
+
+        candidate_ids = chain_assignable_user_ids(task.workspace, task.chain)
+    direct_users = {
+        receiver.id: receiver
+        for receiver in receivers
+        if receiver is not None and (candidate_ids is None or receiver.id in candidate_ids)
+    }
     receiver_users = dict(direct_users)
     if include_subscribers:
-        receiver_users.update({receiver.id: receiver for receiver in task_subscriber_users(task)})
+        receiver_users.update({
+            receiver.id: receiver for receiver in task_subscriber_users(task, candidate_ids=candidate_ids)
+        })
 
     created = []
     email_policy = {}
@@ -96,18 +108,20 @@ def _notify(task, receivers, *, actor, action, title, extra=None, include_subscr
     return created
 
 
-def task_subscriber_users(task):
+def task_subscriber_users(task, *, candidate_ids=None):
     """Return active users persistently subscribed to a research task.
 
     Args:
         task: Research Chain node task whose subscribers are resolved.
+        candidate_ids: 本次通知已计算的有效候选人集合；省略时重新查询。
 
     Returns:
         A list of active users receiving every subsequent task update.
     """
     from plane.research.services.chain_tasks import chain_assignable_user_ids
 
-    candidate_ids = chain_assignable_user_ids(task.workspace, task.chain)
+    if candidate_ids is None:
+        candidate_ids = chain_assignable_user_ids(task.workspace, task.chain)
     return list(
         User.objects.filter(
             research_task_subscriptions__task_id=task.id,

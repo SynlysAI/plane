@@ -587,7 +587,9 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                 {t(`research.chains.chain_status.${chain?.status.toLowerCase()}`)}
               </ResearchStatusBadge>
               <ResearchStatusBadge status="visibility">
-                {t(`research.projects.chain_visibility.${chain?.visibility.toLowerCase()}`)}
+                {t(
+                  `research.projects.chain_visibility.${(chain?.effective_visibility ?? chain?.visibility)?.toLowerCase()}`
+                )}
               </ResearchStatusBadge>
               {stageApprovalSummary && (
                 <span className="text-11 text-secondary">

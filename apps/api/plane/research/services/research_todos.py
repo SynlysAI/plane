@@ -36,6 +36,7 @@ from plane.db.models import (
     User,
 )
 from plane.research.services.chain_tasks import (
+    actor_can_assign_task,
     actor_can_cancel_task,
     actor_can_complete_task,
     actor_can_delete_task,
@@ -299,7 +300,7 @@ def collect_chain_task_todos(workspace, user, scope):
         decisions = {
             "view": True,
             "edit": can_edit,
-            "assign": can_edit,
+            "assign": actor_can_assign_task(workspace, task, user, assignee_is_valid=assignee_is_valid),
             "complete": can_complete,
             "reopen": can_reopen,
             "cancel": can_cancel and task.status != ResearchChainNodeTask.Status.CANCELLED,

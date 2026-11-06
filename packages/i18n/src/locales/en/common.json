@@ -1907,6 +1907,7 @@
       },
       "scopes": {
         "org_scope": "Organisation scope",
+        "workspace": "Research members",
         "collaborator": "Explicit collaborators"
       },
       "roles": {
@@ -2518,7 +2519,7 @@
         "private": "Project members only",
         "members": "Project members",
         "org": "Organisation scope",
-        "workspace": "Workspace members"
+        "workspace": "Visible to all research members"
       },
       "name_placeholder": "Enter a clear project name",
       "org_unit_placeholder": "Select the primary organisation",

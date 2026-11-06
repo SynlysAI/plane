@@ -327,7 +327,7 @@ export function ResearchChainTaskPeek(props: Props) {
   const [instructionBusy, setInstructionBusy] = useState(false);
   const canEdit = kind === "create" || isAllowed(task, "edit");
   const isContentEditable = kind === "create" || (canEdit && isEditMode);
-  const canAssign = kind === "create" || isAllowed(task, "edit") || isAllowed(task, "assign");
+  const canAssign = kind === "create" || isAllowed(task, "assign");
   const workflowLifecycle = task ? WORKFLOW_ACTIONS.filter((action) => isAllowed(task, action)) : [];
   const lifecycle = task ? LIFECYCLE_ACTIONS.filter((action) => isAllowed(task, action)) : [];
   const primaryLifecycle = workflowLifecycle.filter((action) => action !== "cancel");
@@ -578,10 +578,12 @@ export function ResearchChainTaskPeek(props: Props) {
               </>
             )}
           </div>
-          {kind === "create" && (
+          {kind === "create" && !candidates.some((candidate) => candidate.scope === "WORKSPACE") && (
             <p className="mt-3 text-12 text-tertiary">{t("research.chain_tasks.ownership_hint")}</p>
           )}
-          {canAssign && <p className="mt-3 text-12 text-tertiary">{t("research.chain_tasks.membership_hint")}</p>}
+          {canAssign && !candidates.some((candidate) => candidate.scope === "WORKSPACE") && (
+            <p className="mt-3 text-12 text-tertiary">{t("research.chain_tasks.membership_hint")}</p>
+          )}
           {task?.assignee && task.assignee_is_valid === false && (
             <p role="status" className="mt-3 text-12 text-secondary">
               {t("research.chain_tasks.invalid_assignee")}

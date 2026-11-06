@@ -33,6 +33,12 @@ from plane.research.utils.audit import (
     record_audit_event,
 )
 from plane.research.utils.capabilities import NAV_PROJECTS
+from plane.research.utils.chain_permissions import (
+    basic_research_unit_ids,
+    effective_chain_visibility,
+    is_basic_research_chain,
+    is_research_workspace_member,
+)
 from plane.research.utils.errors import (
     ResearchErrorCode,
     research_conflict,
@@ -190,6 +196,11 @@ def visible_profile_queryset(workspace, user):
         | Q(owner_id__in=advised_owner_ids)
         | Q(org_unit_id__in=managed_unit_ids)
     )
+    if is_research_workspace_member(workspace, user):
+        visibility |= Q(
+            chain_kind=ResearchProjectProfile.ChainKind.RESEARCH_CHAIN,
+            org_unit_id__in=basic_research_unit_ids(workspace),
+        )
     if is_workspace_member(user, workspace.id):
         visibility |= Q(chain_visibility=ResearchProjectProfile.ChainVisibility.WORKSPACE)
         visibility |= Q(
@@ -214,6 +225,9 @@ def can_read_project_research_metadata(workspace, user, profile):
     public Plane network alone does not expose research metadata.
     """
     if is_research_admin(user, workspace.id):
+        return True
+
+    if is_basic_research_chain(profile) and is_research_workspace_member(workspace, user):
         return True
 
     today = timezone.localdate()
@@ -325,6 +339,7 @@ def serialize_profile(profile):
             "research_type": profile.research_type,
             "chain_kind": profile.chain_kind,
             "chain_visibility": profile.chain_visibility,
+            "effective_visibility": effective_chain_visibility(profile),
             "chain_id": str(chain.id) if chain is not None else None,
             "workflow_status": profile.workflow_status,
             "started_at": profile.started_at,

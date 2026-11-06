@@ -12,6 +12,8 @@ const calls = vi.hoisted(() => ({
 vi.mock("@plane/constants", () => ({
   API_BASE_URL: "https://plane.test",
   researchEndpoints: {
+    chainNodeTasks: (workspaceSlug: string, chainId: string, nodeId: string) =>
+      `/api/research/workspaces/${workspaceSlug}/chains/${chainId}/nodes/${nodeId}/tasks/`,
     chainNodeTask: (workspaceSlug: string, chainId: string, nodeId: string, taskId: string) =>
       `/api/research/workspaces/${workspaceSlug}/chains/${chainId}/nodes/${nodeId}/tasks/${taskId}/`,
   },
@@ -113,6 +115,17 @@ it("deletes a research task and refreshes workspace todos", async () => {
 
   expect(calls.delete).toHaveBeenCalledWith(BASE_URL);
   expect(calls.notifyWorkspaceTodosUpdated).toHaveBeenCalledTimes(1);
+});
+
+it("独立读取服务端创建权限并保留旧数组读取接口", async () => {
+  const tasks = [{ id: "task-1" }];
+  calls.get.mockResolvedValue({ data: { data: tasks, can_create: false } });
+  const service = new ResearchChainTaskService();
+
+  expect(await service.getNodeTaskList("lab", "chain-1", "node-1")).toEqual({ tasks, can_create: false });
+  expect(await service.getNodeTasks("lab", "chain-1", "node-1")).toEqual(tasks);
+  calls.get.mockResolvedValueOnce({ data: { data: [], can_create: true } });
+  expect(await service.getNodeTaskList("lab", "chain-1", "node-1")).toEqual({ tasks: [], can_create: true });
 });
 
 it("rejects and discards a slot when confirm has no asset_id", async () => {

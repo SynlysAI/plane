@@ -372,6 +372,7 @@ ResearchChainService.prototype.getChainNodeDetail = async () => ({
 ResearchChainService.prototype.submitChainStage = async () => undefined;
 ResearchChainService.prototype.reviewChainStage = async () => scenario.stages[0];
 ResearchChainTaskService.prototype.getNodeTasks = async () => fixtureTasks;
+ResearchChainTaskService.prototype.getNodeTaskList = async () => ({ tasks: fixtureTasks, can_create: true });
 
 await setLanguage("zh-CN");
 document.documentElement.dataset.theme = "light";

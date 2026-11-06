@@ -26,6 +26,7 @@ type TResearchEnvelope<T> = {
   error: unknown;
   request_id: string | null;
   schema_version: string;
+  can_create?: boolean;
 };
 
 export type TResearchChainTaskAction = "complete" | "reopen" | "cancel";
@@ -389,15 +390,21 @@ export class ResearchChainTaskService extends APIService {
     });
   }
 
-  async getNodeTasks(workspaceSlug: string, chainId: string, nodeId: string) {
+  /** 读取节点行动项及独立的创建权限。 */
+  async getNodeTaskList(workspaceSlug: string, chainId: string, nodeId: string) {
     return this.get(researchEndpoints.chainNodeTasks(workspaceSlug, chainId, nodeId))
       .then((response) => {
         const payload = response?.data as TResearchEnvelope<TResearchChainNodeTask[]> | undefined;
-        return payload?.data ?? [];
+        return { tasks: payload?.data ?? [], can_create: payload?.can_create === true };
       })
       .catch((error) => {
         throw error?.response?.data ?? error;
       });
+  }
+
+  /** 为只需读取行动项的既有调用方保留数组接口。 */
+  async getNodeTasks(workspaceSlug: string, chainId: string, nodeId: string) {
+    return (await this.getNodeTaskList(workspaceSlug, chainId, nodeId)).tasks;
   }
 
   /**

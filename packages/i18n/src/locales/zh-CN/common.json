@@ -1930,6 +1930,7 @@
       },
       "scopes": {
         "org_scope": "组织范围",
+        "workspace": "科研成员",
         "collaborator": "显式协作者"
       },
       "roles": {
@@ -2543,7 +2544,7 @@
         "private": "仅课题成员",
         "members": "课题成员",
         "org": "组织范围",
-        "workspace": "工作区成员"
+        "workspace": "所有科研成员可见"
       },
       "name_placeholder": "输入清晰的项目名称",
       "org_unit_placeholder": "选择主归属",

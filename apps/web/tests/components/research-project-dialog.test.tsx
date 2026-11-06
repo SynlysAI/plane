@@ -8,6 +8,7 @@ import type { TResearchProject } from "@/services/research/project.service";
 const mocks = vi.hoisted(() => ({
   updateResearchProject: vi.fn(),
   getOrgUnitMembers: vi.fn(),
+  businessCategory: null as string | null,
 }));
 
 vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
@@ -40,7 +41,9 @@ vi.mock("@/hooks/store/use-research", () => ({
       user: { org_units: [{ org_unit: "unit-1", is_primary: true }] },
     },
     isResearchAdmin: false,
-    getOrgUnits: () => [{ id: "unit-1", name: "材料课题组" }],
+    getOrgUnits: () => [
+      { id: "unit-1", name: "材料课题组", is_active: true, business_category: mocks.businessCategory },
+    ],
     updateResearchProject: mocks.updateResearchProject,
   }),
 }));
@@ -64,6 +67,7 @@ let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 
 beforeEach(() => {
+  mocks.businessCategory = null;
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -154,6 +158,29 @@ it("编辑失败时保留弹窗并显示错误", async () => {
   expect(mocks.updateResearchProject).toHaveBeenCalled();
   expect(container.querySelector('[role="dialog"]')?.textContent).toContain("error");
   expect(onClose).not.toHaveBeenCalled();
+});
+
+it("基础研究项目固定显示全科研可见且不提交冲突的私有配置", async () => {
+  mocks.businessCategory = "BASIC_RESEARCH";
+  mocks.updateResearchProject.mockResolvedValue(project);
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <ResearchProjectDialog currentUserId="user-1" isOpen project={project} onClose={vi.fn()} workspaceSlug="lab" />
+      </MemoryRouter>
+    )
+  );
+  const visibility = [...container.querySelectorAll("label")].find((label) =>
+    label.textContent?.includes("research.projects.fields.chain_visibility")
+  );
+  expect(visibility?.querySelector("select")).toBeNull();
+  expect(visibility?.textContent).toContain("research.projects.chain_visibility.workspace");
+  await act(async () => container.querySelector<HTMLButtonElement>('button[type="submit"]')?.click());
+  expect(mocks.updateResearchProject).toHaveBeenCalledWith("lab", "project-1", {
+    name: project.name,
+    research_type: "RESEARCH_PROJECT",
+    org_unit: "unit-1",
+  });
 });
 
 it("创建时提示组织缺少唯一主 PI 但不阻断提交", async () => {

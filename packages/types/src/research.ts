@@ -160,6 +160,7 @@ export type TResearchProjectProfile = {
   is_active: boolean;
   chain_kind?: "LEGACY_TRAINING" | "RESEARCH_CHAIN";
   chain_visibility?: "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE";
+  effective_visibility?: "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE";
   chain_id?: string | null;
 };
 
@@ -176,6 +177,7 @@ export type TResearchChain = {
   capabilities?: TResearchActionCapabilities;
   status: TResearchProjectStatus;
   visibility: "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE";
+  effective_visibility?: "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE";
   open_task_count?: number;
   next_due_at?: string | null;
   current_node?: TResearchChainSummaryNode | null;
@@ -499,7 +501,7 @@ export type TResearchTaskUserSummary = {
 
 export type TResearchTaskAssignee = TResearchTaskUserSummary;
 
-export type TResearchAssignableUserScope = "ORG_SCOPE" | "COLLABORATOR";
+export type TResearchAssignableUserScope = "ORG_SCOPE" | "COLLABORATOR" | "WORKSPACE";
 
 export type TResearchAssignableUser = {
   user_id: string;
