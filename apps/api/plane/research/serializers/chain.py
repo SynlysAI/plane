@@ -13,7 +13,7 @@ from plane.db.models import (
     ResearchChainUpload,
 )
 from plane.research.services.chain_tasks import chain_lifecycle_manager, chain_manager, chain_resource, chain_writer
-from plane.research.utils.chain_permissions import effective_chain_visibility
+from plane.research.utils.chain_permissions import effective_chain_visibility, is_basic_research_chain
 from plane.research.utils.action_capabilities import capability_map
 from plane.research.utils.acl import build_actor_context, check_access
 from plane.preview.service import file_kind
@@ -163,6 +163,7 @@ class ResearchChainSerializer(serializers.ModelSerializer):
     next_due_at = serializers.SerializerMethodField()
     current_node = serializers.SerializerMethodField()
     effective_visibility = serializers.SerializerMethodField()
+    is_basic_research = serializers.SerializerMethodField()
 
     class Meta:
         model = ResearchChain
@@ -179,6 +180,7 @@ class ResearchChainSerializer(serializers.ModelSerializer):
             "status",
             "visibility",
             "effective_visibility",
+            "is_basic_research",
             "open_task_count",
             "next_due_at",
             "current_node",
@@ -198,6 +200,11 @@ class ResearchChainSerializer(serializers.ModelSerializer):
         """返回研究链基于项目组织归属派生的有效可见性。"""
         profile = getattr(obj.project, "research_profile", None)
         return effective_chain_visibility(profile, configured_visibility=obj.visibility)
+
+    def get_is_basic_research(self, obj):
+        """返回科研链是否归属基础研究方向，供前端区分成员入口。"""
+        profile = getattr(obj.project, "research_profile", None)
+        return is_basic_research_chain(profile)
 
     def get_owner_name(self, obj):
         """Return the owner display name without exposing a raw user ID."""

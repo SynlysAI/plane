@@ -178,6 +178,7 @@ export type TResearchChain = {
   status: TResearchProjectStatus;
   visibility: "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE";
   effective_visibility?: "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE";
+  is_basic_research?: boolean;
   open_task_count?: number;
   next_due_at?: string | null;
   current_node?: TResearchChainSummaryNode | null;

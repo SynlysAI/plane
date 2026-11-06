@@ -210,10 +210,16 @@ afterEach(async () => {
   vi.clearAllMocks();
 });
 
-async function renderPanel(initialTaskId?: string) {
+async function renderPanel(initialTaskId?: string, canOpenMembers = true) {
   await act(async () => {
     root.render(
-      <ResearchChainTaskPanel workspaceSlug="lab" chainId="chain-1" nodeId="node-1" initialTaskId={initialTaskId} />
+      <ResearchChainTaskPanel
+        workspaceSlug="lab"
+        chainId="chain-1"
+        nodeId="node-1"
+        initialTaskId={initialTaskId}
+        canOpenMembers={canOpenMembers}
+      />
     );
   });
   await act(async () => undefined);
@@ -624,11 +630,11 @@ it("does not show task sharing in the create peek", async () => {
 
 it("keeps task requests scoped to the selected node supplied by the detail container", async () => {
   await act(async () => {
-    root.render(<ResearchChainTaskPanel workspaceSlug="lab" chainId="chain-1" nodeId="node-1" />);
+    root.render(<ResearchChainTaskPanel workspaceSlug="lab" chainId="chain-1" nodeId="node-1" canOpenMembers />);
   });
   await act(async () => undefined);
   await act(async () => {
-    root.render(<ResearchChainTaskPanel workspaceSlug="lab" chainId="chain-1" nodeId="node-2" />);
+    root.render(<ResearchChainTaskPanel workspaceSlug="lab" chainId="chain-1" nodeId="node-2" canOpenMembers />);
   });
   await act(async () => undefined);
 
@@ -670,7 +676,7 @@ it("creates a task using only a candidate returned by assignable-users", async (
   expect(container.textContent).toContain("已指派");
 });
 
-it("distinguishes no assignable members from a filtered search in the create peek", async () => {
+it("keeps the member entry for an industrial chain when no assignee is available", async () => {
   mocks.getAssignableUsers.mockResolvedValue([]);
   await renderPanel();
   await act(async () => button("+ 创建任务").click());
@@ -678,9 +684,21 @@ it("distinguishes no assignable members from a filtered search in the create pee
   const assigneeButton = [...container.querySelectorAll<HTMLButtonElement>('button[aria-label="责任人"]')].at(-1);
   await act(async () => assigneeButton?.click());
 
+  expect(container.textContent).toContain("本课题暂无可指派成员，请先到成员页添加。");
+  expect(container.querySelector('a[href="/lab/research/chains/chain-1?tab=members"]')).not.toBeNull();
+  expect(container.textContent).not.toContain("没有匹配的可指派成员，请调整搜索条件。");
+});
+
+it("hides the member entry for a basic research chain when no assignee is available", async () => {
+  mocks.getAssignableUsers.mockResolvedValue([]);
+  await renderPanel(undefined, false);
+  await act(async () => button("+ 创建任务").click());
+  await act(async () => button("更多").click());
+  const assigneeButton = [...container.querySelectorAll<HTMLButtonElement>('button[aria-label="责任人"]')].at(-1);
+  await act(async () => assigneeButton?.click());
+
   expect(container.textContent).toContain("当前课题暂无可指派成员，请联系课题管理员维护授权。");
   expect(container.querySelector('a[href="/lab/research/chains/chain-1?tab=members"]')).toBeNull();
-  expect(container.textContent).not.toContain("没有匹配的可指派成员，请调整搜索条件。");
 });
 
 it("cancels row date and status menus after clicking elsewhere without invoking APIs", async () => {
@@ -907,7 +925,7 @@ it("retains an invalid assignee name and explains how to restore membership", as
   const peek = container.querySelector("aside");
   expect(peek?.textContent).toContain("李同学");
   expect(peek?.textContent).toContain("负责人已不具备有效课题成员资格，请补充成员或重新指派");
-  expect(peek?.textContent).toContain("当前课题暂无可指派成员，请联系课题管理员维护授权。");
+  expect(peek?.textContent).toContain("请先在课题成员中添加负责人");
   const select = peek?.querySelector('button[aria-label="责任人"]') as HTMLButtonElement;
   await act(async () => select.click());
   expect(container.querySelectorAll('[role="option"]')).toHaveLength(0);

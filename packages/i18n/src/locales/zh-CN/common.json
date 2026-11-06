@@ -1821,7 +1821,8 @@
       }
     },
     "chain_tasks": {
-      "membership_hint": "当前课题暂无可指派成员，请联系课题管理员维护授权。",
+      "membership_hint": "请先在课题成员中添加负责人",
+      "membership_hint_admin": "当前课题暂无可指派成员，请联系课题管理员维护授权。",
       "invalid_assignee": "负责人已不具备有效课题成员资格，请补充成员或重新指派",
       "comments": {
         "confirm_delete": "确认删除这条评论？",
@@ -1874,7 +1875,8 @@
       "candidate_load_failed": "候选人范围加载失败，暂不能创建或指派任务。",
       "candidate_scope_hint": "候选人仅来自当前课题的有效成员；组织信息仅用于展示，不做全工作区搜索。",
       "search_assignee": "搜索候选人或组织",
-      "no_assignee_candidates": "当前课题暂无可指派成员，请联系课题管理员维护授权。",
+      "no_assignee_candidates": "本课题暂无可指派成员，请先到成员页添加。",
+      "no_assignee_candidates_admin": "当前课题暂无可指派成员，请联系课题管理员维护授权。",
       "go_members": "前往成员页",
       "no_candidate_match": "没有匹配的可指派成员，请调整搜索条件。",
       "ownership_hint": "任务仍归属于当前节点；负责人必须是当前课题的有效成员。",

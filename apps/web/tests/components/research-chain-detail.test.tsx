@@ -143,6 +143,8 @@ const chain = {
   owner: "user-1",
   status: "ACTIVE",
   visibility: "PRIVATE",
+  effective_visibility: "WORKSPACE",
+  is_basic_research: false,
   created_at: "2026-09-23T01:00:00Z",
   updated_at: "2026-09-23T01:00:00Z",
 };
@@ -237,8 +239,22 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 
-it("redirects the hidden members tab to the chain overview", async () => {
+it("keeps member management available for an industrial research chain", async () => {
   const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  mocks.query = "tab=members";
+  await act(async () => root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />));
+  await act(async () => undefined);
+  const headings = [...container.querySelectorAll("th")].map((heading) => heading.textContent);
+  expect(headings).toEqual(["成员", "权限", "操作"]);
+  const role = container.querySelector("select")!;
+  expect(role.labels?.[0]?.textContent).toContain("权限");
+  expect(role.value).toBe("15");
+  expect(mocks.getChainMembers).toHaveBeenCalledWith("lab", "chain-1");
+});
+
+it("redirects the members tab and skips member requests for a basic research chain", async () => {
+  const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  mocks.getChain.mockResolvedValue({ ...chain, is_basic_research: true });
   mocks.query = "tab=members";
   await act(async () => root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />));
   await act(async () => undefined);
@@ -411,7 +427,7 @@ it("opens node evidence and runs lifecycle actions through the service", async (
     container.querySelector('a[href="/lab/research/chains/chain-1?tab=nodes"]')?.getAttribute("aria-current")
   ).toBe("page");
   expect(container.querySelector('button[aria-pressed="true"]')).not.toBeNull();
-  expect([...container.querySelectorAll("nav a")].map((item) => item.textContent)).toEqual(["概览", "节点"]);
+  expect([...container.querySelectorAll("nav a")].map((item) => item.textContent)).toEqual(["概览", "节点", "成员"]);
   const openAssistant = container.querySelector<HTMLButtonElement>('button[aria-label="请智能体分析"]');
   expect(openAssistant).not.toBeNull();
   await act(async () => openAssistant!.click());
@@ -466,6 +482,10 @@ it("renders the authoritative stage approval summary and material gaps", async (
 it("aggregates the chain overview and jumps straight into the current stage", async () => {
   const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
   mocks.query = "tab=overview";
+  mocks.getChainMembers.mockResolvedValue([
+    { user_id: "user-1", display_name: "李四", role: "OWNER", is_owner: true },
+    { user_id: "user-2", display_name: "张三", role: "MEMBER", is_owner: false },
+  ]);
   mocks.getNodeTasks.mockResolvedValue([
     {
       id: "task-1",
@@ -491,8 +511,7 @@ it("aggregates the chain overview and jumps straight into the current stage", as
   expect(container.textContent).toContain("创建节点");
   expect(container.textContent).toContain("关键指标");
   expect(container.textContent).toContain("阶段审批 3/13");
-  expect(container.textContent).not.toContain("李四 · 张三");
-  expect(container.textContent).not.toContain("管理成员");
+  expect(container.textContent).toContain("李四 · 张三");
   expect(container.textContent).toContain("快捷入口");
 
   await act(async () => {
@@ -786,7 +805,7 @@ it("shows the scoped knowledge upload below the selected node tasks", async () =
   const panel = container.querySelector('[data-testid="chain-knowledge-panel"]');
   expect(panel?.getAttribute("data-chain")).toBe("chain-1");
   expect(panel?.getAttribute("data-node")).toBe("node-1");
-  expect(container.querySelectorAll("nav a").length).toBe(2);
+  expect(container.querySelectorAll("nav a").length).toBe(3);
 });
 
 it("navigates to an empty stage through the workflow itself", async () => {
@@ -901,12 +920,14 @@ it("explains that a failure or return reason is required before sending the tran
 
 it("aliases the old material tabs and explains an empty draft snapshot", async () => {
   const { ResearchChainDetail, resolveChainTab } = await import("@/components/research/chains/research-chain-detail");
-  expect(resolveChainTab("references")).toBe("nodes");
-  expect(resolveChainTab("reports")).toBe("nodes");
-  expect(resolveChainTab("experiments")).toBe("nodes");
-  expect(resolveChainTab("replay")).toBe("nodes");
-  expect(resolveChainTab(null)).toBe("overview");
-  expect(resolveChainTab("")).toBe("overview");
+  expect(resolveChainTab("references", true)).toBe("nodes");
+  expect(resolveChainTab("reports", true)).toBe("nodes");
+  expect(resolveChainTab("experiments", true)).toBe("nodes");
+  expect(resolveChainTab("replay", true)).toBe("nodes");
+  expect(resolveChainTab(null, false)).toBe("overview");
+  expect(resolveChainTab("", false)).toBe("overview");
+  expect(resolveChainTab("members", true)).toBe("members");
+  expect(resolveChainTab("members", false)).toBe("overview");
 
   mocks.getChainNodeDetail.mockResolvedValueOnce({ node, events: [], snapshots: [] });
   await act(async () => {
@@ -937,7 +958,7 @@ it("removes the topic materials tab and redirects legacy links to the node works
 
   expect(container.querySelector('[data-testid="chain-knowledge-panel"]')?.getAttribute("data-node")).toBe("node-1");
   expect(container.textContent).not.toContain("experiment-list");
-  expect(container.querySelectorAll("nav a").length).toBe(2);
+  expect(container.querySelectorAll("nav a").length).toBe(3);
   expect(
     [...container.querySelectorAll("nav a")]
       .find((item) => item.textContent === "课题资料")

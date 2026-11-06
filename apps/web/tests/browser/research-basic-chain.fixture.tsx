@@ -62,6 +62,7 @@ const chain: TResearchChain = {
   status: "ACTIVE",
   visibility: "PRIVATE",
   effective_visibility: "WORKSPACE",
+  is_basic_research: true,
   open_task_count: 1,
   created_at: timestamp,
   updated_at: timestamp,

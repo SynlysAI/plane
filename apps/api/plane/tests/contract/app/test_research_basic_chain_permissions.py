@@ -115,6 +115,7 @@ def test_nonmembers_can_browse_and_receive_tasks_without_project_membership(env)
     detail = client.get(env["chain_url"])
     assert detail.status_code == 200, detail.data
     assert detail.json()["data"]["effective_visibility"] == "WORKSPACE"
+    assert detail.json()["data"]["is_basic_research"] is True
     assert detail.json()["data"]["capabilities"]["actions"]["view"]["allowed"] is True
     assert client.get(f"{env['chain_url']}nodes/").status_code == 200
     assert client.get(env["task_url"]).status_code == 200
@@ -642,3 +643,4 @@ def test_nonbasic_chain_keeps_its_own_configured_visibility(env, category):
     response = client_for(env["student"]).get(env["chain_url"])
     assert response.status_code == 200, response.data
     assert response.json()["data"]["effective_visibility"] == "PRIVATE"
+    assert response.json()["data"]["is_basic_research"] is False

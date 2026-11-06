@@ -29,6 +29,8 @@ type Props = {
   nodeId: string;
   /** 首页动态等外部链接指定的一次性任务深链 ID。 */
   initialTaskId?: string | null;
+  /** 是否允许空候选人入口跳转课题成员页；基础研究链为 false。 */
+  canOpenMembers: boolean;
 };
 
 type TPanelState = "loading" | "ready" | "forbidden" | "error";
@@ -115,7 +117,7 @@ function isTaskActionAllowed(task: TResearchChainNodeTask, action: TResearchChai
 }
 
 /** Load, edit, assign and review tasks attached to one Research Chain node. */
-export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initialTaskId }: Props) {
+export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initialTaskId, canOpenMembers }: Props) {
   const { t, currentLocale } = useTranslation();
   const taskService = useMemo(() => new ResearchChainTaskService(), []);
   const sharedPeek = useResearchChainWorkbenchPeek();
@@ -595,6 +597,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
                           label={t("research.chain_tasks.assignee")}
                           disabled={!canAssign || candidateState !== "ready" || Boolean(actionBusy)}
                           allowClear={!task.assignee}
+                          canOpenMembers={canOpenMembers}
                           onChange={(userId) => void updateProperty(task, { assignee: userId || null })}
                         />
                         {canEdit ? (
@@ -771,6 +774,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
           workspaceSlug={workspaceSlug}
           chainId={chainId}
           nodeId={nodeId}
+          canOpenMembers={canOpenMembers}
           actionBusy={actionBusy}
           onModeChange={setPeekMode}
           onClose={closePeek}

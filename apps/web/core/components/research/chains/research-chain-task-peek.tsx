@@ -84,6 +84,8 @@ type Props = {
   workspaceSlug: string;
   chainId: string;
   nodeId: string;
+  /** 是否保留课题成员入口；基础研究链为 false。 */
+  canOpenMembers: boolean;
   actionBusy: string;
   onModeChange: (mode: TWorkbenchPeekMode) => void;
   onClose: () => void;
@@ -308,7 +310,9 @@ export function ResearchChainTaskPeek(props: Props) {
     locale,
     mode,
     workspaceSlug,
+    chainId,
     nodeId,
+    canOpenMembers,
     actionBusy,
     onModeChange,
     onClose,
@@ -524,6 +528,11 @@ export function ResearchChainTaskPeek(props: Props) {
                   fullWidth
                   menuAlign="left"
                   allowClear={kind === "create" || !task?.assignee}
+                  canOpenMembers={canOpenMembers}
+                  emptyActionHref={
+                    canOpenMembers ? `/${workspaceSlug}/research/chains/${chainId}?tab=members` : undefined
+                  }
+                  emptyActionLabel={canOpenMembers ? t("research.chain_tasks.go_members") : undefined}
                   onChange={(userId) => {
                     if (kind === "create") onFormChange({ assignee: userId });
                     else onCommit({ assignee: userId || null });
@@ -579,7 +588,11 @@ export function ResearchChainTaskPeek(props: Props) {
             <p className="mt-3 text-12 text-tertiary">{t("research.chain_tasks.ownership_hint")}</p>
           )}
           {canAssign && !candidates.some((candidate) => candidate.scope === "WORKSPACE") && (
-            <p className="mt-3 text-12 text-tertiary">{t("research.chain_tasks.membership_hint")}</p>
+            <p className="mt-3 text-12 text-tertiary">
+              {t(
+                canOpenMembers ? "research.chain_tasks.membership_hint" : "research.chain_tasks.membership_hint_admin"
+              )}
+            </p>
           )}
           {task?.assignee && task.assignee_is_valid === false && (
             <p role="status" className="mt-3 text-12 text-secondary">

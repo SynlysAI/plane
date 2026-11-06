@@ -5,15 +5,21 @@ import { useNavigate, useSearchParams } from "react-router";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Skeleton } from "@plane/propel/skeleton";
 import { TabNavigationList } from "@plane/propel/tab-navigation";
+import { Table, TableBody, TableCell, TableRow, TableHead, TableHeader } from "@plane/propel/table";
+import { ListFilterField, ListFilterSelect } from "@plane/ui";
+import { ResearchFilterToolbar, ResearchTableSurface } from "@/components/research/common/research-data-surface";
 import type {
   TResearchChain,
+  TResearchChainMember,
   TResearchChainNode,
   TResearchChainNodeAction,
   TResearchChainStageApprovalSummary,
 } from "@plane/types";
 // components
+import { ResearchPersonSelect } from "@/components/research/common/person-select";
 import { ResearchDeleteButton } from "@/components/research/common/research-delete-button";
 import { useResearch } from "@/hooks/store/use-research";
 import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
@@ -36,6 +42,8 @@ import {
 } from "@/components/research/chains/research-chain-workflow-stage-detail";
 import { ResearchChainTaskPanel } from "@/components/research/chains/research-chain-task-panel";
 import { ResearchPaperReviewPanel } from "@/components/research/chains/research-paper-review-panel";
+// hooks
+import { useMember } from "@/hooks/store/use-member";
 // services
 import { ResearchChainService } from "@/services/research/chain.service";
 const chainService = new ResearchChainService();
@@ -45,10 +53,23 @@ type Props = {
   chainId: string;
 };
 
-type TChainTab = "overview" | "nodes";
-type TRequestedChainTab = TChainTab | "members" | "replay" | "reports" | "experiments" | "references";
+type TChainTab = "overview" | "nodes" | "members";
+type TRequestedChainTab = TChainTab | "replay" | "reports" | "experiments" | "references";
 
 const MATERIAL_TABS = new Set(["materials", "reports", "experiments", "references"]);
+
+/**
+ * 判断科研链是否保留课题成员管理入口。
+ *
+ * Args:
+ *     chain: 科研链详情；详情加载完成前为空。
+ *
+ * Returns:
+ *     基础研究链返回 False，产业化和旧培养课题在详情加载完成后返回 True。
+ */
+function canManageChainMembers(chain: TResearchChain | null): boolean {
+  return chain !== null && chain.is_basic_research !== true;
+}
 
 /**
  * 将已移除的课题旧地址收回仍可用的分区。
@@ -57,12 +78,13 @@ const MATERIAL_TABS = new Set(["materials", "reports", "experiments", "reference
  *     requested: 地址栏中的 tab 参数。
  *
  * Returns:
- *     课题页实际展示的分区。旧资料页签地址回到节点工作台，旧成员页地址回到概览。
+ *     课题页实际展示的分区。旧资料页签地址回到节点工作台；基础研究旧成员地址回到概览。
  */
-export function resolveChainTab(requested: string | null): TChainTab {
+export function resolveChainTab(requested: string | null, membersAvailable: boolean): TChainTab {
   if (requested === "replay") return "nodes";
   if (requested && MATERIAL_TABS.has(requested)) return "nodes";
-  if (requested === "overview" || requested === "nodes") return requested;
+  if (requested === "members" && !membersAvailable) return "overview";
+  if (requested === "overview" || requested === "nodes" || requested === "members") return requested;
   return "overview";
 }
 
@@ -100,20 +122,27 @@ function initialContextExpanded(): boolean {
   return window.localStorage.getItem(CONTEXT_DETAIL_STORAGE_KEY) === "expanded";
 }
 
-/** Research Chain topic page with fixed context, tabs and workflow evidence. */
+const MEMBER_ROLE_LABELS: Record<string, string> = {
+  OWNER: "research.chains.members.role_owner",
+  ADMIN: "research.chains.members.role_admin",
+  MEMBER: "research.chains.members.role_member",
+};
+
+/** Research Chain topic page with fixed context, tabs, workflow evidence and members. */
 export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug, chainId }: Props) {
   const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const assistant = useAIAssistant();
   const navigate = useNavigate();
+  const memberStore = useMember();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get("tab") as TRequestedChainTab | null;
   const requestedNodeId = searchParams.get("node");
   const requestedTaskId = searchParams.get("task");
-  const activeTab = resolveChainTab(requestedTab);
   const [chain, setChain] = useState<TResearchChain | null>(null);
   const [nodes, setNodes] = useState<TResearchChainNode[]>([]);
   const [stageApprovalSummary, setStageApprovalSummary] = useState<TResearchChainStageApprovalSummary | null>(null);
+  const [members, setMembers] = useState<TResearchChainMember[]>([]);
   const [stageDetails, setStageDetails] = useState<TResearchChainStageNodeDetail[]>([]);
   const [selected, setSelected] = useState<TResearchChainStageNodeDetail | null>(null);
   const [stageDetailLoading, setStageDetailLoading] = useState(false);
@@ -130,7 +159,13 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const [transitioning, setTransitioning] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [reasonAction, setReasonAction] = useState<TResearchChainNodeAction | null>(null);
+  const [memberUserId, setMemberUserId] = useState("");
+  const [memberRole, setMemberRole] = useState<"15" | "20">("15");
+  const [memberBusy, setMemberBusy] = useState(false);
+  const [memberError, setMemberError] = useState("");
   const [contextExpanded, setContextExpanded] = useState(initialContextExpanded);
+  const membersAvailable = canManageChainMembers(chain);
+  const activeTab = resolveChainTab(requestedTab, membersAvailable);
   const stageRefreshVersionRef = useRef(0);
   const approvedCountRef = useRef<number | null>(null);
   const current = useMemo(() => pickCurrentNode(nodes), [nodes]);
@@ -223,8 +258,12 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
         chainService.getChainNodes(workspaceSlug, chainId),
         chainService.getChainStageApprovals(workspaceSlug, chainId),
       ]);
+      const chainMembers = canManageChainMembers(chainDetail)
+        ? await chainService.getChainMembers(workspaceSlug, chainId).catch(() => [])
+        : [];
       setChain(chainDetail);
       setNodes(chainNodes);
+      setMembers(chainMembers);
       setStageApprovalSummary(stageApprovals);
       approvedCountRef.current = stageApprovals.progress.approved;
     } catch (error) {
@@ -313,6 +352,11 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
     [searchParams, selectedStage, setSearchParams]
   );
 
+  useEffect(() => {
+    if (!membersAvailable) return;
+    void memberStore.workspace.fetchWorkspaceMembers(workspaceSlug).catch(() => undefined);
+  }, [memberStore, membersAvailable, workspaceSlug]);
+
   const createNode = async () => {
     if (!nodeTitle.trim() || creating) return;
     setCreating(true);
@@ -364,9 +408,66 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
     void transition(node, action);
   };
 
+  const addMember = async () => {
+    if (!memberUserId.trim() || memberBusy) return;
+    setMemberBusy(true);
+    setMemberError("");
+    try {
+      const updated = await chainService.addChainMember(
+        workspaceSlug,
+        chainId,
+        memberUserId.trim(),
+        memberRole === "20" ? 20 : 15
+      );
+      setMembers(updated);
+      setMemberUserId("");
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: t("research.chains.member_added_title"),
+        message: t("research.chains.member_added_message"),
+      });
+    } catch {
+      setMemberError(t("research.chains.member_action_failed"));
+    } finally {
+      setMemberBusy(false);
+    }
+  };
+
+  const removeMember = async (userId: string) => {
+    if (memberBusy) return;
+    setMemberBusy(true);
+    setMemberError("");
+    try {
+      await chainService.removeChainMember(workspaceSlug, chainId, userId);
+      setMembers((latestMembers) => latestMembers.filter((member) => member.user_id !== userId));
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: t("research.chains.member_removed_title"),
+        message: t("research.chains.member_removed_message"),
+      });
+    } catch {
+      setMemberError(t("research.chains.member_action_failed"));
+    } finally {
+      setMemberBusy(false);
+    }
+  };
+
+  const workspaceMembers = memberStore.workspace
+    .getWorkspaceMemberIds(workspaceSlug)
+    .map((userId) => memberStore.getUserDetails(userId))
+    .filter((member): member is NonNullable<typeof member> => !!member)
+    .filter((member) => !memberStore.workspace.isUserSuspended(member.id, workspaceSlug))
+    .map((member) => ({
+      id: member.id,
+      display_name: member.display_name,
+      email: member.email,
+      first_name: member.first_name,
+      last_name: member.last_name,
+    }));
   const tabs: Array<{ id: TChainTab; labelKey: string }> = [
     { id: "overview", labelKey: "research.chains.tabs.overview" },
     { id: "nodes", labelKey: "research.chains.tabs.nodes" },
+    ...(membersAvailable ? [{ id: "members" as const, labelKey: "research.chains.tabs.members" }] : []),
   ];
   const selectedNodeActions = selected ? (
     <div className="flex flex-wrap items-center justify-end gap-2">
@@ -729,6 +830,8 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
             chainId={chainId}
             chain={chain}
             nodes={nodes}
+            members={members}
+            showMembers={membersAvailable}
             currentNode={current}
             stages={workflow.stages}
             stageApprovalSummary={stageApprovalSummary}
@@ -742,6 +845,15 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
               else nextParams.delete("task");
               if (options?.approval) nextParams.set("approval", "1");
               else nextParams.delete("approval");
+              setSearchParams(nextParams);
+            }}
+            onOpenMembers={() => {
+              const nextParams = new URLSearchParams(searchParams);
+              nextParams.set("tab", "members");
+              nextParams.delete("stage");
+              nextParams.delete("node");
+              nextParams.delete("task");
+              nextParams.delete("approval");
               setSearchParams(nextParams);
             }}
             onCreateNode={() => {
@@ -814,6 +926,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                           chainId={chainId}
                           nodeId={selected.node.id}
                           initialTaskId={requestedTaskId}
+                          canOpenMembers={membersAvailable}
                         />
                         <ResearchChainKnowledgePanel knowledge={knowledge} />
                         {selected.node.node_type === "PAPER_WRITING" && (
@@ -835,6 +948,81 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                 }
               />
             )}
+          </section>
+        )}
+
+        {activeTab === "members" && (
+          <section className="p-5">
+            <ResearchFilterToolbar>
+              <ResearchPersonSelect
+                people={workspaceMembers}
+                value={memberUserId}
+                onChange={setMemberUserId}
+                label={t("research.chains.members.user_id")}
+              />
+              <ListFilterField label={t("research.chains.members.role")}>
+                <ListFilterSelect
+                  value={memberRole}
+                  onChange={(event) => setMemberRole(event.target.value as "15" | "20")}
+                >
+                  <option value="15">{t("research.chains.members.role_member")}</option>
+                  <option value="20">{t("research.chains.members.role_admin")}</option>
+                </ListFilterSelect>
+              </ListFilterField>
+              <Button
+                variant="primary"
+                size="xl"
+                onClick={() => void addMember()}
+                disabled={!memberUserId.trim() || memberBusy}
+              >
+                {t("research.chains.members.add")}
+              </Button>
+            </ResearchFilterToolbar>
+            {memberError && (
+              <p className="mt-3 text-12 text-danger-primary" role="alert">
+                {memberError}
+              </p>
+            )}
+            <div className="mt-4">
+              <ResearchTableSurface>
+                <Table className="min-w-120">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>成员</TableHead>
+                      <TableHead>{t("research.chains.members.role")}</TableHead>
+                      <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {members.map((member) => (
+                      <TableRow key={member.user_id}>
+                        <TableCell className="font-medium text-primary">{member.display_name}</TableCell>
+                        <TableCell className="text-tertiary">{t(MEMBER_ROLE_LABELS[member.role])}</TableCell>
+                        <TableCell className="text-right">
+                          {!member.is_owner && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => void removeMember(member.user_id)}
+                              disabled={memberBusy}
+                            >
+                              {t("research.chains.members.remove")}
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {!members.length && (
+                      <TableRow>
+                        <TableCell colSpan={3} className="py-3 text-secondary">
+                          {t("research.chains.members.empty")}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </ResearchTableSurface>
+            </div>
           </section>
         )}
       </div>

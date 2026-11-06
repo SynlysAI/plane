@@ -16,6 +16,8 @@ type Props = {
   selectedLabel?: string;
   fullWidth?: boolean;
   menuAlign?: "left" | "right";
+  /** 是否保留课题成员入口文案；基础研究链为 false。 */
+  canOpenMembers?: boolean;
   emptyActionHref?: string;
   emptyActionLabel?: string;
   onChange: (userId: string) => void;
@@ -75,6 +77,7 @@ export function ResearchAssigneeSelect({
   selectedLabel,
   fullWidth = false,
   menuAlign = "right",
+  canOpenMembers = true,
   emptyActionHref,
   emptyActionLabel,
   onChange,
@@ -147,7 +150,11 @@ export function ResearchAssigneeSelect({
           className="z-20 max-h-96 w-72 max-w-[calc(100vw-24px)] overflow-y-auto rounded-md border border-subtle bg-surface-1 p-2 shadow-[0_8px_24px_rgba(37,37,34,0.08)]"
         >
           {!candidates.some((candidate) => candidate.scope === "WORKSPACE") && (
-            <p className="px-2 py-1 text-12 text-tertiary">{t("research.chain_tasks.membership_hint")}</p>
+            <p className="px-2 py-1 text-12 text-tertiary">
+              {t(
+                canOpenMembers ? "research.chain_tasks.membership_hint" : "research.chain_tasks.membership_hint_admin"
+              )}
+            </p>
           )}
           <input
             type="search"
@@ -211,7 +218,13 @@ export function ResearchAssigneeSelect({
           })}
           {candidates.length === 0 ? (
             <div className="space-y-1 px-2 py-2">
-              <p className="text-11 text-tertiary">{t("research.chain_tasks.no_assignee_candidates")}</p>
+              <p className="text-11 text-tertiary">
+                {t(
+                  canOpenMembers
+                    ? "research.chain_tasks.no_assignee_candidates"
+                    : "research.chain_tasks.no_assignee_candidates_admin"
+                )}
+              </p>
               {emptyActionHref && emptyActionLabel && (
                 <a href={emptyActionHref} className="block text-11 text-accent-primary hover:underline">
                   {emptyActionLabel}

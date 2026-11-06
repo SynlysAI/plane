@@ -1798,7 +1798,8 @@
       }
     },
     "chain_tasks": {
-      "membership_hint": "No member is currently assignable for this topic. Contact a topic administrator to update authorization.",
+      "membership_hint": "Add the assignee as a project member first.",
+      "membership_hint_admin": "No member is currently assignable for this topic. Contact a topic administrator to update authorization.",
       "invalid_assignee": "The assignee is no longer an eligible project member. Restore membership or reassign this task.",
       "comments": {
         "confirm_delete": "Delete this comment?",
@@ -1851,7 +1852,8 @@
       "candidate_load_failed": "The candidate scope could not load, so creating and assigning are temporarily unavailable.",
       "candidate_scope_hint": "Candidates come only from active members of this topic; organisation details are informational, and there is no workspace-wide search.",
       "search_assignee": "Search candidates or organisations",
-      "no_assignee_candidates": "No member is currently assignable for this topic. Contact a topic administrator to update authorization.",
+      "no_assignee_candidates": "No member of this topic can be assigned yet. Add members first.",
+      "no_assignee_candidates_admin": "No member is currently assignable for this topic. Contact a topic administrator to update authorization.",
       "go_members": "Go to members",
       "no_candidate_match": "No assignable member matches this search.",
       "ownership_hint": "The task stays on this node. Assignees must be active members of this topic.",
