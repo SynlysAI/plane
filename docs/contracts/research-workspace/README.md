@@ -48,9 +48,10 @@
 - Git SHA 与内容 hash 的长度约束已由示例验证。
 - 完成 Plane / Runner / Synlora 三个消费视角工程评审。
 - 三份契约进入 v1 工程冻结，RWS-1 可以开始实现。
+- RWS-1 已为 `research-resource-ref.v1` 接入 Plane API 契约测试，覆盖 Git、LFS、Asset、非法 study/hash/path 和幂等重放。
 
 尚未完成：
 
-- 未接入自动化契约测试。
-- 未补充非法示例矩阵。
+- `research-workspace-binding.v1` 与 `research-dataset-manifest.v1` 尚未接入自动化契约测试。
+- 尚未补充覆盖三份 Schema 的完整非法示例矩阵。
 - 未完成业务负责人签字确认。

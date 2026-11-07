@@ -2,9 +2,9 @@
 
 | 项目     | 内容                                                                                          |
 | -------- | --------------------------------------------------------------------------------------------- |
-| 计划版本 | v1.2                                                                                          |
+| 计划版本 | v1.3                                                                                          |
 | 日期     | 2026-11-07                                                                                    |
-| 状态     | Stage RWS-0 本地技术验证完成；远程 Plane 8.4.1 与本地 9.20.x 未对齐，部署待授权               |
+| 状态     | Stage RWS-0 / RWS-1 本地完成；远程 Plane 8.4.1 与本地 9.20.x 未对齐，部署待授权              |
 | 目标架构 | [`AI-Native Research Workspace 目标架构`](../../architecture/ai-native-research-workspace.md) |
 | 交付策略 | 先完成一个试点课题的纵向闭环，再扩大范围                                                      |
 | 默认试点 | 咖啡课题；不做全库迁移                                                                        |
@@ -113,6 +113,8 @@
 
 ## 3. Stage RWS-1：资源模型与幂等控制面
 
+> 2026-11-07 状态：本地开发和验证完成；详见 [`RWS-1 控制面验证证据`](../../evidence/research-workspace/rws1/README.md)。
+
 ### 3.1 目标
 
 在 Plane 中建立 StudyWorkspace 的最小资源身份；本阶段不接 Forgejo、不做 UI、不迁移文件。
@@ -140,11 +142,32 @@
 
 ### 3.4 Stage 出口
 
-- [ ] 一条链重复 `ensure` 只产生一个 StudyWorkspace。
-- [ ] 无权限用户无法探测其他课题工作区。
-- [ ] 旧课题在 feature flag 关闭时行为不变。
-- [ ] 固定资源引用测试覆盖 Git、LFS 和 Asset 三类。
-- [ ] 模型迁移可回滚并在测试库通过。
+- [x] 一条链重复 `ensure` 只产生一个 StudyWorkspace。
+- [x] 无权限用户无法探测其他课题工作区。
+- [x] 旧课题在 feature flag 关闭时行为不变。
+- [x] 固定资源引用测试覆盖 Git、LFS 和 Asset 三类。
+- [x] 模型迁移可回滚并在测试库通过。
+
+### 3.5 RWS-1 完成记录
+
+| 项目         | 实际结果                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------ |
+| 资源身份     | 新增 `StudyWorkspace`，以 active ResearchChain 唯一约束保证一链一工作区                     |
+| 持久副本骨架 | Ensure 创建唯一默认 `WorkspaceWorkingCopy`，本阶段只建立逻辑身份，不接 Forgejo / Runner     |
+| 操作控制面   | `WorkspaceOperation` 记录 actor、kind、payload hash、expected head、状态和错误字段          |
+| 固定引用     | 实现 `research-resource-ref.v1` 校验、canonical digest、幂等注册和 `plane-rws://` 展示 URI  |
+| 投影骨架     | 新增资产投影与索引投影模型；未执行对象存储或 RAGPortal 写入                                 |
+| feature flag | Workspace 使用 `study_workspace_enabled`，链使用 `StudyWorkspace.is_enabled`，默认均不影响旧链 |
+| API          | `POST /api/research/workspaces/<slug>/study-workspaces/ensure/` 及 detail / refs / operations |
+
+本地验证结论：
+
+- RWS-1 契约与并发测试：15 通过。
+- 0235 迁移在 PostgreSQL 临时 schema 正反向执行：1 通过。
+- Research settings 兼容回归：23 通过。
+- 基础研究链权限回归：45 通过。
+- `python manage.py check` 与 `makemigrations --check --dry-run` 均无问题。
+- `test_research_chain.py` 的 9 个 fixture setup error 与 `test_research_nav_capabilities.py` 的 2 个断言失败在 RWS-0 基线 `4e0e47e636` 抽样复现，属于本阶段前已存在的测试漂移；RWS-1 自身的 legacy chain flag 兼容测试通过。
 
 ## 4. Stage RWS-2：Forgejo 协作与 Workspace Runner
 
