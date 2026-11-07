@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+import uuid
+
 # Third party imports
 from rest_framework import serializers
 
@@ -220,6 +222,42 @@ class ResetPasswordSerializer(serializers.Serializer):
 
 
 class ProfileSerializer(BaseSerializer):
+    MAX_PREFERRED_COLLABORATORS = 3
+
+    def validate_preferred_collaborators(self, value):
+        """校验高频合作者配置：去重、限制数量、并确保用户存在且活跃。
+
+        Args:
+            value: 前端提交的合作者用户 ID 列表（最多三位，顺序即优先级）。
+
+        Returns:
+            归一化去重后的 UUID 字符串列表，保持原始顺序。
+        """
+        if not isinstance(value, list):
+            raise serializers.ValidationError("高频合作者必须是列表。")
+
+        normalized = []
+        for item in value:
+            try:
+                collaborator_id = str(uuid.UUID(str(item)))
+            except (ValueError, TypeError, AttributeError):
+                raise serializers.ValidationError("高频合作者包含无效的用户标识。")
+            if collaborator_id not in normalized:
+                normalized.append(collaborator_id)
+
+        if len(normalized) > self.MAX_PREFERRED_COLLABORATORS:
+            raise serializers.ValidationError(f"最多配置 {self.MAX_PREFERRED_COLLABORATORS} 位高频合作者。")
+
+        if normalized:
+            valid_ids = set(
+                User.objects.filter(pk__in=normalized, is_active=True).values_list("pk", flat=True)
+            )
+            valid_ids = {str(pk) for pk in valid_ids}
+            if set(normalized) != valid_ids:
+                raise serializers.ValidationError("高频合作者包含不存在或已停用的用户。")
+
+        return normalized
+
     class Meta:
         model = Profile
         fields = "__all__"

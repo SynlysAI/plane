@@ -30,6 +30,7 @@ from plane.db.models import (
     NotificationEmailCircuit,
     NotificationEmailDelivery,
     NotificationEvent,
+    Profile,
     User,
     UserNotificationPreference,
     WorkspaceNotificationPolicy,
@@ -396,6 +397,39 @@ def create_payload(notification_data):
                     actor_data["activity_time"] = issue_activity.get("activity_time") or timezone.now().isoformat()
 
     return data
+
+
+def _preferred_collaborator_rank_map(receiver_id):
+    """读取接收人配置的高频合作者并生成优先级映射。
+
+    Args:
+        receiver_id: 邮件接收人用户 ID。
+
+    Returns:
+        以合作者用户 ID 字符串为键、配置顺序（0 为最高）为值的映射；未配置时为空字典。
+    """
+    profile = Profile.objects.filter(user_id=receiver_id).only("preferred_collaborators").first()
+    if profile is None:
+        return {}
+    collaborators = profile.preferred_collaborators or []
+    return {str(collaborator_id): rank for rank, collaborator_id in enumerate(collaborators[:3])}
+
+
+def _order_by_preferred_collaborators(items, actor_key, receiver_id):
+    """按接收人配置将命中合作者的条目稳定置顶。
+
+    Args:
+        items: 待排序的条目序列。
+        actor_key: 从条目中提取操作者 ID 字符串的函数。
+        receiver_id: 邮件接收人用户 ID。
+
+    Returns:
+        命中合作者按配置顺序排在最前、其余条目保持原始顺序的新列表；未配置时原样返回。
+    """
+    priority = _preferred_collaborator_rank_map(receiver_id)
+    if not priority:
+        return items
+    return sorted(items, key=lambda item: priority.get(actor_key(item), len(priority)))
 
 
 def process_mention(mention_component):
@@ -933,6 +967,13 @@ def _send_email_notification(issue_id, notification_data, receiver_id, email_not
     for row in eligible_logs:
         filtered_data[str(row.triggered_by_id)].append(row.data or {})
     data = create_payload(dict(filtered_data))
+    data = dict(
+        _order_by_preferred_collaborators(
+            data.items(),
+            lambda pair: pair[0],
+            receiver.id,
+        )
+    )
 
     try:
         (
@@ -1663,7 +1704,11 @@ def send_research_notification_email(delivery_ids, lease_token):
         )
         return False
 
-    events = [delivery.event for delivery in eligible]
+    events = _order_by_preferred_collaborators(
+        [delivery.event for delivery in eligible],
+        lambda event: str(event.triggered_by_id),
+        receiver.id,
+    )
     first_event = events[0]
     first_route = (
         first_event.route

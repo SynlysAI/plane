@@ -248,6 +248,8 @@ class Profile(TimeAuditModel):
         max_length=255, choices=NotificationViewMode.choices, default=NotificationViewMode.FULL
     )
     is_smooth_cursor_enabled = models.BooleanField(default=False)
+    # 邮件通知优先展示的高频合作者（有序用户 ID 列表，最多三位）
+    preferred_collaborators = models.JSONField(default=list, blank=True)
     # mobile
     is_mobile_onboarded = models.BooleanField(default=False)
     mobile_onboarding_step = models.JSONField(default=get_mobile_default_onboarding)
