@@ -4,7 +4,8 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
+import { useParams } from "next/navigation";
 import { observer } from "mobx-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
@@ -21,11 +22,30 @@ export const ProfileSettingsPreferredCollaborators = observer(function ProfileSe
   // translation
   const { t } = useTranslation();
   // store hooks
-  const { data: currentUser } = useUser();
+  const { data: currentUser, userSettings } = useUser();
   const { data: userProfile, updateUserProfile } = useUserProfile();
   const {
-    workspace: { workspaceMemberIds },
+    workspace: { fetchWorkspaceMembers, getWorkspaceMemberIds },
   } = useMember();
+  // router params
+  const { workspaceSlug } = useParams();
+  // 账户设置页不带工作区路由参数时，回退到最近打开或兜底工作区。
+  const profileWorkspaceSlug = (
+    workspaceSlug?.toString() ||
+    userSettings.data.workspace.last_workspace_slug ||
+    userSettings.data.workspace.fallback_workspace_slug ||
+    ""
+  ).trim();
+
+  // 账户设置页不依赖工作区成员加载，需要自行拉取候选成员。
+  useEffect(() => {
+    if (profileWorkspaceSlug && !(getWorkspaceMemberIds(profileWorkspaceSlug)?.length > 0)) {
+      void fetchWorkspaceMembers(profileWorkspaceSlug).catch(() => undefined);
+    }
+  }, [fetchWorkspaceMembers, getWorkspaceMemberIds, profileWorkspaceSlug]);
+
+  // 成员列表按显式工作区 slug 读取，避免账户设置页缺少路由参数时取不到成员。
+  const workspaceMemberIds = profileWorkspaceSlug ? getWorkspaceMemberIds(profileWorkspaceSlug) : [];
 
   const collaborators = useMemo(
     () => (Array.isArray(userProfile?.preferred_collaborators) ? userProfile.preferred_collaborators : []),
@@ -33,10 +53,7 @@ export const ProfileSettingsPreferredCollaborators = observer(function ProfileSe
   );
 
   // 候选成员为当前工作空间成员并排除自己；每个槽位再排除其他已选合作者。
-  const candidateIds = useMemo(
-    () => (workspaceMemberIds ?? []).filter((memberId) => memberId !== currentUser?.id),
-    [workspaceMemberIds, currentUser?.id]
-  );
+  const candidateIds = workspaceMemberIds.filter((memberId) => memberId !== currentUser?.id);
 
   // 始终渲染三个有序槽位；空槽位显示占位文案，配置为空时界面保持安静。
   const slots = useMemo<{ key: string; memberId: string | null; index: number }[]>(() => {
