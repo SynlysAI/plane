@@ -134,7 +134,6 @@ def workspace_research_sections(workspace):
         "code": bool(enabled and settings["code_enabled"]),
         "integrations": bool(enabled and settings["integration_enabled"]),
         "research_chain": bool(enabled and settings["research_chain_enabled"]),
-        "study_workspace": bool(enabled and settings["study_workspace_enabled"]),
     }
 
 

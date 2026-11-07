@@ -56,6 +56,13 @@ from plane.research.views.task_instruction_assets import (
 )
 from plane.research.views.research_todos import ResearchTodoListEndpoint
 from plane.research.views.report_images import ResearchReportImageEndpoint
+from plane.research.views.research_workspace import (
+    StudyWorkspaceDetailEndpoint,
+    StudyWorkspaceEnsureEndpoint,
+    StudyWorkspaceOperationEndpoint,
+    StudyWorkspaceResourceReferenceDetailEndpoint,
+    StudyWorkspaceResourceReferenceEndpoint,
+)
 from plane.research.views.workspace_outcomes import ResearchWorkspaceOutcomeEndpoint
 from plane.research.views.report_context import ResearchFormalReportContentEndpoint, ResearchFormalReportOptionsEndpoint
 from plane.research.views.chain_stage_approvals import (
@@ -291,6 +298,31 @@ from plane.research.views import (
 )
 
 urlpatterns = [
+    path(
+        "research/workspaces/<str:slug>/study-workspaces/ensure/",
+        StudyWorkspaceEnsureEndpoint.as_view(),
+        name="research-study-workspace-ensure",
+    ),
+    path(
+        "research/workspaces/<str:slug>/study-workspaces/<uuid:study_id>/",
+        StudyWorkspaceDetailEndpoint.as_view(),
+        name="research-study-workspace-detail",
+    ),
+    path(
+        "research/workspaces/<str:slug>/study-workspaces/<uuid:study_id>/resource-refs/",
+        StudyWorkspaceResourceReferenceEndpoint.as_view(),
+        name="research-study-workspace-resource-refs",
+    ),
+    path(
+        "research/workspaces/<str:slug>/study-workspaces/<uuid:study_id>/resource-refs/<str:digest>/",
+        StudyWorkspaceResourceReferenceDetailEndpoint.as_view(),
+        name="research-study-workspace-resource-ref-detail",
+    ),
+    path(
+        "research/workspaces/<str:slug>/study-workspaces/<uuid:study_id>/operations/",
+        StudyWorkspaceOperationEndpoint.as_view(),
+        name="research-study-workspace-operations",
+    ),
     path(
         "research/workspaces/<str:slug>/mcp/weekly-report/connections/<uuid:grant_id>/configuration/",
         WeeklyReportConfigurationEndpoint.as_view(),

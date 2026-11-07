@@ -41,6 +41,12 @@ from .experiment import (
     ExperimentRecordVersionSerializer,
 )
 from .code import CodeArtifactSerializer, ProjectCodeRepositorySerializer
+from .research_workspace import (
+    StudyWorkspaceSerializer,
+    WorkspaceOperationSerializer,
+    WorkspaceResourceReferenceSerializer,
+    WorkspaceWorkingCopySerializer,
+)
 from .outcome import ResearchOutcomeLinkSerializer, ResearchOutcomeSerializer
 from .integration import (
     ExternalReferenceLinkSerializer,
@@ -103,6 +109,10 @@ __all__ = [
     "ExperimentRecordVersionSerializer",
     "CodeArtifactSerializer",
     "ProjectCodeRepositorySerializer",
+    "StudyWorkspaceSerializer",
+    "WorkspaceOperationSerializer",
+    "WorkspaceResourceReferenceSerializer",
+    "WorkspaceWorkingCopySerializer",
     "ResearchOutcomeLinkSerializer",
     "ResearchOutcomeSerializer",
     "ExternalReferenceLinkSerializer",
