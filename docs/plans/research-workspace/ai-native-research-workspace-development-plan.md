@@ -2,9 +2,9 @@
 
 | 项目     | 内容                                                                                          |
 | -------- | --------------------------------------------------------------------------------------------- |
-| 计划版本 | v1.1                                                                                          |
+| 计划版本 | v1.2                                                                                          |
 | 日期     | 2026-11-07                                                                                    |
-| 状态     | Stage RWS-0 进行中；契约草案和双环境基线已建立，外部系统实测未完成                            |
+| 状态     | Stage RWS-0 本地技术验证完成；远程 Plane 8.4.1 与本地 9.20.x 未对齐，部署待授权               |
 | 目标架构 | [`AI-Native Research Workspace 目标架构`](../../architecture/ai-native-research-workspace.md) |
 | 交付策略 | 先完成一个试点课题的纵向闭环，再扩大范围                                                      |
 | 默认试点 | 咖啡课题；不做全库迁移                                                                        |
@@ -74,6 +74,7 @@
 - [`ADR 0001：AI-Native Research Workspace 首期形态`](../../architecture/adr/0001-ai-native-research-workspace.md)
 - [`Research Workspace 跨系统契约`](../../contracts/research-workspace/README.md)
 - [`Stage RWS-0 双环境基线记录`](../../operations/research-workspace/rws0-environment-baseline.md)
+- [`Stage RWS-0 技术验证证据`](../../evidence/research-workspace/rws0/README.md)
 
 | 任务               | 交付物                                                            | 验收                                  |
 | ------------------ | ----------------------------------------------------------------- | ------------------------------------- |
@@ -87,24 +88,28 @@
 
 ### 2.3 必须实测的问题
 
-- Forgejo reverse proxy auth 是否覆盖 Git HTTP 和 LFS。
-- Forgejo webhook 的签名、去重和乱序行为。
+- [x] Forgejo reverse proxy auth 覆盖 Git HTTP / LFS。
+- [x] Forgejo webhook 签名、delivery ID 和 push payload。
+- [ ] Webhook 重放去重与乱序对账策略。
 - Plane / AI4MS 用户 subject 与 Forgejo 用户名的稳定映射。
-- Runner 与 Synlora 是否能挂载同一持久卷。
-- 写挂载撤除后旧容器是否还能继续写。
+- [x] Runner 与 Synlora 能挂载同一持久卷。
+- [x] 写挂载撤除后新运行不能继续写。
+- [ ] 正在运行的旧容器被强制撤权的行为。
 - MinIO / 对象存储是否支持版本、校验、保留和下载授权。
-- RAGPortal main / develop 分支在实际部署中的差异。
+- [x] RAGPortal 本地部署版本与 upload / status API 存在性。
+- [ ] 远程 RAGPortal / WeKnora 实际部署版本。
 - 原始实验数据的大小、保留期和备份责任。
 
 ### 2.4 Stage 出口
 
-- [ ] ADR 明确服务形态、Git 引擎、存储布局和鉴权方案。
-- [ ] 外部依赖失败项均有替代方案或明确阻塞。
-- [ ] `research-resource-ref.v1`、`research-workspace-binding.v1`、`research-dataset-manifest.v1` 契约冻结。
-- [ ] POC 不是全 mock；至少真实 Forgejo 和持久卷被验证。
-- [ ] 试点课题范围、回退标准和数据清单确认。
-- [ ] `ai-naive-workspace` 分支建立，且确认不会直接推送 `main` / `develop`。
-- [ ] 本地与 `http://10.26.15.92:3300/` 的环境基线、数据边界和部署方式确认。
+- [x] ADR 明确服务形态、Git 引擎、存储布局和鉴权方案。
+- [x] 外部依赖失败项均有替代方案或明确阻塞。
+- [x] `research-resource-ref.v1`、`research-workspace-binding.v1`、`research-dataset-manifest.v1` 契约工程冻结。
+- [x] POC 不是全 mock；真实 Forgejo 和持久卷已验证。
+- [x] 试点课题范围、回退标准和数据清单确认。
+- [x] `ai-naive-workspace` 分支建立，且未推送 `main` / `develop`。
+- [x] 本地与 `http://10.26.15.92:3300/` 的环境基线和差异已确认。
+- [ ] 远程 Plane 已部署 `ai-naive-workspace` 且与本地版本一致。
 
 ## 3. Stage RWS-1：资源模型与幂等控制面
 

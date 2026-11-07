@@ -100,13 +100,14 @@
 | [`research-p0-p1-architecture.md`](architecture/research-p0-p1-architecture.md)                            | P0/P1 功能与技术架构汇总                                            | 历史架构基线                                                        |
 | [`ai-native-research-workspace.md`](architecture/ai-native-research-workspace.md)                          | Git 化科研工作区的目标架构、存储边界、身份权限和系统集成设计        | 规划中；不代表功能已实现                                            |
 | [`0001-ai-native-research-workspace.md`](architecture/adr/0001-ai-native-research-workspace.md)            | RWS 首期服务形态、组件边界和验证要求 ADR                            | 已接受；实现仅限 `ai-naive-workspace` 分支                          |
-| [`contracts/research-workspace/README.md`](./contracts/research-workspace/README.md)                       | Research Workspace 资源引用、运行绑定和数据清单契约                 | Stage RWS-0 草案，待三方评审冻结                                    |
+| [`contracts/research-workspace/README.md`](./contracts/research-workspace/README.md)                       | Research Workspace 资源引用、运行绑定和数据清单契约                 | v1 工程冻结；自动化契约测试待补充                                   |
 | [`contracts/research-intelligent-platform/README.md`](./contracts/research-intelligent-platform/README.md) | JSON Schema、示例、错误码和兼容性规则                               | 当前跨仓契约；含 `agent-context.v2`、能力投影与 REVIEW scope        |
 
 ## 5. 验收、发布与运维
 
 | 文档                                                                                                                                                                         | 用途                                                                               |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| [`research-workspace/rws0/README.md`](evidence/research-workspace/rws0/README.md)                                                                                            | RWS-0 Forgejo / Synlora / 双环境技术验证证据；远程 Plane 对齐仍阻塞                |
 | [`research-p0-acceptance-report.md`](archive/p0/research-p0-acceptance-report.md)、[`research-p1-release-notes.md`](archive/p1/research-p1-release-notes.md)                 | P0/P1 历史验收和发布门禁                                                           |
 | [`research-intelligent-platform-phase-1-verification.md`](archive/p1/research-intelligent-platform-phase-1-verification.md)                                                  | Phase 1 灰度验收                                                                   |
 | [`research-intelligent-platform-phase-1.5-optimization-fix-plan.md`](plans/phase-1.5/research-intelligent-platform-phase-1.5-optimization-fix-plan.md)                       | Phase 1.5 问题、任务、回滚和当前实现回写                                           |
