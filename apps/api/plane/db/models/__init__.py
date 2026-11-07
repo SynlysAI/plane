@@ -213,6 +213,12 @@ from .research import (
     UserImportRow,
     WorkspaceResearchSetting,
     ResearchWorkspaceAccessGrant,
+    StudyWorkspace,
+    WorkspaceWorkingCopy,
+    WorkspaceOperation,
+    WorkspaceResourceReference,
+    WorkspaceAsset,
+    WorkspaceIndexProjection,
 )
 
 from .asset_preview import AssetPreview

@@ -40,6 +40,14 @@ from .context import ResearchContextGrant
 from .agent_operation import ResearchAgentOperation, ResearchAgentOperationApproval, ResearchAgentWriteGrant
 from .agent import ResearchAgentRunEvent, ResearchAgentSession
 from .backend import ResearchAgentBackendConnection, ResearchAgentIdentityBinding
+from .workspace import (
+    StudyWorkspace,
+    WorkspaceAsset,
+    WorkspaceIndexProjection,
+    WorkspaceOperation,
+    WorkspaceResourceReference,
+    WorkspaceWorkingCopy,
+)
 from .integration import (
     ExternalReferenceLink,
     ExternalSystemConnection,
@@ -182,6 +190,12 @@ __all__ = [
     "ResearchAuditEvent",
     "WorkspaceResearchSetting",
     "ResearchWorkspaceAccessGrant",
+    "StudyWorkspace",
+    "WorkspaceWorkingCopy",
+    "WorkspaceOperation",
+    "WorkspaceResourceReference",
+    "WorkspaceAsset",
+    "WorkspaceIndexProjection",
     "MentorBinding",
     "ResearchOutcome",
     "ResearchOutcomeAttachment",

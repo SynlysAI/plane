@@ -27,7 +27,7 @@ WEEKLY_CONFIDENTIAL_VISIBILITY = "UNIT"
 
 def default_workspace_research_settings():
     limits = research_file_limits()
-    return {
+    defaults = {
         "module_enabled": False,
         "purpose": "GENERAL",
         "main_pi": None,
@@ -46,6 +46,8 @@ def default_workspace_research_settings():
         **research_gate_defaults(),
         **limits,
     }
+    defaults["study_workspace_enabled"] = False
+    return defaults
 
 
 @reuse_todo_query
@@ -83,6 +85,7 @@ def get_workspace_research_settings(workspace):
         "experiment_enabled": bool(setting.experiment_enabled),
         "code_enabled": bool(setting.code_enabled),
         "integration_enabled": bool(setting.integration_enabled),
+        "study_workspace_enabled": bool(setting.study_workspace_enabled),
         "research_chain_enabled": True,
         "research_trace_enabled": bool(setting.research_trace_enabled),
         "research_account_link_enabled": bool(setting.research_account_link_enabled),
@@ -131,6 +134,7 @@ def workspace_research_sections(workspace):
         "code": bool(enabled and settings["code_enabled"]),
         "integrations": bool(enabled and settings["integration_enabled"]),
         "research_chain": bool(enabled and settings["research_chain_enabled"]),
+        "study_workspace": bool(enabled and settings["study_workspace_enabled"]),
     }
 
 
