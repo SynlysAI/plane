@@ -41,7 +41,14 @@
     },
     "preferences": {
       "heading": "Tercihler",
-      "description": "Uygulama deneyiminizi çalışma şeklinize göre özelleştirin",
+      "description": "Uygulama deneyiminizi çalışma şeklinize göre özelleştirin"
+    },
+    "notifications": {
+      "heading": "E-posta bildirimleri",
+      "description": "Abone olduğunuz İş öğelerinden haberdar olun. Bildirim almak için bunu etkinleştirin.",
+      "select_default_view": "Varsayılan görünümü seç",
+      "compact": "Kompakt",
+      "full": "Tam ekran",
       "preferred_collaborators": {
         "title": "Priority collaborators",
         "description": "Select up to three collaborators whose updates appear first in notification emails.",
@@ -52,13 +59,6 @@
         "error_title": "Save failed",
         "error_message": "Please try again later."
       }
-    },
-    "notifications": {
-      "heading": "E-posta bildirimleri",
-      "description": "Abone olduğunuz İş öğelerinden haberdar olun. Bildirim almak için bunu etkinleştirin.",
-      "select_default_view": "Varsayılan görünümü seç",
-      "compact": "Kompakt",
-      "full": "Tam ekran"
     },
     "security": {
       "heading": "Güvenlik"

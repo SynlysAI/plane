@@ -41,7 +41,14 @@
     },
     "preferences": {
       "heading": "환경 설정",
-      "description": "작업 방식에 맞게 앱 환경을 사용자 정의하세요",
+      "description": "작업 방식에 맞게 앱 환경을 사용자 정의하세요"
+    },
+    "notifications": {
+      "heading": "이메일 알림",
+      "description": "구독한 작업 항목에 대한 최신 정보를 유지하세요. 알림을 받으려면 이 기능을 활성화하세요.",
+      "select_default_view": "기본 보기 선택",
+      "compact": "컴팩트",
+      "full": "전체 화면",
       "preferred_collaborators": {
         "title": "Priority collaborators",
         "description": "Select up to three collaborators whose updates appear first in notification emails.",
@@ -52,13 +59,6 @@
         "error_title": "Save failed",
         "error_message": "Please try again later."
       }
-    },
-    "notifications": {
-      "heading": "이메일 알림",
-      "description": "구독한 작업 항목에 대한 최신 정보를 유지하세요. 알림을 받으려면 이 기능을 활성화하세요.",
-      "select_default_view": "기본 보기 선택",
-      "compact": "컴팩트",
-      "full": "전체 화면"
     },
     "security": {
       "heading": "보안"

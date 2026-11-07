@@ -41,7 +41,14 @@
     },
     "preferences": {
       "heading": "環境設定",
-      "description": "あなたの働き方に合わせてアプリの体験をカスタマイズします",
+      "description": "あなたの働き方に合わせてアプリの体験をカスタマイズします"
+    },
+    "notifications": {
+      "heading": "メール通知",
+      "description": "購読している作業項目の最新情報を受け取ります。通知を受け取るには有効にしてください。",
+      "select_default_view": "デフォルト表示を選択",
+      "compact": "コンパクト",
+      "full": "全画面",
       "preferred_collaborators": {
         "title": "Priority collaborators",
         "description": "Select up to three collaborators whose updates appear first in notification emails.",
@@ -52,13 +59,6 @@
         "error_title": "Save failed",
         "error_message": "Please try again later."
       }
-    },
-    "notifications": {
-      "heading": "メール通知",
-      "description": "購読している作業項目の最新情報を受け取ります。通知を受け取るには有効にしてください。",
-      "select_default_view": "デフォルト表示を選択",
-      "compact": "コンパクト",
-      "full": "全画面"
     },
     "security": {
       "heading": "セキュリティ"

@@ -69,14 +69,14 @@ export const ProfileSettingsPreferredCollaborators = observer(function ProfileSe
     (next: string[]) => {
       const update = updateUserProfile({ preferred_collaborators: next });
       setPromiseToast(update, {
-        loading: t("account_settings.preferences.preferred_collaborators.saving"),
+        loading: t("account_settings.notifications.preferred_collaborators.saving"),
         success: {
-          title: t("account_settings.preferences.preferred_collaborators.saved_title"),
-          message: () => t("account_settings.preferences.preferred_collaborators.saved_message"),
+          title: t("account_settings.notifications.preferred_collaborators.saved_title"),
+          message: () => t("account_settings.notifications.preferred_collaborators.saved_message"),
         },
         error: {
-          title: t("account_settings.preferences.preferred_collaborators.error_title"),
-          message: () => t("account_settings.preferences.preferred_collaborators.error_message"),
+          title: t("account_settings.notifications.preferred_collaborators.error_title"),
+          message: () => t("account_settings.notifications.preferred_collaborators.error_message"),
         },
       });
     },
@@ -99,8 +99,8 @@ export const ProfileSettingsPreferredCollaborators = observer(function ProfileSe
 
   return (
     <SettingsControlItem
-      title={t("account_settings.preferences.preferred_collaborators.title")}
-      description={t("account_settings.preferences.preferred_collaborators.description")}
+      title={t("account_settings.notifications.preferred_collaborators.title")}
+      description={t("account_settings.notifications.preferred_collaborators.description")}
       control={
         <div className="flex w-full min-w-60 flex-col gap-2">
           {slots.map((slot) => (
@@ -119,7 +119,7 @@ export const ProfileSettingsPreferredCollaborators = observer(function ProfileSe
                 )}
                 buttonVariant="border-with-text"
                 buttonClassName="!px-3 !py-2 bg-surface-1 w-full justify-between"
-                placeholder={t("account_settings.preferences.preferred_collaborators.placeholder")}
+                placeholder={t("account_settings.notifications.preferred_collaborators.placeholder")}
               />
             </div>
           ))}

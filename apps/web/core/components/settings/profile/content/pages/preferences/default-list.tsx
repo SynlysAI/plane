@@ -7,7 +7,6 @@
 import { observer } from "mobx-react";
 // components
 import { ThemeSwitcher } from "@/components/appearance";
-import { ProfileSettingsPreferredCollaborators } from "./preferred-collaborators";
 import { WorkspaceBackgroundSettings } from "./background-settings";
 
 export const ProfileSettingsDefaultPreferencesList = observer(function ProfileSettingsDefaultPreferencesList() {
@@ -22,8 +21,6 @@ export const ProfileSettingsDefaultPreferencesList = observer(function ProfileSe
       />
       <div className="h-5" />
       <WorkspaceBackgroundSettings />
-      <div className="h-5" />
-      <ProfileSettingsPreferredCollaborators />
     </div>
   );
 });

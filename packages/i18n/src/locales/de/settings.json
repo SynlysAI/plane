@@ -41,7 +41,14 @@
     },
     "preferences": {
       "heading": "Einstellungen",
-      "description": "Passen Sie Ihre App-Erfahrung an Ihre Arbeitsweise an",
+      "description": "Passen Sie Ihre App-Erfahrung an Ihre Arbeitsweise an"
+    },
+    "notifications": {
+      "heading": "E-Mail-Benachrichtigungen",
+      "description": "Bleiben Sie bei Arbeitselementen auf dem Laufenden, die Sie abonniert haben. Aktivieren Sie dies, um benachrichtigt zu werden.",
+      "select_default_view": "Standardansicht auswählen",
+      "compact": "Kompakt",
+      "full": "Vollbild",
       "preferred_collaborators": {
         "title": "Priority collaborators",
         "description": "Select up to three collaborators whose updates appear first in notification emails.",
@@ -52,13 +59,6 @@
         "error_title": "Save failed",
         "error_message": "Please try again later."
       }
-    },
-    "notifications": {
-      "heading": "E-Mail-Benachrichtigungen",
-      "description": "Bleiben Sie bei Arbeitselementen auf dem Laufenden, die Sie abonniert haben. Aktivieren Sie dies, um benachrichtigt zu werden.",
-      "select_default_view": "Standardansicht auswählen",
-      "compact": "Kompakt",
-      "full": "Vollbild"
     },
     "security": {
       "heading": "Sicherheit"

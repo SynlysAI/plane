@@ -41,7 +41,14 @@
     },
     "preferences": {
       "heading": "偏好設定",
-      "description": "以您工作的方式自訂您的應用程式體驗",
+      "description": "以您工作的方式自訂您的應用程式體驗"
+    },
+    "notifications": {
+      "heading": "電子郵件通知",
+      "description": "隨時掌握您訂閱的工作事項。啟用此功能以接收通知。",
+      "select_default_view": "選擇預設檢視",
+      "compact": "緊湊",
+      "full": "全螢幕",
       "preferred_collaborators": {
         "title": "高頻合作者",
         "description": "最多選擇三位合作者，其動態將在郵件通知中優先展示。",
@@ -52,13 +59,6 @@
         "error_title": "儲存失敗",
         "error_message": "請稍後再試。"
       }
-    },
-    "notifications": {
-      "heading": "電子郵件通知",
-      "description": "隨時掌握您訂閱的工作事項。啟用此功能以接收通知。",
-      "select_default_view": "選擇預設檢視",
-      "compact": "緊湊",
-      "full": "全螢幕"
     },
     "security": {
       "heading": "安全性"

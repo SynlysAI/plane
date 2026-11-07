@@ -41,7 +41,14 @@
     },
     "preferences": {
       "heading": "Настройки",
-      "description": "Настройте работу с приложением так, как вам удобно",
+      "description": "Настройте работу с приложением так, как вам удобно"
+    },
+    "notifications": {
+      "heading": "Email-уведомления",
+      "description": "Будьте в курсе рабочих элементов, на которые вы подписаны. Включите, чтобы получать уведомления.",
+      "select_default_view": "Выбрать вид по умолчанию",
+      "compact": "Компактный",
+      "full": "Полный экран",
       "preferred_collaborators": {
         "title": "Priority collaborators",
         "description": "Select up to three collaborators whose updates appear first in notification emails.",
@@ -52,13 +59,6 @@
         "error_title": "Save failed",
         "error_message": "Please try again later."
       }
-    },
-    "notifications": {
-      "heading": "Email-уведомления",
-      "description": "Будьте в курсе рабочих элементов, на которые вы подписаны. Включите, чтобы получать уведомления.",
-      "select_default_view": "Выбрать вид по умолчанию",
-      "compact": "Компактный",
-      "full": "Полный экран"
     },
     "security": {
       "heading": "Безопасность"

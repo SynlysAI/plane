@@ -41,7 +41,14 @@
     },
     "preferences": {
       "heading": "Predvoľby",
-      "description": "Prispôsobte si aplikáciu spôsobu, akým pracujete",
+      "description": "Prispôsobte si aplikáciu spôsobu, akým pracujete"
+    },
+    "notifications": {
+      "heading": "E-mailové oznámenia",
+      "description": "Majte prehľad o pracovných položkách, ktoré odoberáte. Aktivujte toto pre zasielanie oznámení.",
+      "select_default_view": "Vybrať predvolené zobrazenie",
+      "compact": "Kompaktné",
+      "full": "Celá obrazovka",
       "preferred_collaborators": {
         "title": "Priority collaborators",
         "description": "Select up to three collaborators whose updates appear first in notification emails.",
@@ -52,13 +59,6 @@
         "error_title": "Save failed",
         "error_message": "Please try again later."
       }
-    },
-    "notifications": {
-      "heading": "E-mailové oznámenia",
-      "description": "Majte prehľad o pracovných položkách, ktoré odoberáte. Aktivujte toto pre zasielanie oznámení.",
-      "select_default_view": "Vybrať predvolené zobrazenie",
-      "compact": "Kompaktné",
-      "full": "Celá obrazovka"
     },
     "security": {
       "heading": "Zabezpečenie"

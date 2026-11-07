@@ -41,7 +41,14 @@
     },
     "preferences": {
       "heading": "Preferences",
-      "description": "Customize your app experience the way you work",
+      "description": "Customize your app experience the way you work"
+    },
+    "notifications": {
+      "heading": "Email notifications",
+      "description": "Stay in the loop on Work items you are subscribed to. Enable this to get notified.",
+      "select_default_view": "Select default view",
+      "compact": "Compact",
+      "full": "Full Screen",
       "preferred_collaborators": {
         "title": "Priority collaborators",
         "description": "Select up to three collaborators whose updates appear first in notification emails.",
@@ -52,13 +59,6 @@
         "error_title": "Save failed",
         "error_message": "Please try again later."
       }
-    },
-    "notifications": {
-      "heading": "Email notifications",
-      "description": "Stay in the loop on Work items you are subscribed to. Enable this to get notified.",
-      "select_default_view": "Select default view",
-      "compact": "Compact",
-      "full": "Full Screen"
     },
     "security": {
       "heading": "Security"

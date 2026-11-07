@@ -14,6 +14,8 @@ import type { IUserEmailNotificationSettings } from "@plane/types";
 import { Switch } from "@makeplane/propel/components/switch";
 // components
 import { SettingsControlItem } from "@/components/settings/control-item";
+// local imports
+import { ProfileSettingsPreferredCollaborators } from "./preferred-collaborators";
 // services
 import { UserService } from "@/services/user.service";
 
@@ -237,6 +239,8 @@ export const NotificationsProfileSettingsForm = observer(function NotificationsP
           }
         />
       ))}
+      <div className="h-5" />
+      <ProfileSettingsPreferredCollaborators />
     </div>
   );
 });
