@@ -239,7 +239,6 @@ export const NotificationsProfileSettingsForm = observer(function NotificationsP
           }
         />
       ))}
-      <div className="h-5" />
       <ProfileSettingsPreferredCollaborators />
     </div>
   );

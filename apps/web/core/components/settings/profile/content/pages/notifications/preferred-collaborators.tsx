@@ -12,7 +12,6 @@ import { useTranslation } from "@plane/i18n";
 import { setPromiseToast } from "@plane/propel/toast";
 // components
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import { SettingsControlItem } from "@/components/settings/control-item";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useUser, useUserProfile } from "@/hooks/store/user";
@@ -98,33 +97,37 @@ export const ProfileSettingsPreferredCollaborators = observer(function ProfileSe
   if (!userProfile) return null;
 
   return (
-    <SettingsControlItem
-      title={t("account_settings.notifications.preferred_collaborators.title")}
-      description={t("account_settings.notifications.preferred_collaborators.description")}
-      control={
-        <div className="flex w-full min-w-60 flex-col gap-2">
-          {slots.map((slot) => (
-            <div key={slot.key} className="flex items-center gap-2">
-              <span className="w-3 text-right text-caption-md-regular text-tertiary">{slot.index + 1}</span>
-              <MemberDropdown
-                allowClear
-                value={slot.memberId}
-                onChange={(val) => handleSlotChange(slot, val)}
-                multiple={false}
-                memberIds={candidateIds.filter(
-                  (candidateId) =>
-                    !collaborators.some(
-                      (selectedId, selectedIndex) => selectedIndex !== slot.index && selectedId === candidateId
-                    )
-                )}
-                buttonVariant="border-with-text"
-                buttonClassName="!px-3 !py-2 bg-surface-1 w-full justify-between"
-                placeholder={t("account_settings.notifications.preferred_collaborators.placeholder")}
-              />
-            </div>
-          ))}
-        </div>
-      }
-    />
+    <section className="flex w-full flex-col gap-y-3">
+      <div className="flex flex-col gap-1">
+        <h3 className="text-sm pt-4 font-medium text-primary">
+          {t("account_settings.notifications.preferred_collaborators.title")}
+        </h3>
+        <p className="text-caption-md-regular text-secondary">
+          {t("account_settings.notifications.preferred_collaborators.description")}
+        </p>
+      </div>
+      <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-2">
+        {slots.map((slot) => (
+          <div key={slot.key} className="flex min-w-44 flex-1 items-center gap-2">
+            <span className="w-3 shrink-0 text-right text-caption-md-regular text-tertiary">{slot.index + 1}</span>
+            <MemberDropdown
+              allowClear
+              value={slot.memberId}
+              onChange={(val) => handleSlotChange(slot, val)}
+              multiple={false}
+              memberIds={candidateIds.filter(
+                (candidateId) =>
+                  !collaborators.some(
+                    (selectedId, selectedIndex) => selectedIndex !== slot.index && selectedId === candidateId
+                  )
+              )}
+              buttonVariant="border-with-text"
+              buttonClassName="!px-3 !py-2 bg-surface-1 w-full justify-between"
+              placeholder={t("account_settings.notifications.preferred_collaborators.placeholder")}
+            />
+          </div>
+        ))}
+      </div>
+    </section>
   );
 });
