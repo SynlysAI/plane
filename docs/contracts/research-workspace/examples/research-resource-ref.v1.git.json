@@ -1,0 +1,11 @@
+{
+  "schema_version": "research-resource-ref.v1",
+  "study_id": "b16d0d33-4a54-4b89-88a0-7e9b1d028001",
+  "kind": "git",
+  "repository_id": "71824e61-a59f-48b1-9f13-e3a2d0970001",
+  "commit": "8d202d35f26e10267cb6cbac70142ee219800001",
+  "path": "research/opening/report.md",
+  "blob_oid": "3dce58322c727a459c1acf75c95fe7a04cf30001",
+  "content_sha256": "6b2f4c14a91a90dd5767de1e41a97f193f31c70af12dc8058ff9e38d80000001",
+  "size": 12345
+}

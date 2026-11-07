@@ -1,0 +1,19 @@
+{
+  "schema_version": "research-dataset-manifest.v1",
+  "study_id": "b16d0d33-4a54-4b89-88a0-7e9b1d028001",
+  "dataset_id": "bbdbf15e-968b-47cc-8b64-496ca9800001",
+  "logical_name": "nmr-raw",
+  "revision": 1,
+  "data_dictionary": "data/nmr-raw.dictionary.md",
+  "items": [
+    {
+      "asset_revision_id": "758ec46d-6d47-443c-a19b-98bf15500001",
+      "path": "2026-11-07/sample-a.csv",
+      "sha256": "41a0d91d2f2b6d37593b56d43ea08f020ea0df76a55c6f38b0f6340000000001",
+      "size": 987654,
+      "media_type": "text/csv",
+      "source_system": "SpecLabOS",
+      "source_run_id": "R20261107-001"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": "research-workspace-binding.v1",
+  "plane_workspace_id": "e47ff45f-beca-4328-a42b-4c4571b80001",
+  "study_id": "b16d0d33-4a54-4b89-88a0-7e9b1d028001",
+  "chain_id": "e2b09b52-8328-47f1-a3e1-744bcbda0001",
+  "working_copy_id": "18eaa4cd-cb05-48f5-a4a4-7eb844870001",
+  "run_id": "run-20261107-001",
+  "branch": "agent/run-20261107-001",
+  "base_commit": "8d202d35f26e10267cb6cbac70142ee219800001",
+  "asset_manifest_digest": "2ff8b9b7985d32675d4c97e39517b931f3eb9424a5cd375759f7394000000001",
+  "skills_digest": "84436f9d848e34ff6bcdaeccd0d982e87075e0f7b6d544f50e8cf98000000001",
+  "mcp_capability_digest": "60f82b6ffcaea56a43177cbecb9d8f51937e3588c329849a45c0be0000000001",
+  "environment_image_digest": "sha256:9c1d3f36b0dbb2e0dcae9292c4f59872ff18fdca2d17165d5948ba0000000001",
+  "grant_id": "grant-20261107-000001",
+  "delegated_user_id": "user-001",
+  "capabilities": ["files.read", "files.write", "run.execute", "changes.propose", "assets.read"],
+  "policy_version": 1,
+  "issued_at": "2026-11-07T10:00:00Z",
+  "expires_at": "2026-11-07T12:00:00Z"
+}

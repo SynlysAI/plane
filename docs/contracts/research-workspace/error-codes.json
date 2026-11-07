@@ -1,0 +1,55 @@
+{
+  "schema_version": "research-workspace.error-codes.v1",
+  "codes": {
+    "RWS_IDEMPOTENCY_CONFLICT": {
+      "http_status": 409,
+      "retryable": false,
+      "description": "Same idempotency key was replayed with a different payload hash."
+    },
+    "RWS_HEAD_MISMATCH": {
+      "http_status": [409, 412],
+      "retryable": false,
+      "description": "Git HEAD or file ETag differs from the caller's expected value."
+    },
+    "RWS_PATH_INVALID": {
+      "http_status": 400,
+      "retryable": false,
+      "description": "Path is outside the working copy or is not portable."
+    },
+    "RWS_MOUNT_INVALID": {
+      "http_status": 400,
+      "retryable": false,
+      "description": "Mount reference is not registered or cannot be resolved safely."
+    },
+    "RWS_LEASE_CONFLICT": {
+      "http_status": 423,
+      "retryable": true,
+      "description": "Another active writer holds the working-copy lease."
+    },
+    "RWS_CAPABILITY_DENIED": {
+      "http_status": 403,
+      "retryable": false,
+      "description": "Actor or agent capability does not permit the operation."
+    },
+    "RWS_BINDING_INVALID": {
+      "http_status": 401,
+      "retryable": false,
+      "description": "Workspace binding is expired, revoked, or does not match the run."
+    },
+    "RWS_ASSET_INCOMPLETE": {
+      "http_status": 409,
+      "retryable": true,
+      "description": "Referenced LFS object or immutable asset is not ready."
+    },
+    "RWS_GIT_REJECTED": {
+      "http_status": [409, 422],
+      "retryable": false,
+      "description": "Git provider rejected a push, merge, or protected-ref operation."
+    },
+    "RWS_INDEX_RECONCILE_REQUIRED": {
+      "http_status": 409,
+      "retryable": true,
+      "description": "RAGPortal receipt is timeout, duplicate, stale, or out of order."
+    }
+  }
+}

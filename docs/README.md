@@ -84,6 +84,7 @@
 | [`research-space-code-refinement-development-design.md`](plans/phase-1.6/research-space-code-refinement-development-design.md)     | 主轴三：引用审计、逐符号清理表与提交级验证矩阵                    | 实施复核版；C0–C6 已实施，C7 仅完成只读审计                                                         |
 | [`research-intelligent-platform-phase-2-plan.md`](plans/phase-2/research-intelligent-platform-phase-2-plan.md)                     | 实验运行、Job、数据资产和垂类能力                                 | 规划中                                                                                              |
 | [`research-intelligent-platform-phase-3-plan.md`](plans/phase-3/research-intelligent-platform-phase-3-plan.md)                     | 治理、规模化、灾备和开放能力                                      | 规划中                                                                                              |
+| [`ai-native-research-workspace-development-plan.md`](plans/research-workspace/ai-native-research-workspace-development-plan.md)    | Git 化科研工作区的分阶段开发计划、验收矩阵和发布门槛              | 规划中；尚未实施代码或部署                                                                          |
 | [`wechat-mini-program-prd.md`](product/wechat-mini-program-prd.md)                                                                 | 微信小程序独立产品设想                                            | 暂缓，不计入当前 Plane Web 交付                                                                     |
 
 ## 4. 实现规格与当前契约
@@ -97,6 +98,9 @@
 | [`research-navigation-visibility.md`](product/research-navigation-visibility.md)                           | 科研导航能力投影和可见性                                            | 历史版本保留，当前规则以代码 `capabilities.py` 和 Workspace v3 为准 |
 | [`research-workspace-ux-guide.md`](product/research-workspace-ux-guide.md)                                 | UI/UX 系列唯一设计入口                                              | 当前有效                                                            |
 | [`research-p0-p1-architecture.md`](architecture/research-p0-p1-architecture.md)                            | P0/P1 功能与技术架构汇总                                            | 历史架构基线                                                        |
+| [`ai-native-research-workspace.md`](architecture/ai-native-research-workspace.md)                          | Git 化科研工作区的目标架构、存储边界、身份权限和系统集成设计        | 规划中；不代表功能已实现                                            |
+| [`0001-ai-native-research-workspace.md`](architecture/adr/0001-ai-native-research-workspace.md)            | RWS 首期服务形态、组件边界和验证要求 ADR                            | 已接受；实现仅限 `ai-naive-workspace` 分支                          |
+| [`contracts/research-workspace/README.md`](./contracts/research-workspace/README.md)                       | Research Workspace 资源引用、运行绑定和数据清单契约                 | Stage RWS-0 草案，待三方评审冻结                                    |
 | [`contracts/research-intelligent-platform/README.md`](./contracts/research-intelligent-platform/README.md) | JSON Schema、示例、错误码和兼容性规则                               | 当前跨仓契约；含 `agent-context.v2`、能力投影与 REVIEW scope        |
 
 ## 5. 验收、发布与运维

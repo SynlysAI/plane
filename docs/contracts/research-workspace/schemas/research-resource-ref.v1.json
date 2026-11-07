@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://plane.synlys.ai/contracts/research-workspace/research-resource-ref.v1.json",
+  "title": "Research Resource Reference v1",
+  "description": "A immutable reference to a Git blob, LFS object, research asset, or legacy external material.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "research-resource-ref.v1"
+    },
+    "study_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "kind": {
+      "enum": ["git", "lfs", "asset", "legacy_external"]
+    },
+    "repository_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "commit": {
+      "$ref": "#/$defs/fullCommitSha"
+    },
+    "path": {
+      "$ref": "#/$defs/relativePath"
+    },
+    "blob_oid": {
+      "$ref": "#/$defs/gitObjectOid"
+    },
+    "lfs_oid": {
+      "$ref": "#/$defs/contentSha256"
+    },
+    "asset_revision_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "logical_asset_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "external_reference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "content_sha256": {
+      "$ref": "#/$defs/contentSha256"
+    },
+    "size": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "source_system": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "source_run_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    }
+  },
+  "required": ["schema_version", "study_id", "kind", "content_sha256", "size"],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "git"
+          }
+        }
+      },
+      "then": {
+        "required": ["repository_id", "commit", "path", "blob_oid"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "lfs"
+          }
+        }
+      },
+      "then": {
+        "required": ["repository_id", "commit", "path", "lfs_oid"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "asset"
+          }
+        }
+      },
+      "then": {
+        "required": ["asset_revision_id", "logical_asset_id", "path"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "legacy_external"
+          }
+        }
+      },
+      "then": {
+        "required": ["external_reference"]
+      }
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "fullCommitSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$|^[0-9a-f]{64}$"
+    },
+    "gitObjectOid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$|^[0-9a-f]{64}$"
+    },
+    "contentSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^(?:[A-Za-z0-9._()+,-]+(?:/[A-Za-z0-9._()+,-]+)*)?$",
+      "not": {
+        "pattern": "(^|/)\\.\\.?(/|$)"
+      }
+    }
+  }
+}

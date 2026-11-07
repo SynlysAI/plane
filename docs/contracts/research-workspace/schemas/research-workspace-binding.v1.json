@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://plane.synlys.ai/contracts/research-workspace/research-workspace-binding.v1.json",
+  "title": "Research Workspace Binding v1",
+  "description": "A short-lived, capability-bounded binding between Plane, Synlora, and a Workspace Runner.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "research-workspace-binding.v1"
+    },
+    "plane_workspace_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "study_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "chain_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "working_copy_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "branch": {
+      "type": "string",
+      "pattern": "^agent/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "base_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$|^[0-9a-f]{64}$"
+    },
+    "asset_manifest_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "skills_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "mcp_capability_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "environment_image_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "grant_id": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,255}$"
+    },
+    "delegated_user_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "capabilities": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": ["files.read", "files.write", "run.execute", "changes.propose", "assets.read"]
+      }
+    },
+    "policy_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "schema_version",
+    "plane_workspace_id",
+    "study_id",
+    "chain_id",
+    "working_copy_id",
+    "run_id",
+    "branch",
+    "base_commit",
+    "asset_manifest_digest",
+    "grant_id",
+    "delegated_user_id",
+    "capabilities",
+    "policy_version",
+    "issued_at",
+    "expires_at"
+  ],
+  "additionalProperties": false
+}
