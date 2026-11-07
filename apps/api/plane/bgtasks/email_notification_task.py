@@ -30,7 +30,6 @@ from plane.db.models import (
     NotificationEmailCircuit,
     NotificationEmailDelivery,
     NotificationEvent,
-    Profile,
     User,
     UserNotificationPreference,
     WorkspaceNotificationPolicy,
@@ -42,6 +41,10 @@ from plane.utils.email import is_email_recipient_blocked
 from plane.utils.email_recipient_filters import EmailRecipientFilterConfigurationError
 from plane.utils.notification_outbox import issue_notification_category
 from plane.utils.assignment_transfer import assignment_transfer_email_context
+from plane.utils.preferred_collaborators import (
+    order_by_preferred_collaborators,
+    preferred_collaborator_rank_map,
+)
 
 MAX_EMAIL_DELIVERY_ATTEMPTS = 6
 EMAIL_DELIVERY_MAX_AGE = timedelta(hours=24)
@@ -399,37 +402,9 @@ def create_payload(notification_data):
     return data
 
 
-def _preferred_collaborator_rank_map(receiver_id):
-    """读取接收人配置的高频合作者并生成优先级映射。
-
-    Args:
-        receiver_id: 邮件接收人用户 ID。
-
-    Returns:
-        以合作者用户 ID 字符串为键、配置顺序（0 为最高）为值的映射；未配置时为空字典。
-    """
-    profile = Profile.objects.filter(user_id=receiver_id).only("preferred_collaborators").first()
-    if profile is None:
-        return {}
-    collaborators = profile.preferred_collaborators or []
-    return {str(collaborator_id): rank for rank, collaborator_id in enumerate(collaborators[:3])}
-
-
-def _order_by_preferred_collaborators(items, actor_key, receiver_id):
-    """按接收人配置将命中合作者的条目稳定置顶。
-
-    Args:
-        items: 待排序的条目序列。
-        actor_key: 从条目中提取操作者 ID 字符串的函数。
-        receiver_id: 邮件接收人用户 ID。
-
-    Returns:
-        命中合作者按配置顺序排在最前、其余条目保持原始顺序的新列表；未配置时原样返回。
-    """
-    priority = _preferred_collaborator_rank_map(receiver_id)
-    if not priority:
-        return items
-    return sorted(items, key=lambda item: priority.get(actor_key(item), len(priority)))
+# 高频合作者置顶逻辑的共享实现，保留原名称以兼容既有引用与测试。
+_preferred_collaborator_rank_map = preferred_collaborator_rank_map
+_order_by_preferred_collaborators = order_by_preferred_collaborators
 
 
 def process_mention(mention_component):

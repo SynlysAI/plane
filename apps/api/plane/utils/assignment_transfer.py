@@ -14,6 +14,7 @@ from plane.utils.administrative_projects import (
     assignable_project_member_ids,
     research_project_ids,
 )
+from plane.utils.preferred_collaborators import order_by_preferred_collaborators
 
 ASSIGNMENT_TRANSFER_ACTION = "assignment_transfer"
 ASSIGNMENT_TRANSFER_SALT = "plane.email.assignment-transfer.v1"
@@ -156,6 +157,8 @@ def assignment_transfer_email_context(entity_type, entity, receiver, base_url):
 
     Returns:
         A template context dictionary, or an empty dictionary when unavailable.
+        Candidate ordering prioritizes the receiver's preferred collaborators
+        before the display cap is applied.
     """
     owner_id = assignment_transfer_owner_id(entity_type, entity)
     if owner_id is None or str(owner_id) != str(receiver.id):
@@ -163,6 +166,11 @@ def assignment_transfer_email_context(entity_type, entity, receiver, base_url):
     candidates = assignment_transfer_candidates(entity_type, entity)
     if not candidates:
         return {}
+    candidates = order_by_preferred_collaborators(
+        candidates,
+        lambda candidate: str(candidate.id),
+        receiver.id,
+    )
     token = build_assignment_transfer_token(entity_type, entity.id, receiver.id, owner_id)
     action_url = f"{base_url.rstrip('/')}/email-actions/assignment-transfer/"
     native_route = assignment_transfer_route(entity_type, entity)

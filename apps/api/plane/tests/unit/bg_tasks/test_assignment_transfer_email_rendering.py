@@ -17,6 +17,7 @@ from plane.db.models import (
     Issue,
     NotificationEmailDelivery,
     NotificationEvent,
+    Profile,
     Project,
     ProjectMember,
     ResearchChainNodeTask,
@@ -73,6 +74,56 @@ def test_assignment_email_candidates_are_sorted_capped_and_explain_overflow(work
     assert context["has_more_candidates"] is True
     assert context["native_url"].endswith("email_transfer=1")
     assert all("/email-actions/assignment-transfer/" in item["url"] for item in context["candidates"])
+
+
+@pytest.mark.django_db
+def test_assignment_email_pins_preferred_collaborators_before_candidate_cap(workspace, create_user):
+    """高频合作者应在候选人截断前置顶，保证进入邮件展示的前八位。"""
+    project = Project.objects.create(
+        name="合作者优先项目",
+        identifier=f"PC{uuid4().hex[:3]}",
+        workspace=workspace,
+        created_by=create_user,
+    )
+    ProjectMember.objects.create(workspace=workspace, project=project, member=create_user, role=20)
+    owner = _user(workspace, 0, project)
+    owner.display_name = "当前负责人"
+    owner.save(update_fields=["display_name"])
+    # 名字按字母序排前八的普通候选人。
+    for index in range(1, 9):
+        _user(workspace, index, project)
+    # 配置的合作者名字按字母序会落在前八之外。
+    preferred_a = _user(workspace, 9, project)
+    preferred_a.first_name = "周合作者甲"
+    preferred_a.save(update_fields=["first_name"])
+    preferred_b = _user(workspace, 10, project)
+    preferred_b.first_name = "郑合作者乙"
+    preferred_b.save(update_fields=["first_name"])
+    Profile.objects.update_or_create(
+        user=owner,
+        defaults={"preferred_collaborators": [str(preferred_a.id), str(preferred_b.id)]},
+    )
+    issue = Issue.objects.create(
+        name="合作者优先工作项",
+        project=project,
+        workspace=workspace,
+        created_by=create_user,
+    )
+    issue.issue_assignee.create(
+        workspace=workspace,
+        project=project,
+        issue=issue,
+        assignee=owner,
+    )
+
+    context = assignment_transfer_email_context("issue", issue, owner, "https://plane.example")
+
+    display_names = [item["display_name"] for item in context["candidates"]]
+    assert display_names[:2] == [preferred_a.display_name, preferred_b.display_name]
+    remaining = display_names[2:]
+    assert remaining == sorted(remaining)
+    assert len(remaining) == 6
+    assert context["has_more_candidates"] is True
 
 
 @pytest.mark.django_db
