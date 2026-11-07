@@ -326,9 +326,9 @@ export type TResearchChainStageReviewAction = {
   schema_version: "research-chain-stage-review-action.v1";
   id: string;
   attempt_no: number;
-  reviewer_role: "ADVISOR" | "PI";
+  reviewer_role: "ADVISOR" | "PI" | "SUBMITTER";
   reviewer_detail?: { id: string; display_name: string; email: string } | null;
-  action: "APPROVE" | "RETURN";
+  action: "APPROVE" | "RETURN" | "WITHDRAW";
   comment: string;
   escalated_to_pi: boolean;
   material_snapshot: Array<Record<string, unknown>>;

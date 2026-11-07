@@ -33,6 +33,7 @@ from plane.research.services.chain_stage_approvals import (
     remove_stage_material,
     review_chain_stage,
     submit_chain_stage,
+    withdraw_chain_stage,
 )
 from plane.research.services.chain_tasks import chain_writer
 from plane.research.services.idempotency import conflict_response, payload_hash, request_id_from
@@ -483,6 +484,64 @@ class ResearchChainStageSubmitEndpoint(ResearchChainStageApprovalBaseEndpoint):
         return Response(
             _envelope(
                 ResearchChainStageSerializer(submitted, context={"actor": request.user}).data,
+                request_id,
+                "research-chain-stage.v1",
+            )
+        )
+
+
+class ResearchChainStageWithdrawEndpoint(ResearchChainStageApprovalBaseEndpoint):
+    """Withdraw one stage before direct advisor review."""
+
+    def post(self, request, slug, chain_id, stage_code):
+        workspace, chain, error = self._chain(request, slug, chain_id)
+        if error:
+            return error
+        stage_or_error = self._stage(chain, stage_code)
+        if isinstance(stage_or_error, Response):
+            return stage_or_error
+        stage = stage_or_error
+        request_id, request_error = _request_id(request)
+        if request_error:
+            return request_error
+        permission_error = self._writable(request, chain)
+        if permission_error:
+            return permission_error
+        digest = payload_hash(request.data)
+        existing_action = stage.review_actions.filter(request_id=request_id).first()
+        if existing_action is not None:
+            if existing_action.reviewer_id != request.user.id:
+                return research_error(
+                    ResearchErrorCode.PERMISSION_DENIED,
+                    "Only the original withdrawer can replay this action.",
+                    status.HTTP_403_FORBIDDEN,
+                )
+            if existing_action.declaration_snapshot.get("payload_hash") != digest:
+                return conflict_response()
+            stage.refresh_from_db()
+            return Response(
+                _envelope(
+                    ResearchChainStageSerializer(stage, context={"actor": request.user}).data,
+                    request_id,
+                    "research-chain-stage.v1",
+                )
+            )
+        try:
+            withdrawn = withdraw_chain_stage(
+                stage,
+                request.user,
+                reason=str(request.data.get("reason") or ""),
+                request_id=request_id,
+                request=request,
+                payload_digest=digest,
+            )
+        except ChainStageRuleError as rule_error:
+            return _rule_error(rule_error)
+        except IntegrityError:
+            return conflict_response()
+        return Response(
+            _envelope(
+                ResearchChainStageSerializer(withdrawn, context={"actor": request.user}).data,
                 request_id,
                 "research-chain-stage.v1",
             )

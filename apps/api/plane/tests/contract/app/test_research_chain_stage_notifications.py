@@ -201,6 +201,27 @@ def test_conditional_approval_false_finishes_without_pi_and_notifies_owner(env):
     assert notifications(env, env["owner"]).filter(data__action="approved").count() == 1
 
 
+def test_withdrawal_notifies_advisor_once(env):
+    stage, node = prepare_stage(env, "PRE_EXPERIMENT")
+    submitted = env["owner_client"].post(
+        url(env, "PRE_EXPERIMENT/submit/"),
+        {"request_id": f"submit-{uuid4().hex}", "node_id": str(node.id)},
+        format="json",
+    )
+    assert submitted.status_code == 200, submitted.json()
+
+    request_id = f"withdraw-{uuid4().hex}"
+    payload = {"request_id": request_id, "reason": "需要补充实验边界"}
+    withdrawn = env["owner_client"].post(url(env, "PRE_EXPERIMENT/withdraw/"), payload, format="json")
+    replay = env["owner_client"].post(url(env, "PRE_EXPERIMENT/withdraw/"), payload, format="json")
+
+    assert withdrawn.status_code == 200, withdrawn.json()
+    assert replay.status_code == 200, replay.json()
+    assert notifications(env, env["advisor"]).filter(data__action="withdrawn").count() == 1
+    stage.refresh_from_db()
+    assert stage.status == "NEEDS_REVISION"
+
+
 def test_mine_todo_projects_pending_returned_and_approved_stages(env):
     stage, node = prepare_stage(env, "PRE_EXPERIMENT")
     env["owner_client"].post(

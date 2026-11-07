@@ -94,7 +94,11 @@ function stageLabelKey(stageCode: string): string {
 
 /** 读取最新一次退回意见。 */
 function latestReturn(stage: TResearchChainStageApproval): TResearchChainStageReviewAction | null {
-  return reverseReviewActions(stage.review_actions).find((action) => action.action === "RETURN") ?? null;
+  return (
+    reverseReviewActions(stage.review_actions).find(
+      (action) => action.action === "RETURN" || action.action === "WITHDRAW"
+    ) ?? null
+  );
 }
 
 /** 返回按时间倒序排列的审核记录副本，兼容当前 TypeScript 运行目标。 */
@@ -160,6 +164,8 @@ export function ResearchChainStageApprovalPanel({
   const [requiresPi, setRequiresPi] = useState(stage.requires_pi);
   const [escalationReason, setEscalationReason] = useState(stage.escalation_reason);
   const [comment, setComment] = useState("");
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawReason, setWithdrawReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [templateSections, setTemplateSections] = useState<TReportTemplateSection[]>([]);
@@ -217,6 +223,11 @@ export function ResearchChainStageApprovalPanel({
       active = false;
     };
   }, [usesPreopeningTemplate, workspaceSlug]);
+
+  useEffect(() => {
+    setRequiresPi(stage.requires_pi);
+    setEscalationReason(stage.escalation_reason);
+  }, [stage.escalation_reason, stage.requires_pi, stage.status]);
 
   useEffect(() => {
     if (stage.stage_code !== "TOPIC_EVALUATION" || evaluation?.status !== "RUNNING") return;
@@ -315,6 +326,25 @@ export function ResearchChainStageApprovalPanel({
         escalation_reason: escalationReason.trim() || undefined,
       });
       setComment("");
+      await onStageChanged();
+    } catch (actionError) {
+      setError(describeActionError(actionError));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** 撤回尚未被直接导师处理的阶段提交。 */
+  const withdrawStage = async () => {
+    if (!withdrawReason.trim() || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await chainService.withdrawChainStage(workspaceSlug, chainId, stage.stage_code, {
+        reason: withdrawReason.trim(),
+      });
+      setWithdrawOpen(false);
+      setWithdrawReason("");
       await onStageChanged();
     } catch (actionError) {
       setError(describeActionError(actionError));
@@ -455,6 +485,11 @@ export function ResearchChainStageApprovalPanel({
                       "research.chains.stage_approval.advisor_required_reason"
                     ))}
               </p>
+              {stage.status === "NEEDS_REVISION" && latestReturned?.comment && (
+                <p className="mt-1 text-11 text-secondary">
+                  {t("research.chains.stage_approval.latest_return")}: {firstLine(latestReturned.comment)}
+                </p>
+              )}
 
               {can(stage, "review") && (
                 <div className="mt-3 space-y-1 border-t border-subtle pt-3 text-12">
@@ -469,11 +504,6 @@ export function ResearchChainStageApprovalPanel({
                       ? t("research.chains.stage_approval.role_pi")
                       : t("research.chains.stage_approval.role_advisor")}
                   </p>
-                  {latestReturned?.comment && (
-                    <p className="text-secondary">
-                      {t("research.chains.stage_approval.latest_return")}: {firstLine(latestReturned.comment)}
-                    </p>
-                  )}
                   {(change.added.length > 0 || change.removed.length > 0) && (
                     <p className="text-tertiary">
                       {change.added.length > 0 && `+${change.added.join("、")}`}
@@ -664,6 +694,85 @@ export function ResearchChainStageApprovalPanel({
                         : t("research.chains.stage_approval.material_not_ready")}
                     </p>
                   )}
+                </div>
+              )}
+
+              {can(stage, "withdraw") && (
+                <div className="mt-3 space-y-2 border-t border-subtle pt-3">
+                  {withdrawOpen ? (
+                    <>
+                      <label className="grid gap-1 text-11 text-secondary">
+                        {t("research.chains.stage_approval.withdraw_reason")}
+                        <textarea
+                          value={withdrawReason}
+                          onChange={(event) => setWithdrawReason(event.target.value)}
+                          rows={3}
+                          placeholder={t("research.chains.stage_approval.withdraw_reason_placeholder")}
+                          className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary"
+                        />
+                      </label>
+                      <p className="text-11 text-tertiary">
+                        {t("research.chains.stage_approval.withdraw_consequence")}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          disabled={busy || !withdrawReason.trim()}
+                          onClick={() => void withdrawStage()}
+                        >
+                          {t("research.chains.stage_approval.withdraw_confirm")}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => setWithdrawOpen(false)}
+                        >
+                          {t("research.chains.stage_approval.cancel")}
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => setWithdrawOpen(true)}
+                    >
+                      {t("research.chains.stage_approval.withdraw")}
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {can(stage, "return_after_approval") && (
+                <div className="mt-3 space-y-2 border-t border-subtle pt-3">
+                  <label className="grid gap-1 text-11 text-secondary">
+                    {t("research.chains.stage_approval.return_after_approval_reason")}
+                    <textarea
+                      value={comment}
+                      onChange={(event) => setComment(event.target.value)}
+                      rows={3}
+                      placeholder={t("research.chains.stage_approval.return_after_approval_placeholder")}
+                      className="w-full rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary"
+                    />
+                  </label>
+                  <p className="text-11 text-tertiary">
+                    {t("research.chains.stage_approval.return_after_approval_hint")}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={busy || !comment.trim()}
+                    onClick={() => void reviewStage("RETURN", false)}
+                  >
+                    {t("research.chains.stage_approval.return_after_approval")}
+                  </Button>
                 </div>
               )}
 

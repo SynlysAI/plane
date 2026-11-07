@@ -1,5 +1,6 @@
 """Research Chain thirteen-stage approval rule tests."""
 
+from datetime import timedelta
 from uuid import uuid4
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
@@ -14,10 +15,13 @@ from plane.db.models import (
     OrgUnit,
     OrgUnitMember,
     Project,
+    ResearchAgentSession,
     ResearchChain,
     ResearchChainNode,
+    ResearchChainStageEvaluation,
     ResearchChainUpload,
     ResearchChainStageMaterialItem,
+    ResearchContextGrant,
     ResearchProjectProfile,
 )
 from plane.research.services.chain_stage_approvals import (
@@ -28,6 +32,7 @@ from plane.research.services.chain_stage_approvals import (
     initialize_chain_stages,
     review_chain_stage,
     submit_chain_stage,
+    withdraw_chain_stage,
 )
 from plane.research.services.chain_stage_approvals import mark_chain_stage_in_progress
 from plane.research.serializers.chain_stage import ResearchChainStagePrecheckSerializer
@@ -257,6 +262,46 @@ def node_type_for_stage(stage_code):
     return "ANALYSIS" if stage_code.startswith("ANALYSIS_") else stage_code
 
 
+def make_applied_evaluation(env, stage, node):
+    grant = ResearchContextGrant.objects.create(
+        workspace=env["workspace"],
+        user=env["owner"],
+        project=env["project"],
+        research_chain=env["chain"],
+        chain_node=node,
+        context_hash=uuid4().hex,
+        token_hash=uuid4().hex,
+        expires_at=timezone.now() + timedelta(hours=1),
+        request_id=f"grant-{uuid4().hex}",
+    )
+    session = ResearchAgentSession.objects.create(
+        workspace=env["workspace"],
+        user=env["owner"],
+        project=env["project"],
+        research_chain=env["chain"],
+        chain_node=node,
+        context_grant=grant,
+        status=ResearchAgentSession.Status.READY,
+        provider=ResearchAgentSession.Provider.SCIENCE_DISCOVERY,
+        request_id=f"session-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+    return ResearchChainStageEvaluation.objects.create(
+        stage=stage,
+        agent_session=session,
+        track=ResearchChainStageEvaluation.Track.APPLIED,
+        status=ResearchChainStageEvaluation.Status.READY,
+        input_snapshot={},
+        result={"decision": "ADVISORY"},
+        material_version=approval_service.stage_material_version(stage),
+        prompt_version="topic-evaluation-agent.v1",
+        provider=ResearchChainStageEvaluation.Provider.SCIENCE_DISCOVERY,
+        request_id=f"evaluation-{uuid4().hex}",
+        created_by=env["owner"],
+    )
+
+
 def test_submit_blocks_incomplete_materials(env):
     initialize_chain_stages(env["chain"], env["owner"])
     stage = env["chain"].stage_approvals.get(stage_code="LITERATURE_REVIEW")
@@ -372,6 +417,139 @@ def test_return_requires_comment_and_resubmission_creates_new_attempt(env):
     assert resubmitted.status == "AWAITING_ADVISOR"
 
 
+def test_submitter_can_withdraw_before_advisor_review_and_resubmit(env):
+    initialize_chain_stages(env["chain"], env["owner"])
+    stage = env["chain"].stage_approvals.get(stage_code="EXPERIMENT")
+    fill_materials(stage, prefix="Withdrawable")
+    node = make_node(env, "EXPERIMENT", "Withdrawable submission")
+    submit_chain_stage(
+        stage,
+        env["owner"],
+        node=node,
+        requires_pi=True,
+        escalation_reason="需要主 PI 判断实验风险",
+        request_id=f"submit-{uuid4().hex}",
+    )
+
+    with pytest.raises(ChainStageRuleError) as missing_reason:
+        withdraw_chain_stage(stage, env["owner"], reason=" ", request_id=f"withdraw-{uuid4().hex}")
+    assert missing_reason.value.error_code == "research_chain_invalid"
+
+    with pytest.raises(ChainStageRuleError) as wrong_actor:
+        withdraw_chain_stage(stage, env["advisor"], reason="导师代撤", request_id=f"withdraw-{uuid4().hex}")
+    assert wrong_actor.value.error_code == "research_permission_denied"
+
+    withdrawn = withdraw_chain_stage(
+        stage,
+        env["owner"],
+        reason="发现实验边界需要补充",
+        request_id=f"withdraw-{uuid4().hex}",
+    )
+
+    assert withdrawn.status == "NEEDS_REVISION"
+    assert withdrawn.attempt_count == 1
+    assert withdrawn.requires_pi is False
+    assert withdrawn.escalation_reason == ""
+    assert withdrawn.approved_at is None
+    withdrawn.submitted_node.refresh_from_db()
+    assert withdrawn.submitted_node.status == "NEEDS_REVISION"
+    action = withdrawn.review_actions.get(action="WITHDRAW")
+    assert action.reviewer_role == "SUBMITTER"
+    assert action.comment == "发现实验边界需要补充"
+    assert action.material_snapshot
+
+    resubmitted = submit_chain_stage(
+        withdrawn,
+        env["owner"],
+        node=withdrawn.submitted_node,
+        requires_pi=False,
+        request_id=f"submit-{uuid4().hex}",
+    )
+    assert resubmitted.attempt_count == 2
+    assert resubmitted.status == "AWAITING_ADVISOR"
+
+
+def test_withdraw_is_rejected_after_advisor_escalation(env):
+    initialize_chain_stages(env["chain"], env["owner"])
+    stage = env["chain"].stage_approvals.get(stage_code="EXPERIMENT")
+    fill_materials(stage, prefix="PI gate")
+    submit_chain_stage(
+        stage,
+        env["owner"],
+        node=make_node(env, "EXPERIMENT"),
+        requires_pi=True,
+        escalation_reason="需要主 PI 判断实验风险",
+        request_id=f"submit-{uuid4().hex}",
+    )
+    stage = review_chain_stage(
+        stage,
+        env["advisor"],
+        action="APPROVE",
+        request_id=f"approve-{uuid4().hex}",
+        escalate_to_pi=True,
+    )
+    stage.status = "AWAITING_PI"
+    stage.save(update_fields=["status", "updated_at"])
+
+    with pytest.raises(ChainStageRuleError) as error:
+        withdraw_chain_stage(stage, env["owner"], reason="想补充材料", request_id=f"withdraw-{uuid4().hex}")
+
+    assert error.value.error_code == "research_chain_stage_state_conflict"
+    assert stage.review_actions.filter(action="WITHDRAW").exists() is False
+
+
+def test_principal_can_return_an_approved_stage_and_reopen_completed_chain(env):
+    initialize_chain_stages(env["chain"], env["owner"])
+    stage = env["chain"].stage_approvals.get(stage_code="PRE_EXPERIMENT")
+    fill_materials(stage, prefix="Final return")
+    node = make_node(env, "PRE_EXPERIMENT", "Final return node")
+    submit_chain_stage(stage, env["owner"], node=node, request_id=f"submit-{uuid4().hex}")
+    approved = review_chain_stage(
+        stage,
+        env["advisor"],
+        action="APPROVE",
+        request_id=f"approve-{uuid4().hex}",
+    )
+    env["chain"].stage_approvals.exclude(pk=approved.pk).update(status="APPROVED")
+    env["chain"].status = ResearchChain.Status.COMPLETED
+    env["chain"].save(update_fields=["status", "updated_at"])
+    profile = env["project"].research_profile
+    profile.workflow_status = "COMPLETED"
+    profile.completed_at = timezone.localdate()
+    profile.is_active = False
+    profile.save(update_fields=["workflow_status", "completed_at", "is_active", "updated_at"])
+
+    with pytest.raises(ChainStageRuleError) as wrong_reviewer:
+        review_chain_stage(
+            approved,
+            env["advisor"],
+            action="RETURN",
+            comment="导师无权最终重开",
+            request_id=f"return-{uuid4().hex}",
+        )
+    assert wrong_reviewer.value.error_code == "research_chain_stage_reviewer_invalid"
+
+    returned = review_chain_stage(
+        approved,
+        env["principal"],
+        action="RETURN",
+        comment="结论需要补充实验证据",
+        request_id=f"return-{uuid4().hex}",
+    )
+
+    assert returned.status == "NEEDS_REVISION"
+    assert returned.approved_at is None
+    returned.submitted_node.refresh_from_db()
+    assert returned.submitted_node.status == "NEEDS_REVISION"
+    assert returned.review_actions.filter(reviewer_role="PI", action="RETURN").exists() is True
+    env["chain"].refresh_from_db()
+    profile.refresh_from_db()
+    assert env["chain"].status == ResearchChain.Status.ACTIVE
+    assert profile.workflow_status == "ACTIVE"
+    assert profile.completed_at is None
+    assert profile.is_active is True
+
+
 def test_chain_completes_only_after_all_thirteen_stages_are_approved(env):
     initialize_chain_stages(env["chain"], env["owner"])
     submitted_nodes = {}
@@ -391,6 +569,8 @@ def test_chain_completes_only_after_all_thirteen_stages_are_approved(env):
             parent_node=parent_node,
         )
         submitted_nodes[stage.stage_code] = stage_node
+        if stage.stage_code == "TOPIC_EVALUATION":
+            make_applied_evaluation(env, stage, stage_node)
         submit_chain_stage(
             stage,
             env["owner"],
@@ -482,6 +662,7 @@ def test_precheck_expires_after_material_version_changes_and_blocks_stage_three(
 
     replacement_precheck = create_stage_precheck(stage, env["owner"], request_id=f"precheck-{uuid4().hex}")
     assert ResearchChainStagePrecheckSerializer(replacement_precheck).data["is_current"] is True
+    make_applied_evaluation(env, stage, node)
     submitted = submit_chain_stage(stage, env["owner"], node=node, request_id=f"submit-{uuid4().hex}")
     assert submitted.status == "AWAITING_ADVISOR"
 

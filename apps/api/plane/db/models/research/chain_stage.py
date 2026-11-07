@@ -169,10 +169,12 @@ class ResearchChainStageReviewAction(AppendOnlyModel):
     class ReviewerRole(models.TextChoices):
         ADVISOR = "ADVISOR", "Direct advisor"
         PI = "PI", "Principal investigator"
+        SUBMITTER = "SUBMITTER", "Submitter"
 
     class Action(models.TextChoices):
         APPROVE = "APPROVE", "Approve"
         RETURN = "RETURN", "Return"
+        WITHDRAW = "WITHDRAW", "Withdraw"
 
     stage = models.ForeignKey(
         ResearchChainStage,

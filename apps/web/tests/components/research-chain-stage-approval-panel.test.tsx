@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   getLatestChainStageEvaluation: vi.fn(),
   submitChainStage: vi.fn(),
   reviewChainStage: vi.fn(),
+  withdrawChainStage: vi.fn(),
 }));
 
 vi.mock("@plane/i18n", () => ({
@@ -38,6 +39,7 @@ vi.mock("@/services/research/chain.service", () => ({
     getLatestChainStageEvaluation = mocks.getLatestChainStageEvaluation;
     submitChainStage = mocks.submitChainStage;
     reviewChainStage = mocks.reviewChainStage;
+    withdrawChainStage = mocks.withdrawChainStage;
   },
 }));
 
@@ -94,7 +96,9 @@ function stage(seed: Record<string, unknown>) {
         remove_material: capability("remove_material"),
         precheck: capability("precheck", true),
         submit: capability("submit", true),
+        withdraw: capability("withdraw"),
         review: capability("review"),
+        return_after_approval: capability("return_after_approval"),
       },
     },
     created_at: "2026-10-22T01:00:00Z",
@@ -592,6 +596,83 @@ it("sends an explicit student declaration for a conditional stage", async () => 
   });
 });
 
+it("requires a reason before the student withdraws a submitted stage", async () => {
+  const submitted = stage({
+    status: "AWAITING_ADVISOR",
+    submitted_node: "node-1",
+    submitted_at: "2026-11-06T02:00:00Z",
+    current_review_step: "ADVISOR",
+    capabilities: {
+      schema_version: "research-capabilities.v1",
+      actions: {
+        edit_materials: capability("edit_materials"),
+        remove_material: capability("remove_material"),
+        precheck: capability("precheck"),
+        submit: capability("submit"),
+        withdraw: capability("withdraw", true),
+        review: capability("review"),
+        return_after_approval: capability("return_after_approval"),
+      },
+    },
+  });
+  mocks.withdrawChainStage.mockResolvedValue({});
+  await renderPanel({ stage: submitted, expanded: true });
+
+  await act(async () => button("撤回修改")?.click());
+  expect(button("确认撤回")?.disabled).toBe(true);
+
+  const textarea = container.querySelector<HTMLTextAreaElement>("textarea")!;
+  const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+  await act(async () => {
+    valueSetter?.call(textarea, "需要补充实验边界");
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => button("确认撤回")?.click());
+
+  expect(mocks.withdrawChainStage).toHaveBeenCalledWith("lab", "chain-1", "TOPIC_EVALUATION", {
+    reason: "需要补充实验边界",
+  });
+  expect(onChanged).toHaveBeenCalled();
+});
+
+it("requires a reason before the principal returns an approved stage", async () => {
+  const approved = stage({
+    status: "APPROVED",
+    submitted_node: "node-1",
+    submitted_at: "2026-11-06T02:00:00Z",
+    approved_at: "2026-11-06T03:00:00Z",
+    capabilities: {
+      schema_version: "research-capabilities.v1",
+      actions: {
+        edit_materials: capability("edit_materials"),
+        remove_material: capability("remove_material"),
+        precheck: capability("precheck"),
+        submit: capability("submit"),
+        withdraw: capability("withdraw"),
+        review: capability("review"),
+        return_after_approval: capability("return_after_approval", true),
+      },
+    },
+  });
+  mocks.reviewChainStage.mockResolvedValue({});
+  await renderPanel({ stage: approved, expanded: true });
+
+  expect(button("退回修改")?.disabled).toBe(true);
+  const textarea = container.querySelector<HTMLTextAreaElement>("textarea")!;
+  const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+  await act(async () => {
+    valueSetter?.call(textarea, "结论需要补充实验证据");
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => button("退回修改")?.click());
+
+  expect(mocks.reviewChainStage).toHaveBeenCalledWith("lab", "chain-1", "TOPIC_EVALUATION", {
+    action: "RETURN",
+    comment: "结论需要补充实验证据",
+  });
+  expect(onChanged).toHaveBeenCalled();
+});
+
 it("sends an explicit boolean when the advisor chooses conditional escalation", async () => {
   const conditional = stage({
     stage_code: "EXPERIMENT",
@@ -607,7 +688,9 @@ it("sends an explicit boolean when the advisor chooses conditional escalation", 
         remove_material: capability("remove_material"),
         precheck: capability("precheck"),
         submit: capability("submit"),
+        withdraw: capability("withdraw"),
         review: capability("review", true),
+        return_after_approval: capability("return_after_approval"),
       },
     },
   });
@@ -617,7 +700,7 @@ it("sends an explicit boolean when the advisor chooses conditional escalation", 
   expect(container.textContent).toContain("申请人: 研究负责人");
   expect(button("通过并转主 PI")).not.toBeNull();
   expect(button("通过（不转 PI）")).not.toBeNull();
-  expect(button("驳回")?.disabled).toBe(true);
+  expect(button("退回修改")?.disabled).toBe(true);
 
   const textarea = container.querySelector("textarea")!;
   const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
@@ -666,4 +749,31 @@ it("keeps review history collapsed until requested", async () => {
   await act(async () => button("历史审核 1 次")?.click());
   expect(container.textContent).toContain("直接导师");
   expect(container.textContent).toContain("补充实验边界");
+});
+
+it("renders withdrawal history with the submitter role", async () => {
+  const withdrawn = stage({
+    status: "NEEDS_REVISION",
+    review_actions: [
+      {
+        schema_version: "research-chain-stage-review-action.v1",
+        id: "withdraw-1",
+        attempt_no: 1,
+        reviewer_role: "SUBMITTER",
+        reviewer_detail: { id: "student", display_name: "研究负责人", email: "student@example.com" },
+        action: "WITHDRAW",
+        comment: "需要补充实验边界",
+        escalated_to_pi: false,
+        material_snapshot: [],
+        declaration_snapshot: {},
+        created_at: "2026-11-06T02:10:00Z",
+      },
+    ],
+  });
+  await renderPanel({ stage: withdrawn, expanded: true });
+
+  expect(container.textContent).toContain("最新退回意见: 需要补充实验边界");
+  await act(async () => button("历史审核 1 次")?.click());
+  expect(container.textContent).toContain("研究负责人");
+  expect(container.textContent).toContain("撤回");
 });

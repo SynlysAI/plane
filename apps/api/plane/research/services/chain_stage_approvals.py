@@ -19,9 +19,11 @@ from plane.research.utils.chain_stage_notifications import (
     notify_chain_stage_decided,
     notify_chain_stage_escalated,
     notify_chain_stage_submitted,
+    notify_chain_stage_withdrawn,
 )
 from plane.research.utils.errors import ResearchErrorCode
 from plane.research.utils.org import active_membership_q
+from plane.research.services.chain_tasks import chain_writer
 from plane.research.utils.todo_context import reuse_todo_query
 from plane.utils.html_processor import strip_tags
 
@@ -1007,6 +1009,31 @@ def _complete_chain_if_ready(stage, actor, request_id):
     return True
 
 
+def _reopen_chain_if_completed(stage, actor, request_id):
+    """Reopen a completed research chain after one approved stage is returned."""
+    from plane.db.models import ResearchChain, ResearchProjectProfile
+
+    chain = ResearchChain.objects.select_for_update().get(pk=stage.chain_id)
+    if chain.status != ResearchChain.Status.COMPLETED:
+        return False
+    chain.status = ResearchChain.Status.ACTIVE
+    chain.save(update_fields=["status", "updated_at"])
+    profile = ResearchProjectProfile.objects.select_for_update().filter(project_id=chain.project_id).first()
+    if profile is not None:
+        profile.workflow_status = ResearchProjectProfile.WorkflowStatus.ACTIVE
+        profile.completed_at = None
+        profile.is_active = True
+        profile.save(update_fields=["workflow_status", "completed_at", "is_active", "updated_at"])
+    _stage_event(stage, "CHAIN_REOPENED", actor, request_id, "An approved stage was returned; chain reopened")
+    _audit_stage(
+        ResearchAuditAction.CHAIN_STAGE_REOPEN,
+        stage,
+        actor,
+        {"chain": str(chain.id), "stage": stage.stage_code},
+    )
+    return True
+
+
 def submit_chain_stage(
     stage,
     actor,
@@ -1090,17 +1117,136 @@ def submit_chain_stage(
         return locked_stage
 
 
+def withdraw_chain_stage(
+    stage,
+    actor,
+    *,
+    reason,
+    request_id,
+    request=None,
+    payload_digest="",
+):
+    """Withdraw a submitted stage before the direct advisor reviews it.
+
+    Args:
+        stage: The Research Chain stage being withdrawn.
+        actor: Authenticated chain writer who originally submitted the stage.
+        reason: Required explanation retained in the immutable action history.
+        request_id: Idempotency key supplied by the API caller.
+        request: Optional HTTP request for audit metadata.
+        payload_digest: Hash of the API payload used for idempotent replay.
+
+    Returns:
+        The refreshed stage after it returns to the editable state.
+    """
+    from plane.db.models import ResearchChainNode, ResearchChainStageReviewAction
+
+    normalized_reason = strip_tags(str(reason or "")).strip()
+    if not normalized_reason:
+        raise ChainStageRuleError(
+            ResearchErrorCode.CHAIN_INVALID,
+            "A reason is required when withdrawing a stage.",
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+
+    with transaction.atomic():
+        locked_stage = type(stage).objects.select_for_update().get(pk=stage.pk)
+        if locked_stage.chain.status != "ACTIVE":
+            raise ChainStageRuleError(
+                ResearchErrorCode.CHAIN_STAGE_STATE_CONFLICT,
+                "Only active research chains can withdraw stage approvals.",
+            )
+        if locked_stage.status != "AWAITING_ADVISOR":
+            raise ChainStageRuleError(
+                ResearchErrorCode.CHAIN_STAGE_STATE_CONFLICT,
+                "Only a stage awaiting direct advisor review can be withdrawn.",
+            )
+        if not chain_writer(locked_stage.workspace, actor, locked_stage.chain):
+            raise ChainStageRuleError(
+                ResearchErrorCode.PERMISSION_DENIED,
+                "Only chain writers can withdraw a submitted stage.",
+                status.HTTP_403_FORBIDDEN,
+            )
+
+        previous_status = locked_stage.status
+        ResearchChainStageReviewAction.objects.create(
+            stage=locked_stage,
+            attempt_no=locked_stage.attempt_count,
+            reviewer=actor,
+            reviewer_role="SUBMITTER",
+            action="WITHDRAW",
+            comment=normalized_reason,
+            material_snapshot=_material_snapshot(locked_stage),
+            declaration_snapshot={
+                "requires_pi": locked_stage.requires_pi,
+                "escalation_reason": locked_stage.escalation_reason,
+                "policy": CHAIN_STAGE_PI_POLICIES[locked_stage.stage_code],
+                "attempt": locked_stage.attempt_count,
+                "payload_hash": payload_digest,
+            },
+            request_id=request_id,
+        )
+        locked_stage.status = "NEEDS_REVISION"
+        locked_stage.requires_pi = False
+        locked_stage.escalation_reason = ""
+        locked_stage.approved_at = None
+        locked_stage.save(
+            update_fields=[
+                "status",
+                "requires_pi",
+                "escalation_reason",
+                "approved_at",
+                "updated_at",
+            ]
+        )
+        if locked_stage.submitted_node is not None:
+            locked_node = ResearchChainNode.objects.select_for_update().get(pk=locked_stage.submitted_node_id)
+            locked_node.status = "NEEDS_REVISION"
+            locked_node.save(update_fields=["status", "updated_at"])
+        _stage_event(
+            locked_stage,
+            "CHAIN_STAGE_WITHDRAWN",
+            actor,
+            request_id,
+            normalized_reason,
+        )
+        _audit_stage(
+            ResearchAuditAction.CHAIN_STAGE_WITHDRAW,
+            locked_stage,
+            actor,
+            {
+                "attempt": locked_stage.attempt_count,
+                "reason": normalized_reason[:240],
+                "status": locked_stage.status,
+                "changes": [{"field": "status", "old_value": previous_status, "new_value": locked_stage.status}],
+            },
+            request,
+        )
+        locked_stage.refresh_from_db()
+        advisor = resolve_advisor(locked_stage.chain)
+        notify_chain_stage_withdrawn(locked_stage, advisor, actor)
+        return locked_stage
+
+
 @transaction.atomic
-def _return_stage(stage, actor, reviewer_role, comment, request_id, request):
+def _return_stage(stage, actor, reviewer_role, comment, request_id, request, *, after_approval=False):
     previous_status = stage.status
     stage.status = "NEEDS_REVISION"
-    stage.save(update_fields=["status", "updated_at"])
+    if after_approval:
+        stage.approved_at = None
+    stage.save(update_fields=["status", "approved_at", "updated_at"] if after_approval else ["status", "updated_at"])
     if stage.submitted_node is not None:
         stage.submitted_node.status = "NEEDS_REVISION"
         stage.submitted_node.save(update_fields=["status", "updated_at"])
-    _stage_event(stage, "CHAIN_STAGE_RETURNED", actor, request_id, comment)
+    _stage_event(
+        stage,
+        "CHAIN_STAGE_RETURNED_AFTER_APPROVAL" if after_approval else "CHAIN_STAGE_RETURNED",
+        actor,
+        request_id,
+        comment,
+    )
     _audit_stage(
-        ResearchAuditAction.CHAIN_STAGE_RETURN,
+        ResearchAuditAction.CHAIN_STAGE_REOPEN if after_approval else ResearchAuditAction.CHAIN_STAGE_RETURN,
         stage,
         actor,
         {
@@ -1113,6 +1259,8 @@ def _return_stage(stage, actor, reviewer_role, comment, request_id, request):
         },
         request,
     )
+    if after_approval:
+        _reopen_chain_if_completed(stage, actor, request_id)
     profile = _chain_profile(stage.chain)
     if profile is not None and profile.owner is not None:
         notify_chain_stage_decided(stage, profile.owner, actor, "returned")
@@ -1220,11 +1368,17 @@ def review_chain_stage(
 
     with transaction.atomic():
         locked_stage = type(stage).objects.select_for_update().get(pk=stage.pk)
+        return_after_approval = locked_stage.status == "APPROVED" and normalized_action == "RETURN"
         reviewer_role = "ADVISOR" if locked_stage.status == "AWAITING_ADVISOR" else "PI"
-        if locked_stage.status not in ("AWAITING_ADVISOR", "AWAITING_PI"):
+        if locked_stage.status not in ("AWAITING_ADVISOR", "AWAITING_PI") and not return_after_approval:
             raise ChainStageRuleError(
                 ResearchErrorCode.CHAIN_STAGE_STATE_CONFLICT,
                 f"The stage status {locked_stage.status} does not allow review.",
+            )
+        if return_after_approval and locked_stage.chain.status not in ("ACTIVE", "COMPLETED"):
+            raise ChainStageRuleError(
+                ResearchErrorCode.CHAIN_STAGE_STATE_CONFLICT,
+                "An approved stage can only be returned while its research chain is active or completed.",
             )
         if escalate_to_pi is not None and not isinstance(escalate_to_pi, bool):
             raise ChainStageRuleError(
@@ -1295,7 +1449,15 @@ def review_chain_stage(
             request_id=request_id,
         )
         if normalized_action == "RETURN":
-            return _return_stage(locked_stage, actor, reviewer_role, str(comment).strip(), request_id, request)
+            return _return_stage(
+                locked_stage,
+                actor,
+                reviewer_role,
+                str(comment).strip(),
+                request_id,
+                request,
+                after_approval=return_after_approval,
+            )
         return _approve_stage(
             locked_stage,
             actor,

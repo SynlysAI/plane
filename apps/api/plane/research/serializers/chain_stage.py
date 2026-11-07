@@ -24,7 +24,16 @@ from plane.research.utils.action_capabilities import capability_map
 from plane.research.utils.errors import ResearchErrorCode
 
 
-STAGE_ACTIONS = ("view", "edit_materials", "remove_material", "precheck", "submit", "review")
+STAGE_ACTIONS = (
+    "view",
+    "edit_materials",
+    "remove_material",
+    "precheck",
+    "submit",
+    "withdraw",
+    "review",
+    "return_after_approval",
+)
 
 
 def _user_lite(user):
@@ -241,6 +250,7 @@ class ResearchChainStageSerializer(serializers.ModelSerializer):
         writable = self._cached_writable(obj, actor)
         editable = writable and obj.status in ("NOT_STARTED", "IN_PROGRESS", "NEEDS_REVISION")
         reviewer_allowed = False
+        principal_allowed = False
         reasons = {}
         if obj.status == "AWAITING_ADVISOR":
             reviewer, reviewer_error, reviewer_reason_code = self._cached_reviewer(
@@ -262,13 +272,25 @@ class ResearchChainStageSerializer(serializers.ModelSerializer):
                     "reason_code": reviewer_reason_code or ResearchErrorCode.CHAIN_STAGE_REVIEWER_NOT_CONFIGURED,
                     "reason": reviewer_error,
                 }
+        elif obj.status == "APPROVED":
+            reviewer, reviewer_error, reviewer_reason_code = self._cached_reviewer(
+                "principal", resolve_principal, obj.chain
+            )
+            principal_allowed = reviewer is not None and str(reviewer.get("id")) == str(actor.id)
+            if reviewer_error:
+                reasons["return_after_approval"] = {
+                    "reason_code": reviewer_reason_code or ResearchErrorCode.CHAIN_STAGE_REVIEWER_NOT_CONFIGURED,
+                    "reason": reviewer_error,
+                }
         decisions = {
             "view": True,
             "edit_materials": editable,
             "remove_material": editable,
             "precheck": editable and obj.stage_code == "TOPIC_EVALUATION",
             "submit": editable,
+            "withdraw": writable and obj.status == "AWAITING_ADVISOR",
             "review": obj.chain.status == "ACTIVE" and reviewer_allowed,
+            "return_after_approval": obj.chain.status in ("ACTIVE", "COMPLETED") and principal_allowed,
         }
         return capability_map(STAGE_ACTIONS, decisions, reasons=reasons)
 

@@ -698,6 +698,8 @@ export const researchEndpoints = {
     `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/stage-approvals/${stageCode}/evaluations/`,
   chainStageSubmit: (slug: string, chainId: string, stageCode: string) =>
     `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/stage-approvals/${stageCode}/submit/`,
+  chainStageWithdraw: (slug: string, chainId: string, stageCode: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/stage-approvals/${stageCode}/withdraw/`,
   chainStageReview: (slug: string, chainId: string, stageCode: string) =>
     `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/stage-approvals/${stageCode}/review/`,
   chainMember: (slug: string, chainId: string, userId: string) =>

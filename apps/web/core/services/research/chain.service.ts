@@ -340,6 +340,22 @@ export class ResearchChainService extends APIService {
       });
   }
 
+  async withdrawChainStage(workspaceSlug: string, chainId: string, stageCode: string, payload: { reason: string }) {
+    return this.post(researchEndpoints.chainStageWithdraw(workspaceSlug, chainId, stageCode), {
+      ...payload,
+      request_id: request_id(),
+    })
+      .then((res) => {
+        const response = res?.data as TResearchEnvelope<TResearchChainStageApproval> | undefined;
+        if (!response?.data) throw response ?? {};
+        notifyWorkspaceTodosUpdated();
+        return response.data;
+      })
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
+
   async addChainMember(workspaceSlug: string, chainId: string, userId: string, role: 15 | 20 = 15) {
     return this.post(researchEndpoints.chainMembers(workspaceSlug, chainId), { user_id: userId, role })
       .then((res) => {

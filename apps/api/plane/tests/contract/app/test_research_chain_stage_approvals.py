@@ -437,6 +437,137 @@ def test_material_submit_and_review_flow(env):
     assert snapshot["items"][0]["upload"]["download_url"].endswith("/download/")
 
 
+def test_stage_withdrawal_contract_requires_reason_permission_and_idempotency(env):
+    node = ResearchChainNode.objects.create(
+        chain=env["chain"],
+        node_type="EXPERIMENT",
+        title="API withdrawable",
+        request_id=f"node-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+    for requirement in env["chain"].stage_approvals.get(stage_code="EXPERIMENT").material_requirements.all():
+        upload = make_upload(env, node, name=f"{requirement.code}.pdf")
+        created = env["owner_client"].post(
+            url(env, "EXPERIMENT/materials/"),
+            {
+                "request_id": f"material-{upload.id}",
+                "requirement_code": requirement.code,
+                "upload_id": str(upload.id),
+            },
+            format="json",
+        )
+        assert created.status_code == 201, created.json()
+    submitted = env["owner_client"].post(
+        url(env, "EXPERIMENT/submit/"),
+        {
+            "request_id": f"submit-{uuid4().hex}",
+            "node_id": str(node.id),
+            "requires_pi": True,
+            "escalation_reason": "需要主 PI 判断",
+        },
+        format="json",
+    )
+    assert submitted.status_code == 200, submitted.json()
+
+    missing_reason = env["owner_client"].post(
+        url(env, "EXPERIMENT/withdraw/"),
+        {"request_id": f"withdraw-{uuid4().hex}", "reason": " "},
+        format="json",
+    )
+    forbidden = env["advisor_client"].post(
+        url(env, "EXPERIMENT/withdraw/"),
+        {"request_id": f"withdraw-{uuid4().hex}", "reason": "导师不能代撤"},
+        format="json",
+    )
+    assert missing_reason.status_code == 422
+    assert forbidden.status_code == 403
+
+    request_id = f"withdraw-{uuid4().hex}"
+    payload = {"request_id": request_id, "reason": "需要补充实验边界"}
+    withdrawn = env["owner_client"].post(url(env, "EXPERIMENT/withdraw/"), payload, format="json")
+    replay = env["owner_client"].post(url(env, "EXPERIMENT/withdraw/"), payload, format="json")
+    changed = env["owner_client"].post(
+        url(env, "EXPERIMENT/withdraw/"),
+        {**payload, "reason": "改变后的原因"},
+        format="json",
+    )
+
+    assert withdrawn.status_code == 200, withdrawn.json()
+    assert replay.status_code == 200, replay.json()
+    assert changed.status_code == 409
+    assert withdrawn.json()["data"]["status"] == "NEEDS_REVISION"
+    assert withdrawn.json()["data"]["requires_pi"] is False
+    assert withdrawn.json()["data"]["capabilities"]["actions"]["edit_materials"]["allowed"] is True
+    stage = env["chain"].stage_approvals.get(stage_code="EXPERIMENT")
+    assert stage.review_actions.filter(action="WITHDRAW", reviewer_role="SUBMITTER").count() == 1
+    node.refresh_from_db()
+    assert node.status == "NEEDS_REVISION"
+
+
+def test_principal_can_return_approved_stage_through_review_contract(env):
+    node = ResearchChainNode.objects.create(
+        chain=env["chain"],
+        node_type="PRE_EXPERIMENT",
+        title="API final return",
+        request_id=f"node-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+    upload = make_upload(env, node)
+    env["owner_client"].post(
+        url(env, "PRE_EXPERIMENT/materials/"),
+        {
+            "request_id": f"material-{uuid4().hex}",
+            "requirement_code": "PRE_EXPERIMENT_PLAN",
+            "upload_id": str(upload.id),
+        },
+        format="json",
+    )
+    env["owner_client"].post(
+        url(env, "PRE_EXPERIMENT/submit/"),
+        {"request_id": f"submit-{uuid4().hex}", "node_id": str(node.id)},
+        format="json",
+    )
+    approved = env["advisor_client"].post(
+        url(env, "PRE_EXPERIMENT/review/"),
+        {"request_id": f"approve-{uuid4().hex}", "action": "APPROVE"},
+        format="json",
+    )
+    assert approved.status_code == 200, approved.json()
+
+    missing_reason = env["principal_client"].post(
+        url(env, "PRE_EXPERIMENT/review/"),
+        {"request_id": f"return-{uuid4().hex}", "action": "RETURN"},
+        format="json",
+    )
+    forbidden = env["advisor_client"].post(
+        url(env, "PRE_EXPERIMENT/review/"),
+        {"request_id": f"return-{uuid4().hex}", "action": "RETURN", "comment": "导师不能重开"},
+        format="json",
+    )
+    assert missing_reason.status_code == 422
+    assert forbidden.status_code == 403
+
+    returned = env["principal_client"].post(
+        url(env, "PRE_EXPERIMENT/review/"),
+        {
+            "request_id": f"return-{uuid4().hex}",
+            "action": "RETURN",
+            "comment": "结论需要补充实验证据",
+        },
+        format="json",
+    )
+    assert returned.status_code == 200, returned.json()
+    assert returned.json()["data"]["status"] == "NEEDS_REVISION"
+    assert returned.json()["data"]["approved_at"] is None
+    assert returned.json()["data"]["capabilities"]["actions"]["return_after_approval"]["allowed"] is False
+    stage = env["chain"].stage_approvals.get(stage_code="PRE_EXPERIMENT")
+    assert stage.review_actions.filter(reviewer_role="PI", action="RETURN").count() == 1
+    node.refresh_from_db()
+    assert node.status == "NEEDS_REVISION"
+
+
 def test_processing_upload_can_be_linked_but_does_not_satisfy_requirement(env):
     node = ResearchChainNode.objects.create(
         chain=env["chain"],

@@ -97,6 +97,11 @@ def notify_chain_stage_submitted(stage, advisor, actor):
     return _notify(stage, [advisor], actor, title="科研链阶段已提交，等待导师审核", action="submitted")
 
 
+def notify_chain_stage_withdrawn(stage, advisor, actor):
+    """Notify the direct advisor that a submitter withdrew a pending stage."""
+    return _notify(stage, [advisor], actor, title="科研链阶段已撤回，待学生修改", action="withdrawn")
+
+
 def notify_chain_stage_escalated(stage, principal, actor):
     """Notify the principal investigator that an advisor escalated a stage."""
     return _notify(stage, [principal], actor, title="科研链阶段已转主 PI 审核", action="escalated")

@@ -66,6 +66,7 @@ from plane.research.views.chain_stage_approvals import (
     ResearchChainStagePrecheckEndpoint,
     ResearchChainStageReviewEndpoint,
     ResearchChainStageSubmitEndpoint,
+    ResearchChainStageWithdrawEndpoint,
 )
 from plane.research.views.feedback import (
     ResearchFeedbackEndpoint,
@@ -578,6 +579,11 @@ urlpatterns = [
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/stage-approvals/<str:stage_code>/submit/",
         ResearchChainStageSubmitEndpoint.as_view(),
         name="research-chain-stage-submit",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/stage-approvals/<str:stage_code>/withdraw/",
+        ResearchChainStageWithdrawEndpoint.as_view(),
+        name="research-chain-stage-withdraw",
     ),
     path(
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/stage-approvals/<str:stage_code>/review/",

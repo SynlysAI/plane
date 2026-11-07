@@ -127,6 +127,8 @@ class ResearchAuditAction:
     CHAIN_STAGE_EVALUATION_CREATE = "chain.stage.evaluation.create"
     CHAIN_STAGE_SUBMIT = "chain.stage.submit"
     CHAIN_STAGE_RETURN = "chain.stage.return"
+    CHAIN_STAGE_WITHDRAW = "chain.stage.withdraw"
+    CHAIN_STAGE_REOPEN = "chain.stage.reopen"
     CHAIN_STAGE_ADVISOR_APPROVE = "chain.stage.advisor.approve"
     CHAIN_STAGE_PI_APPROVE = "chain.stage.pi.approve"
     CHAIN_COMPLETE = "chain.complete"
