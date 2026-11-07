@@ -67,6 +67,7 @@ export class ProfileStore implements IUserProfileStore {
     updated_at: "",
     language: DEFAULT_LANGUAGE,
     start_of_the_week: EStartOfTheWeek.SUNDAY,
+    preferred_collaborators: [],
   };
 
   // services

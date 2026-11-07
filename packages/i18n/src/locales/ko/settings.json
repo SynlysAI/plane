@@ -41,7 +41,17 @@
     },
     "preferences": {
       "heading": "환경 설정",
-      "description": "작업 방식에 맞게 앱 환경을 사용자 정의하세요"
+      "description": "작업 방식에 맞게 앱 환경을 사용자 정의하세요",
+      "preferred_collaborators": {
+        "title": "Priority collaborators",
+        "description": "Select up to three collaborators whose updates appear first in notification emails.",
+        "placeholder": "Select a member",
+        "saving": "Saving priority collaborators...",
+        "saved_title": "Saved",
+        "saved_message": "Priority collaborator preference updated.",
+        "error_title": "Save failed",
+        "error_message": "Please try again later."
+      }
     },
     "notifications": {
       "heading": "이메일 알림",

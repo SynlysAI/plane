@@ -87,6 +87,8 @@ export type TUserProfile = {
   created_at: Date | string;
   updated_at: Date | string;
   start_of_the_week: EStartOfTheWeek;
+  /** 邮件通知优先展示的高频合作者用户 ID（有序，最多三位）。 */
+  preferred_collaborators?: string[];
 };
 
 export interface IInstanceAdminStatus {

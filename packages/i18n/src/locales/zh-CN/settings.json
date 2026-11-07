@@ -41,7 +41,17 @@
     },
     "preferences": {
       "heading": "偏好设置",
-      "description": "按照您的工作方式自定义您的应用体验"
+      "description": "按照您的工作方式自定义您的应用体验",
+      "preferred_collaborators": {
+        "title": "高频合作者",
+        "description": "最多选择三位合作者，其动态将在邮件通知中优先展示。",
+        "placeholder": "选择成员",
+        "saving": "正在保存高频合作者…",
+        "saved_title": "已保存",
+        "saved_message": "高频合作者偏好已更新。",
+        "error_title": "保存失败",
+        "error_message": "请稍后重试。"
+      }
     },
     "notifications": {
       "heading": "邮件通知",
